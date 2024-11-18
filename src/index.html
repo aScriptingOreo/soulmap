@@ -1,0 +1,62 @@
+<!-- src/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Soulmap</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* Custom styles for the location marker */
+    .custom-location-icon {
+      filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
+      transition: transform 0.3s ease, filter 0.3s ease;
+    }
+
+    .custom-location-icon:hover,
+    .custom-location-icon.selected {
+      transform: scale(1.5);
+      filter: drop-shadow(0 0 10px yellow);
+    }
+
+    /* Styles for cursor position display */
+    #cursor-position {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      color: #333;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      z-index: 1000; /* Ensure it's above the map */
+    }
+
+    /* Custom styles for popups based on device type */
+    .popup-desktop {
+      font-size: 14px;
+    }
+    .popup-tablet {
+      font-size: 16px;
+    }
+    .popup-phone {
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script type="module" src="./index.ts"></script> <!-- Entry point -->
+</body>
+</html>
