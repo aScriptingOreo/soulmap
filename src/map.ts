@@ -25,6 +25,38 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       break;
   }
 
+  // Define custom icons for different types
+  const icons = {
+    location: L.icon({
+      iconUrl: '/SF_location_marker.svg',
+      iconSize: iconSize,
+      iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+      popupAnchor: [0, -iconSize[1] / 2],
+      className: 'custom-location-icon'
+    }),
+    dungeon: L.icon({
+      iconUrl: '/SF_dungeon_entrance.svg',
+      iconSize: [iconSize[0] * 1.5, iconSize[1] * 1.5],
+      iconAnchor: [iconSize[0] * 1.5 / 2, iconSize[1] * 1.5 / 2],
+      popupAnchor: [0, -iconSize[1] * 1.5 / 2],
+      className: 'custom-location-icon'
+    }),
+    loot: L.icon({
+      iconUrl: '/SF_loot.svg',
+      iconSize: iconSize,
+      iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+      popupAnchor: [0, -iconSize[1] / 2],
+      className: 'custom-location-icon'
+    }),
+    unknown: L.icon({
+      iconUrl: '/question_mark.svg',
+      iconSize: iconSize,
+      iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+      popupAnchor: [0, -iconSize[1] / 2],
+      className: 'custom-location-icon'
+    })
+  };
+
   // Create the map with the default zoom level
   const map = L.map('map', {
     crs: L.CRS.Simple,
@@ -43,32 +75,60 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     L.imageOverlay('/midrath.jpg', bounds).addTo(map);
     map.fitBounds(bounds);
 
-    // Create markers for each location
-    locations.forEach((location) => {
-      const [x, y] = Array.isArray(location.coordinates[0]) 
-        ? location.coordinates[0] as [number, number]
-        : location.coordinates as [number, number];
-
-      const icon = L.divIcon({
-        className: 'custom-location-icon',
-        html: `<i class="${location.icon}" style="font-size: ${location.iconSize || 1}em;"></i>`,
-        iconSize: [30, 30]
-      });
-
-      const marker = L.marker([y, x], { icon }).addTo(map);
-      markers.push(marker);
-
-      // Bind tooltip
-      marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
-    });
-
-    // Initialize sidebar with markers
+    // Initialize sidebar first
     const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
     const sidebar = new Sidebar({
       element: sidebarElement,
       locations,
       map,
       markers
+    });
+
+    // Create markers for each location
+    locations.forEach((location) => {
+      // Handle multiple coordinates
+      const coordinatesArray = Array.isArray(location.coordinates[0]) 
+        ? location.coordinates as [number, number][]
+        : [location.coordinates] as [number, number][];
+
+      // Create a marker for each coordinate
+      coordinatesArray.forEach(([x, y]) => {
+        // Use either Font Awesome icon or custom SVG icon
+        let icon: L.Icon | L.DivIcon;
+        if (location.icon && location.icon.startsWith('fa-')) {
+          const sizeMultiplier = location.iconSize || 1;
+          icon = L.divIcon({
+            className: 'custom-location-icon',
+            html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: white; text-shadow: 2px 2px 4px black;"></i>`,
+            iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+            iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
+          });
+        } else {
+          const iconType = (['location', 'dungeon', 'loot', 'unknown'].includes(location.type) 
+            ? location.type 
+            : 'unknown') as keyof typeof icons;
+          icon = icons[iconType];
+        }
+
+        // Create and add marker to map
+        const marker = L.marker([y, x], { icon }).addTo(map);
+        markers.push(marker);
+
+        // Bind tooltip
+        marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
+
+        // Add click handler for marker
+        marker.on('click', () => {
+          // Update sidebar content
+          sidebar.updateContent(location, x, y);
+
+          // Handle marker highlight
+          document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+            el.classList.remove('selected');
+          });
+          marker.getElement()?.classList.add('selected');
+        });
+      });
     });
 
     // Initialize search functionality
