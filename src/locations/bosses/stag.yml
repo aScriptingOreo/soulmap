@@ -1,0 +1,8 @@
+name: "Tormented Stag"
+coordinates:
+  - [2981, 2500]
+  - [2019, 3001]
+
+description: "Chance to spawn the tormented stag"
+icon: "fa-solid fa-skull-crossbones"
+iconSize: 0.75

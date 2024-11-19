@@ -1,0 +1,5 @@
+name: "Tree Dungeon"
+coordinates: [3046, 453]
+description: "This is where you start the Vaermina Quest"
+icon: "fa-solid fa-dungeon"
+iconSize: 0.75
