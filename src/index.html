@@ -210,6 +210,77 @@
       margin: 0;
       opacity: 0.9;
     }
+
+    .location-drawer {
+      position: absolute;
+      bottom: 60px; /* Add bottom padding to avoid toolbar */
+      left: 0;
+      right: 0;
+      background: rgba(51, 51, 51, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      max-height: 40vh; /* Limit height to 40% of viewport */
+      transition: transform 0.3s ease;
+    }
+
+    .drawer-header {
+      padding: 15px 20px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(51, 51, 51, 0.95); /* Match drawer background */
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .drawer-content {
+      overflow-y: auto;
+      max-height: calc(40vh - 50px);
+      padding: 10px 0;
+      padding-bottom: 60px; /* Add padding for the toolbar */
+    }
+
+    .category {
+      margin-bottom: 10px;
+    }
+
+    .category-header {
+      padding: 10px 20px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+    }
+
+    .category-content {
+      display: none;
+      padding-left: 20px;
+    }
+
+    .category-content.open {
+      display: block;
+    }
+
+    .location-item {
+      padding: 8px 20px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .location-item:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .drawer-collapsed .drawer-content {
+      display: none;
+    }
+
+    .drawer-collapsed .fa-chevron-up {
+      transform: rotate(180deg);
+    }
   </style>
 </head>
 <body>
@@ -225,6 +296,15 @@
     <div class="coordinates-display"></div>
     <div class="location-image">
       <img id="sidebar-image" src="" alt="" style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
+    </div>
+    <div class="location-drawer">
+      <div class="drawer-header" id="drawer-toggle">
+        <span>Locations List</span>
+        <i class="fa-solid fa-chevron-up"></i>
+      </div>
+      <div class="drawer-content">
+        <div class="categories"></div>
+      </div>
     </div>
   </div>
   <div id="popup-overlay">

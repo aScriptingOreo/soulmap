@@ -80,6 +80,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     };
 
     // Add each location as a marker
+    const markers: L.Marker[] = [];
     locations.forEach((location) => {
       const iconType = (['location', 'dungeon', 'loot', 'unknown'].includes(location.type) ? location.type : 'unknown') as 'location' | 'dungeon' | 'loot' | 'unknown'; // Use type from directory or 'unknown'
       const coordinates = Array.isArray(location.coordinates[0]) ? location.coordinates as [number, number][] : [location.coordinates as [number, number]];
@@ -101,6 +102,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
           }
         }
         const marker = L.marker([y, x], { icon }).addTo(map);
+        markers.push(marker);
         // Bind tooltip on hover
         marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
 
@@ -213,6 +215,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       });
     });
 
+    createLocationDrawer(locations, map, markers);
+
 // Display coordinates on map click (for any location)
 map.on('click', (e) => {
   const coordinates = e.latlng;
@@ -290,3 +294,81 @@ document.addEventListener('keydown', (e) => {
     closeModal();
   }
 });
+
+function createLocationDrawer(locations: (Location & { type: string })[], map: L.Map, markers: L.Marker[]) {
+  const categoriesContainer = document.querySelector('.categories') as HTMLElement;
+  const drawerToggle = document.getElementById('drawer-toggle') as HTMLElement;
+  const locationDrawer = document.querySelector('.location-drawer') as HTMLElement;
+
+  // Group locations by type
+  const groupedLocations = locations.reduce((acc, location) => {
+    if (!acc[location.type]) {
+      acc[location.type] = [];
+    }
+    acc[location.type].push(location);
+    return acc;
+  }, {} as { [key: string]: (Location & { type: string })[] });
+
+  // Create category sections
+  Object.entries(groupedLocations).forEach(([category, items]) => {
+    const categoryDiv = document.createElement('div');
+    categoryDiv.className = 'category';
+    
+    const categoryHeader = document.createElement('div');
+    categoryHeader.className = 'category-header';
+    categoryHeader.innerHTML = `
+      <span>${category.charAt(0).toUpperCase() + category.slice(1)}</span>
+      <i class="fa-solid fa-chevron-down"></i>
+    `;
+
+    const categoryContent = document.createElement('div');
+    categoryContent.className = 'category-content';
+
+    items.forEach((item) => {
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'location-item';
+      itemDiv.textContent = item.name;
+      itemDiv.onclick = () => {
+        const coords = Array.isArray(item.coordinates[0]) 
+          ? item.coordinates[0] as [number, number]
+          : item.coordinates as [number, number];
+        
+        map.setView([coords[1], coords[0]], map.getZoom());
+        
+        // Find and highlight the corresponding marker
+        const marker = markers.find(m => {
+          const pos = m.getLatLng();
+          return pos.lat === coords[1] && pos.lng === coords[0];
+        });
+        
+        if (marker) {
+          // Clear previous selections
+          document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+            el.classList.remove('selected');
+          });
+          
+          // Add selected class
+          marker.getElement()?.classList.add('selected');
+          
+          // Trigger the marker's click event to update sidebar
+          marker.fire('click');
+        }
+      };
+      categoryContent.appendChild(itemDiv);
+    });
+
+    categoryHeader.onclick = () => {
+      categoryContent.classList.toggle('open');
+      categoryHeader.querySelector('i')?.classList.toggle('fa-chevron-up');
+    };
+
+    categoryDiv.appendChild(categoryHeader);
+    categoryDiv.appendChild(categoryContent);
+    categoriesContainer.appendChild(categoryDiv);
+  });
+
+  // Toggle drawer
+  drawerToggle.onclick = () => {
+    locationDrawer.classList.toggle('drawer-collapsed');
+  };
+}
