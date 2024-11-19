@@ -8,7 +8,7 @@ coordinates:
   - [2472, 2604]
   - [3090, 2817]
   - [3345, 2445]
-description: "Chance to drop blitzel fragments"
+description: "These chests are not guaranteed spawns. Chance to drop blitzel fragments"
 icon: "fa-solid fa-toolbox"
 iconSize: 0.5
 iconColor: "#00008B"
