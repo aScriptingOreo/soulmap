@@ -4,5 +4,6 @@ coordinates:
   - [2019, 3001]
 
 description: "Chance to spawn the tormented stag"
-icon: "fa-solid fa-skull-crossbones"
+icon: "fa-solid fa-crown"
 iconSize: 0.75
+iconColor: "#f0d57f"

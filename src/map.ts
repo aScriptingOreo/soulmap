@@ -99,23 +99,31 @@ export async function initializeMap(locations: (Location & { type: string })[], 
           const sizeMultiplier = location.iconSize || 1;
           icon = L.divIcon({
             className: 'custom-location-icon',
-            html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: white; text-shadow: 2px 2px 4px black;"></i>`,
+            html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px black;"></i>`,
             iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
             iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
           });
         } else {
-          const iconType = (['location', 'dungeon', 'loot', 'unknown'].includes(location.type) 
-            ? location.type 
-            : 'unknown') as keyof typeof icons;
-          icon = icons[iconType];
+          const sizeMultiplier = location.iconSize || 1;
+          icon = L.icon({
+            iconUrl: `${location.icon}.svg`,
+            iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+            iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
+            className: 'custom-location-icon'
+          });
         }
 
         // Create and add marker to map
         const marker = L.marker([y, x], { icon }).addTo(map);
         markers.push(marker);
 
-        // Bind tooltip
-        marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
+        // Bind tooltip with adjusted offset
+        marker.bindTooltip(location.name, { 
+          permanent: false, 
+          direction: 'top',
+          offset: [0, -30], // Move tooltip 30 pixels up
+          className: 'leaflet-tooltip' // Ensure our custom styles are applied
+        });
 
         // Add click handler for marker
         marker.on('click', () => {
@@ -144,4 +152,53 @@ export async function initializeMap(locations: (Location & { type: string })[], 
   img.onerror = () => {
     console.error("Failed to load the image 'midrath.jpg'. Check the path and ensure it exists in 'res/'.");
   };
+
+  // Add map click handler for coordinates
+  map.on('click', (e) => {
+    const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+    const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+    const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+    const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
+    const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
+
+    // Update coordinates display
+    const x = Math.round(e.latlng.lng);
+    const y = Math.round(e.latlng.lat);
+    titleEl.textContent = 'Map Location';
+    descEl.textContent = 'Click on a marker to see location details';
+    coordEl.textContent = `[${x}, ${y}]`; // Changed format to match YAML
+    
+    // Clear image if any
+    imgEl.style.display = 'none';
+    imgEl.src = '';
+  });
+
+  // Add map click handler for coordinates
+  map.on('click', (e) => {
+    const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+    const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+    const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+    const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
+    const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
+
+    // Update coordinates display
+    const x = Math.round(e.latlng.lng);
+    const y = Math.round(e.latlng.lat);
+    titleEl.textContent = 'Map Location';
+    descEl.textContent = 'Click on a marker to see location details';
+    coordEl.textContent = `[${x}, ${y}]`; // Updated to YAML format
+    
+    // Clear image if any
+    imgEl.style.display = 'none';
+    imgEl.src = '';
+
+    // Clear any selected markers
+    document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+      el.classList.remove('selected');
+    });
+
+    if (debug) {
+      console.log(`Clicked coordinates: [${x}, ${y}]`); // Updated debug log format too
+    }
+  });
 }

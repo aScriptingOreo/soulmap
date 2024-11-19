@@ -50,7 +50,7 @@ export class Sidebar {
   updateContent(location: Location & { type: string }, x: number, y: number) {
     this.titleEl.textContent = location.name;
     this.descEl.textContent = location.description || 'No description available';
-    this.coordEl.textContent = `X: ${Math.round(x)}, Y: ${Math.round(y)}`;
+    this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`; // Changed format to match YAML
 
     if (location.imgUrl) {
       this.imgEl.src = location.imgUrl;

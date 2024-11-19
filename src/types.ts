@@ -1,9 +1,10 @@
 // src/types.ts
 export interface Location {
   name: string;
-  coordinates: [number, number] | [number, number][]; // Single or multiple coordinates
+  coordinates: [number, number] | [number, number][];
   description: string;
-  icon?: string; // Optional Font Awesome icon class
-  iconSize?: number; // Optional size multiplier for the icon
-  imgUrl?: string; // Optional image URL for the tooltip
+  icon?: string;
+  iconSize?: number;
+  imgUrl?: string;
+  iconColor?: string; // New optional hex color property
 }

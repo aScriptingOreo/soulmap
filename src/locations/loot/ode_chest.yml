@@ -11,3 +11,4 @@ coordinates:
 description: "Chance to drop blitzel fragments"
 icon: "fa-solid fa-toolbox"
 iconSize: 0.5
+iconColor: "#00008B"

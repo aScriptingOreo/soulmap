@@ -1,7 +1,7 @@
 # src/locations/loot/ode_chest.yml
 name: "Oro's Well Chest"
 coordinates: [2640, 1649]
-description: ""
+description: "credits: Sharksashimi"
 icon: "fa-solid fa-chess-rook"
 iconSize: 0.5
 imgUrl: "https://media.discordapp.net/attachments/1308252464340009081/1308284082475503679/image.png?ex=673d6200&is=673c1080&hm=09cd64f9367f579a2d0eec63a586049821a38d8c6b81bee7699cc37f7c7994fe&=&format=webp&quality=lossless"
