@@ -103,9 +103,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         const marker = L.marker([y, x], { icon }).addTo(map);
         // Bind tooltip on hover
         marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
-        // Bind popup on click
-        const popupContent = `<strong>${location.name}</strong><br>${location.description}${location.imgUrl ? `<br><img src="${location.imgUrl}" alt="${location.name}" style="max-width: 100%; height: auto;">` : ''}`;
-        marker.bindPopup(popupContent);
+
         // Add click event to toggle the selected class
         marker.on('click', () => {
           document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
@@ -116,32 +114,179 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             iconElement.classList.add('selected');
           }
         });
+
+        // Referências aos elementos do dropdown
+        const imageDropdown = document.getElementById('image-dropdown')!;
+        const dropdownImage = document.getElementById('dropdown-image') as HTMLImageElement;
+
+        // Para cada marcador, modifique o evento de clique
+        marker.on('click', () => {
+          // Verifica se a localização tem uma imagem
+          if (location.imgUrl) {
+            // Exibe a imagem no dropdown
+            dropdownImage.src = location.imgUrl;
+            imageDropdown.style.display = 'block';
+          } else {
+            // Se não houver imagem, oculta o dropdown
+            imageDropdown.style.display = 'none';
+            dropdownImage.src = '';
+          }
+          // Resto do código...
+        });
+
         // Remove selected class when clicking outside the marker
         map.on('click', (e) => {
           if (!marker.getElement()?.contains(e.originalEvent.target as Node)) {
             document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
               el.classList.remove('selected');
             });
+            imageDropdown.style.display = 'none';
+            dropdownImage.src = '';
           }
         });
         // Keep marker centered on zoom
         map.on('zoomend', () => {
           marker.setLatLng([y, x]);
         });
+
+        // Instead, add this to your marker click handler:
+        marker.on('click', () => {
+          const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+          const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+          const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+          const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
+          const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
+          const imageModal = document.querySelector('#image-modal') as HTMLElement;
+          const modalImage = document.querySelector('#modal-image') as HTMLImageElement;
+          const modalTitle = document.querySelector('.modal-title') as HTMLElement;
+          const modalDescription = document.querySelector('.modal-description') as HTMLElement;
+          const closeButton = document.querySelector('.close-button') as HTMLElement;
+
+          // Update content
+          titleEl.textContent = location.name;
+          descEl.textContent = location.description || 'No description available';
+          coordEl.textContent = `X: ${Math.round(x)}, Y: ${Math.round(y)}`;
+
+          // Handle image
+          if (location.imgUrl) {
+            imgEl.src = location.imgUrl;
+            imgEl.style.display = 'block';
+
+            // Add click handler for the image
+            imgEl.onclick = () => {
+              modalImage.src = location.imgUrl;
+              modalTitle.textContent = location.name;
+              modalDescription.textContent = location.description || 'No description available';
+              imageModal.style.display = 'flex';
+            };
+
+            // Close modal when clicking close button
+            closeButton.onclick = () => {
+              imageModal.style.display = 'none';
+            };
+
+            // Close modal when clicking outside
+            imageModal.onclick = (e) => {
+              if (e.target === imageModal) {
+                imageModal.style.display = 'none';
+              }
+            };
+          } else {
+            imgEl.style.display = 'none';
+            imgEl.src = '';
+          }
+
+          // Show sidebar and handle marker selection
+          sidebar.classList.add('active');
+        });
+
+        // Add click handler to map to close sidebar when clicking outside
+        map.on('click', (e) => {
+          if (!marker.getElement()?.contains(e.originalEvent.target as Node)) {
+            const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+            sidebar.classList.remove('active');
+            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+              el.classList.remove('selected');
+            });
+          }
+        });
       });
     });
 
-    // Display cursor coordinates on click
-    const cursorPosition = document.createElement('div');
-    cursorPosition.id = 'cursor-position';
-    document.body.appendChild(cursorPosition);
-    map.on('click', (e) => {
-      const { lat, lng } = e.latlng;
-      cursorPosition.innerText = `X: ${Math.round(lng)}, Y: ${Math.round(lat)}`;
-    });
-  };
+// Display coordinates on map click (for any location)
+map.on('click', (e) => {
+  const coordinates = e.latlng;
+  const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+  const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
+  const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+  const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+
+  // Update coordinates display
+  coordEl.textContent = `X: ${Math.round(coordinates.lng)}, Y: ${Math.round(coordinates.lat)}`;
+  
+  // Clear other fields when clicking empty space
+  if (!e.originalEvent.target.classList.contains('custom-location-icon')) {
+    titleEl.textContent = 'Map Location';
+    descEl.textContent = 'Click on a marker to see location details';
+  }
+});
+
+map.on('click', (e) => {
+  if (!e.originalEvent.target.classList.contains('custom-location-icon')) {
+    const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+    const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+    const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+    const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
+
+    titleEl.textContent = 'Map Location';
+    descEl.textContent = 'Click on a marker to see location details';
+    imgEl.style.display = 'none';
+    imgEl.src = '';
+  }
+});
+  }; // Close img.onload
 
   img.onerror = () => {
     console.error("Failed to load the image 'midrath.jpg'. Check the path and ensure it exists in 'res/'.");
   };
-}
+} // Close initializeMap
+
+// Add click handler for the sidebar image
+const sidebarImage = document.querySelector('#sidebar-image') as HTMLImageElement;
+const imageModal = document.querySelector('#image-modal') as HTMLElement;
+const modalImage = document.querySelector('#modal-image') as HTMLImageElement;
+const modalTitle = document.querySelector('.modal-title') as HTMLElement;
+const modalDescription = document.querySelector('.modal-description') as HTMLElement;
+const closeButton = document.querySelector('.close-button') as HTMLElement;
+
+// Function to close modal
+const closeModal = () => {
+  imageModal.style.display = 'none';
+};
+
+// Open modal when clicking sidebar image
+sidebarImage.addEventListener('click', () => {
+  if (location.imgUrl) {
+    modalImage.src = location.imgUrl;
+    modalTitle.textContent = location.name;
+    modalDescription.textContent = location.description || 'No description available';
+    imageModal.style.display = 'flex';
+  }
+});
+
+// Close modal when clicking close button
+closeButton.addEventListener('click', closeModal);
+
+// Close modal when clicking outside the image
+imageModal.addEventListener('click', (e) => {
+  if (e.target === imageModal) {
+    closeModal();
+  }
+});
+
+// Close modal with ESC key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal();
+  }
+});

@@ -44,16 +44,16 @@
     /* Styles for cursor position display */
     #cursor-position {
       position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background-color: rgba(255, 255, 255, 0.8);
+      bottom: 20px;
+      right: 30px; /* Position from right edge, giving space for Ko-fi button */
+      background-color: rgba(0, 0, 0, 0.8);
       padding: 5px 10px;
       border-radius: 4px;
-      font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+      font-family: 'Roboto', sans-serif;
       font-size: 14px;
-      color: #333;
+      color: #ffffff;
       box-shadow: 0 0 5px rgba(0,0,0,0.3);
-      z-index: 1000; /* Ensure it's above the map */
+      z-index: 1000;
     }
 
     /* Custom styles for popups based on device type */
@@ -103,11 +103,129 @@
     #popup-content button:hover {
       background-color: #ccc; /* Light gray on hover */
     }
+
+    .right-sidebar {
+      position: fixed;
+      top: 0;
+      right: 0;  /* Changed from -300px */
+      width: 300px;
+      height: 100%;
+      background-color: rgba(51, 51, 51, 0.95);
+      color: white;
+      z-index: 1000;
+      border-radius: 10px 0 0 10px;
+      box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+      padding: 20px;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    .coordinates-display {
+      margin-top: 10px;
+      padding: 5px 10px;
+      background-color: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .location-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .location-description {
+      font-size: 14px;
+      margin-bottom: 15px;
+      line-height: 1.4;
+    }
+
+    #image-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 2100;
+      padding: 40px;
+    }
+
+    .modal-content {
+      position: relative;
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    #modal-image {
+      max-width: 100%;
+      max-height: 90vh;
+      display: block;
+      border-radius: 10px;
+    }
+
+    .close-button {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      border: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      font-size: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.3s;
+    }
+
+    .close-button:hover {
+      background: rgba(0, 0, 0, 0.9);
+    }
+
+    .image-info {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 20px;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+      color: white;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      margin: 0 0 10px 0;
+    }
+
+    .modal-description {
+      font-size: 16px;
+      margin: 0;
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
   <div id="map">
     <div id="overlay"></div>
+  </div>
+  <div id="image-dropdown" style="position: absolute; top: 10px; right: 10px; display: none;">
+    <img id="dropdown-image" src="" alt="Imagem da Localização" style="max-width: 200px; max-height: 200px;">
+  </div>
+  <div class="right-sidebar">
+    <div class="location-title"></div>
+    <div class="location-description"></div>
+    <div class="coordinates-display"></div>
+    <div class="location-image">
+      <img id="sidebar-image" src="" alt="" style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
+    </div>
   </div>
   <div id="popup-overlay">
     <div id="popup-content">
@@ -119,9 +237,32 @@
       <button onclick="dismissPopup()">Dismiss</button>
     </div>
   </div>
+  <div id="image-modal" style="display: none;">
+    <div class="modal-content">
+      <button class="close-button">&times;</button>
+      <img id="modal-image" src="" alt="">
+      <div class="image-info">
+        <h2 class="modal-title"></h2>
+        <p class="modal-description"></p>
+      </div>
+    </div>
+  </div>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script type="module" src="./index.ts"></script> <!-- Entry point -->
-  <script>
+    <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+      <script>
+        kofiWidgetOverlay.draw('ascriptingoreo', {
+          'type': 'floating-chat',
+          'floating-chat.donateButton.text': 'Send Love',
+          'floating-chat.donateButton.background-color': '#d9534f',
+          'floating-chat.donateButton.text-color': '#fff',
+          'floating-chat.donateButton.position.right': '20px',
+          'floating-chat.donateButton.position.bottom': '20px',
+          'floating-chat.donateButton.position': 'fixed',
+          'floating-chat.donateButton.zIndex': '1000'
+        });
+      </script>
+    <script>
     function dismissPopup() {
       document.getElementById('popup-overlay').style.display = 'none';
     }
