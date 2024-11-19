@@ -5,4 +5,5 @@ export interface Location {
   description: string;
   icon?: string; // Optional Font Awesome icon class
   iconSize?: number; // Optional size multiplier for the icon
+  imgUrl?: string; // Optional image URL for the tooltip
 }

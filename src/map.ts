@@ -9,7 +9,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
   const deviceType = getDeviceType();
   let defaultZoom: number;
   let iconSize: [number, number];
-
   switch (deviceType) {
     case 'desktop':
       defaultZoom = -2;
@@ -42,10 +41,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     console.log(`Image loaded: width=${w}, height=${h}`);
-
     // Define image bounds using the actual image size
     const bounds: L.LatLngBoundsExpression = [[0, 0], [h, w]];
-
     // Add the image overlay
     L.imageOverlay('/midrath.jpg', bounds).addTo(map);
     map.fitBounds(bounds);
@@ -86,10 +83,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     locations.forEach((location) => {
       const iconType = (['location', 'dungeon', 'loot', 'unknown'].includes(location.type) ? location.type : 'unknown') as 'location' | 'dungeon' | 'loot' | 'unknown'; // Use type from directory or 'unknown'
       const coordinates = Array.isArray(location.coordinates[0]) ? location.coordinates as [number, number][] : [location.coordinates as [number, number]];
-
       coordinates.forEach(([x, y]) => {
         console.log(`Adding marker: ${location.name} at (${x}, ${y}) with type ${iconType}`);
-
         // Use Font Awesome icon if specified
         let icon: L.Icon | L.DivIcon = icons[iconType];
         if (location.icon) {
@@ -103,25 +98,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
               iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
               popupAnchor: [0, -iconSize[1] * sizeMultiplier / 2]
             });
-          } else {
-            icon = L.icon({
-              iconUrl: location.icon,
-              iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
-              iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
-              popupAnchor: [0, -iconSize[1] * sizeMultiplier / 2],
-              className: 'custom-location-icon'
-            });
           }
         }
-
         const marker = L.marker([y, x], { icon }).addTo(map);
-
         // Bind tooltip on hover
         marker.bindTooltip(location.name, { permanent: false, direction: 'top' });
-
         // Bind popup on click
-        marker.bindPopup(`<strong>${location.name}</strong><br>${location.description}`);
-
+        const popupContent = `<strong>${location.name}</strong><br>${location.description}${location.imgUrl ? `<br><img src="${location.imgUrl}" alt="${location.name}" style="max-width: 100%; height: auto;">` : ''}`;
+        marker.bindPopup(popupContent);
         // Add click event to toggle the selected class
         marker.on('click', () => {
           document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
@@ -132,7 +116,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             iconElement.classList.add('selected');
           }
         });
-
         // Remove selected class when clicking outside the marker
         map.on('click', (e) => {
           if (!marker.getElement()?.contains(e.originalEvent.target as Node)) {
@@ -141,7 +124,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             });
           }
         });
-
         // Keep marker centered on zoom
         map.on('zoomend', () => {
           marker.setLatLng([y, x]);
@@ -153,7 +135,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const cursorPosition = document.createElement('div');
     cursorPosition.id = 'cursor-position';
     document.body.appendChild(cursorPosition);
-
     map.on('click', (e) => {
       const { lat, lng } = e.latlng;
       cursorPosition.innerText = `X: ${Math.round(lng)}, Y: ${Math.round(lat)}`;

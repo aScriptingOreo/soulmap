@@ -1,0 +1,6 @@
+# src/locations/loot/ode_chest.yml
+name: "Juniper Fragment"
+coordinates: [1071, 524]
+description: ""
+icon: "fa-solid fa-toolbox"
+iconSize: 0.5

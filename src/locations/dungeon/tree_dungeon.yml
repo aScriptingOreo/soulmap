@@ -1,5 +1,5 @@
-name: "Tree Dungeon"
+name: "[Glade] Tree Dungeon"
 coordinates: [3046, 453]
 description: "This is where you start the Vaermina Quest"
-icon: "fa-solid fa-dungeon"
+icon: "fa-brands fa-pagelines"
 iconSize: 0.75
