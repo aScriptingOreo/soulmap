@@ -327,33 +327,88 @@ function createLocationDrawer(locations: (Location & { type: string })[], map: L
     items.forEach((item) => {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'location-item';
-      itemDiv.textContent = item.name;
-      itemDiv.onclick = () => {
-        const coords = Array.isArray(item.coordinates[0]) 
-          ? item.coordinates[0] as [number, number]
-          : item.coordinates as [number, number];
+      
+      // Check if location has multiple coordinates
+      const hasMultipleCoords = Array.isArray(item.coordinates[0]);
+      
+      if (hasMultipleCoords) {
+        // Create parent item with dropdown
+        const parentDiv = document.createElement('div');
+        parentDiv.className = 'location-item-parent';
+        parentDiv.innerHTML = `
+          <div class="location-header">
+            <span>${item.name}</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </div>
+        `;
         
-        map.setView([coords[1], coords[0]], map.getZoom());
+        // Create dropdown content
+        const dropdownContent = document.createElement('div');
+        dropdownContent.className = 'location-dropdown';
+        dropdownContent.style.display = 'none';
+        dropdownContent.style.paddingLeft = '20px';
         
-        // Find and highlight the corresponding marker
-        const marker = markers.find(m => {
-          const pos = m.getLatLng();
-          return pos.lat === coords[1] && pos.lng === coords[0];
+        // Add numbered locations
+        (item.coordinates as [number, number][]).forEach((coords, index) => {
+          const locationOption = document.createElement('div');
+          locationOption.className = 'location-option';
+          locationOption.textContent = `#${index + 1}`;
+          locationOption.style.padding = '5px 0';
+          locationOption.style.cursor = 'pointer';
+          
+          locationOption.onclick = (e) => {
+            e.stopPropagation();
+            map.setView([coords[1], coords[0]], map.getZoom());
+            
+            // Find and highlight the corresponding marker
+            const marker = markers.find(m => {
+              const pos = m.getLatLng();
+              return pos.lat === coords[1] && pos.lng === coords[0];
+            });
+            
+            if (marker) {
+              document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+                el.classList.remove('selected');
+              });
+              marker.getElement()?.classList.add('selected');
+              marker.fire('click');
+            }
+          };
+          
+          dropdownContent.appendChild(locationOption);
         });
         
-        if (marker) {
-          // Clear previous selections
-          document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-            el.classList.remove('selected');
+        // Toggle dropdown on click
+        parentDiv.querySelector('.location-header')?.addEventListener('click', () => {
+          const isOpen = dropdownContent.style.display === 'block';
+          dropdownContent.style.display = isOpen ? 'none' : 'block';
+          parentDiv.querySelector('i')?.classList.toggle('fa-chevron-up');
+        });
+        
+        parentDiv.appendChild(dropdownContent);
+        itemDiv.appendChild(parentDiv);
+      } else {
+        // Single location handling (existing code)
+        itemDiv.textContent = item.name;
+        itemDiv.onclick = () => {
+          const coords = item.coordinates as [number, number];
+          map.setView([coords[1], coords[0]], map.getZoom());
+          
+          const marker = markers.find(m => {
+            const pos = m.getLatLng();
+            return pos.lat === coords[1] && pos.lng === coords[0];
           });
           
-          // Add selected class
-          marker.getElement()?.classList.add('selected');
-          
-          // Trigger the marker's click event to update sidebar
-          marker.fire('click');
-        }
-      };
+          if (marker) {
+            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+              el.classList.remove('selected');
+            });
+            marker.getElement()?.classList.add('selected');
+            marker.fire('click');
+          }
+        };
+      }
+      
       categoryContent.appendChild(itemDiv);
     });
 
@@ -367,7 +422,6 @@ function createLocationDrawer(locations: (Location & { type: string })[], map: L
     categoriesContainer.appendChild(categoryDiv);
   });
 
-  // Toggle drawer
   drawerToggle.onclick = () => {
     locationDrawer.classList.toggle('drawer-collapsed');
   };
