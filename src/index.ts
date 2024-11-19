@@ -2,11 +2,19 @@
 import { marked } from 'marked';
 import { loadLocations } from './loader';
 import { initializeMap } from './map';
+import type { VersionInfo } from './types';
 
 async function loadGreeting() {
   try {
+    const versionModule = await import('./mapversion.yml');
+    const versionData = versionModule.default as VersionInfo;
     const response = await fetch('./greetings.md');
-    const markdown = await response.text();
+    let markdown = await response.text();
+    
+    // Replace version placeholders
+    markdown = markdown.replace('{version}', versionData.version)
+                      .replace('{game_version}', versionData.game_version);
+    
     const html = marked(markdown);
     
     const popupText = document.getElementById('popup-text');
@@ -16,6 +24,20 @@ async function loadGreeting() {
     }
   } catch (error) {
     console.error('Error loading greeting:', error);
+  }
+}
+
+async function updateVersionDisplay() {
+  try {
+    const versionModule = await import('./mapversion.yml');
+    const versionData = versionModule.default as VersionInfo;
+    
+    const versionDisplay = document.getElementById('version-display');
+    if (versionDisplay) {
+      versionDisplay.textContent = `Soulmap | v${versionData.version} | up to date with ${versionData.game_version}`;
+    }
+  } catch (error) {
+    console.error('Error loading version:', error);
   }
 }
 
@@ -40,6 +62,7 @@ async function initMain() {
 document.addEventListener('DOMContentLoaded', async () => {
   // Show greeting first
   await loadGreeting();
+  await updateVersionDisplay();
   
   // Set up dismiss handler
   document.querySelector('#popup-content button')?.addEventListener('click', dismissPopup);

@@ -1,0 +1,381 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+}
+#map {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  z-index: 100; /* Ensure the map is at z-index 100 */
+}
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8); /* 80% see-through dark overlay */
+  z-index: 101; /* Ensure it's above the map but below the icons */
+}
+
+/* Custom styles for the location marker */
+.custom-location-icon {
+  filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
+  transition: transform 0.3s ease, filter 0.3s ease;
+  z-index: 102; /* Ensure icons are above the overlay */
+}
+
+.custom-location-icon:hover,
+.custom-location-icon.selected {
+  transform: scale(1.5);
+  filter: drop-shadow(0 0 10px yellow);
+}
+
+/* Styles for cursor position display */
+#cursor-position {
+  position: absolute;
+  bottom: 20px;
+  right: 30px; /* Position from right edge, giving space for Ko-fi button */
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #ffffff;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  z-index: 1000;
+}
+
+/* Custom styles for popups based on device type */
+.popup-desktop {
+  font-size: 14px;
+}
+.popup-tablet {
+  font-size: 16px;
+}
+.popup-phone {
+  font-size: 18px;
+}
+
+/* Styles for the popup overlay */
+#popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000; /* Ensure it's above everything else */
+}
+#popup-content {
+  position: relative;
+  max-width: 600px;
+  max-height: 80vh;
+  background-color: #333; /* Gray background */
+  padding: 20px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+#popup-text {
+  overflow-y: auto;
+  max-height: calc(80vh - 80px); /* Leave space for button */
+  color: white;
+  font-family: 'Roboto', sans-serif;
+  padding-right: 10px;
+  margin-bottom: 20px;
+}
+#popup-content button {
+  position: sticky;
+  bottom: 0;
+  align-self: center;
+  padding: 10px 20px;
+  border: none;
+  background-color: #fff; /* White button */
+  color: #333; /* Gray text */
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+}
+#popup-content button:hover {
+  background-color: #ccc; /* Light gray on hover */
+}
+
+.right-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;  /* Changed from -300px */
+  width: 300px;
+  height: 100%;
+  background-color: rgba(51, 51, 51, 0.95);
+  color: white;
+  z-index: 1000;
+  border-radius: 10px 0 0 10px;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+  font-family: 'Roboto', sans-serif;
+}
+
+.coordinates-display {
+  margin-top: 10px;
+  padding: 5px 10px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.location-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.location-description {
+  font-size: 14px;
+  margin-bottom: 15px;
+  line-height: 1.4;
+}
+
+#image-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2100;
+  padding: 40px;
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#modal-image {
+  max-width: 100%;
+  max-height: 90vh;
+  display: block;
+  border-radius: 10px;
+}
+
+.close-button {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s;
+}
+
+.close-button:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.image-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+  color: white;
+}
+
+.modal-title {
+  font-size: 24px;
+  margin: 0 0 10px 0;
+}
+
+.modal-description {
+  font-size: 16px;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.version-box {
+    position: fixed;
+    top: 20px;
+    left: 65px;  /* Changed from 20px to 5px */
+    background: rgba(51, 51, 51, 0.95);
+    padding: 10px 15px;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    z-index: 1000;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    font-family: 'Roboto', sans-serif;
+  }
+
+.location-drawer {
+  position: absolute;
+  bottom: 60px; /* Add bottom padding to avoid toolbar */
+  left: 0;
+  right: 0;
+  background: rgba(51, 51, 51, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 40vh; /* Limit height to 40% of viewport */
+  transition: transform 0.3s ease;
+}
+
+.drawer-header {
+  padding: 15px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(51, 51, 51, 0.95); /* Match drawer background */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.drawer-content {
+  overflow-y: auto;
+  max-height: calc(40vh - 50px);
+  padding: 10px 0;
+  padding-bottom: 60px; /* Add padding for the toolbar */
+}
+
+.category {
+  margin-bottom: 10px;
+}
+
+.category-header {
+  padding: 10px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+
+.category-content {
+  display: none;
+  padding-left: 20px;
+}
+
+.category-content.open {
+  display: block;
+}
+
+.location-item {
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.location-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.drawer-collapsed .drawer-content {
+  display: none;
+}
+
+.drawer-collapsed .fa-chevron-up {
+  transform: rotate(180deg);
+}
+
+.search-container {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  z-index: 1000;
+}
+
+#location-search {
+  width: 100%;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: 14px;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 5px;
+  background: rgba(51, 51, 51, 0.95);
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  display: none;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.search-result {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.search-result:last-child {
+  border-bottom: none;
+}
+
+.search-result:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.result-name {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.result-description {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.no-results {
+  padding: 10px 15px;
+  color: white;
+  text-align: center;
+  opacity: 0.7;
+}
+
+/* Add custom tooltip styling */
+.leaflet-tooltip {
+  background-color: rgba(51, 51, 51, 0.95) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  padding: 5px 10px !important;
+  font-family: 'Roboto', sans-serif !important;
+  font-size: 14px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Override the default tooltip arrow color */
+.leaflet-tooltip-top:before {
+  border-top-color: rgba(51, 51, 51, 0.95) !important;
+  margin-bottom: -15px !important; /* Move tooltip higher */
+}

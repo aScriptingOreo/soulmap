@@ -8,3 +8,7 @@ export interface Location {
   imgUrl?: string;
   iconColor?: string; // New optional hex color property
 }
+export interface VersionInfo {
+  version: string;
+  game_version: string;
+}

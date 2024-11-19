@@ -4,14 +4,16 @@ import yaml from '@rollup/plugin-yaml';
 import path from 'path';
 
 export default defineConfig({
-  root: path.resolve(__dirname, 'src'), // Set src/ as the root
-  publicDir: path.resolve(__dirname, 'res'), // Serve static assets from res/
+  root: path.resolve(__dirname, 'src'),
+  publicDir: path.resolve(__dirname, 'res'),
   build: {
-    outDir: '../dist', // Output directory
+    outDir: '../dist',
     emptyOutDir: true,
   },
   plugins: [
-    yaml()
+    yaml({
+      include: ['src/**/*.yml', 'src/**/*.yaml', 'src/mapversion.yml'] // Explicitly include mapversion.yml
+    })
   ],
   resolve: {
     alias: {
@@ -21,7 +23,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      allow: ['..'] // Allow accessing files from the project root if needed
+      allow: ['..']
     }
   }
 });
