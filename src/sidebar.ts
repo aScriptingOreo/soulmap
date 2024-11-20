@@ -23,6 +23,8 @@ export class Sidebar {
   private modalDescription: HTMLElement;
   private closeButton: HTMLElement;
   private locationDrawer: HTMLElement;
+  private visibleMarkers: Set<string> = new Set();
+  private visibleCategories: Set<string> = new Set();
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -44,6 +46,10 @@ export class Sidebar {
 
     this.initializeImageHandlers();
     this.initializeLocationDrawer();
+
+    // Initialize visibility sets
+    this.visibleMarkers = new Set(this.locations.map(l => l.name));
+    this.visibleCategories = new Set(this.locations.map(l => l.type));
   }
 
   // Update sidebar content
@@ -117,21 +123,38 @@ export class Sidebar {
     
     const categoryHeader = document.createElement('div');
     categoryHeader.className = 'category-header';
-    categoryHeader.innerHTML = `
-      <span>${category.charAt(0).toUpperCase() + category.slice(1)}</span>
-      <i class="fa-solid fa-chevron-down"></i>
-    `;
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+    
+    const visibilityToggle = document.createElement('span');
+    visibilityToggle.className = 'material-icons visibility-toggle';
+    visibilityToggle.textContent = 'visibility';
+    
+    const chevronIcon = document.createElement('i');
+    chevronIcon.className = 'fa-solid fa-chevron-down';
+    
+    categoryHeader.appendChild(titleSpan);
+    categoryHeader.appendChild(visibilityToggle);
+    categoryHeader.appendChild(chevronIcon);
 
     const categoryContent = document.createElement('div');
     categoryContent.className = 'category-content';
+
+    // Add category visibility toggle
+    visibilityToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleCategoryVisibility(category, items, visibilityToggle);
+    });
 
     items.forEach((item) => {
       this.createLocationItem(item, categoryContent);
     });
 
+    // Existing category click handler...
     categoryHeader.addEventListener('click', () => {
       categoryContent.classList.toggle('open');
-      categoryHeader.querySelector('i')?.classList.toggle('fa-chevron-up');
+      chevronIcon.classList.toggle('fa-chevron-up');
     });
 
     categoryDiv.appendChild(categoryHeader);
@@ -153,55 +176,96 @@ export class Sidebar {
   // Create multi-location item
   private createMultiLocationItem(item: Location & { type: string }, container: HTMLElement) {
     const parentDiv = document.createElement('div');
-    parentDiv.className = 'location-item-parent';
+    parentDiv.className = 'category';
     parentDiv.setAttribute('data-name', item.name);
-    parentDiv.innerHTML = `
-      <div class="location-header">
-        <span>${item.name}</span>
-        <i class="fa-solid fa-chevron-down"></i>
-      </div>
-    `;
+    
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'category-header';
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = item.name;
+    
+    const visibilityToggle = document.createElement('span');
+    visibilityToggle.className = 'material-icons visibility-toggle';
+    visibilityToggle.textContent = 'visibility';
+    
+    const chevronIcon = document.createElement('i');
+    chevronIcon.className = 'fa-solid fa-chevron-down';
+    
+    headerDiv.appendChild(nameSpan); // Fix: was using titleSpan instead of nameSpan
+    headerDiv.appendChild(visibilityToggle);
+    headerDiv.appendChild(chevronIcon);
 
     const dropdownContent = document.createElement('div');
-    dropdownContent.className = 'location-dropdown';
-    dropdownContent.style.display = 'none';
-    dropdownContent.style.paddingLeft = '20px';
-
+    dropdownContent.className = 'category-content';
+    
     (item.coordinates as [number, number][]).forEach((coords, index) => {
-      const locationOption = document.createElement('div');
-      locationOption.className = 'location-option';
-      locationOption.textContent = `#${index + 1}`;
-      locationOption.style.padding = '5px 0';
-      locationOption.style.cursor = 'pointer';
+        const locationOption = document.createElement('div');
+        locationOption.className = 'location-item';
+        
+        const coordSpan = document.createElement('span');
+        coordSpan.className = 'location-name';
+        coordSpan.textContent = `#${index + 1}`;
+        
+        const coordToggle = document.createElement('span');
+        coordToggle.className = 'material-icons visibility-toggle';
+        coordToggle.textContent = 'visibility';
+        
+        locationOption.appendChild(coordSpan);
+        locationOption.appendChild(coordToggle);
+        
+        coordSpan.addEventListener('click', () => {
+            this.handleLocationClick(coords, item);
+        });
+        
+        coordToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const markerKey = `${item.name}-${index}`;
+            this.toggleMarkerVisibility(markerKey, coordToggle, coords);
+        });
+        
+        dropdownContent.appendChild(locationOption);
+    });
 
-      locationOption.addEventListener('click', (e) => {
+    visibilityToggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.handleLocationClick(coords, item);
-      });
-
-      dropdownContent.appendChild(locationOption);
+        this.toggleMultiMarkerVisibility(item, visibilityToggle);
     });
 
-    parentDiv.querySelector('.location-header')?.addEventListener('click', () => {
-      const isOpen = dropdownContent.style.display === 'block';
-      dropdownContent.style.display = isOpen ? 'none' : 'block';
-      parentDiv.querySelector('i')?.classList.toggle('fa-chevron-up');
+    headerDiv.addEventListener('click', () => {
+        dropdownContent.classList.toggle('open');
+        chevronIcon.classList.toggle('fa-chevron-up');
     });
 
+    parentDiv.appendChild(headerDiv);
     parentDiv.appendChild(dropdownContent);
     container.appendChild(parentDiv);
-  }
+}
 
   // Create single location item
   private createSingleLocationItem(item: Location & { type: string }, container: HTMLElement) {
     const itemDiv = document.createElement('div');
     itemDiv.className = 'location-item';
-    itemDiv.setAttribute('data-name', item.name);
-    itemDiv.textContent = item.name;
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'location-name';
+    nameSpan.textContent = item.name;
+    
+    const visibilityToggle = document.createElement('span');
+    visibilityToggle.className = 'material-icons visibility-toggle';
+    visibilityToggle.textContent = 'visibility';
+    
+    itemDiv.appendChild(nameSpan);
+    itemDiv.appendChild(visibilityToggle);
 
-    itemDiv.addEventListener('click', () => {
+    nameSpan.addEventListener('click', () => {
       const coords = item.coordinates as [number, number];
       this.handleLocationClick(coords, item);
+    });
+
+    visibilityToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleMarkerVisibility(item.name, visibilityToggle);
     });
 
     container.appendChild(itemDiv);
@@ -224,4 +288,229 @@ export class Sidebar {
       marker.fire('click');
     }
   }
+
+  private toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement, coords?: [number, number]) {
+    const isVisible = this.visibleMarkers.has(locationName);
+    const [baseName] = locationName.split('-');
+    
+    // Find parent category and its toggle
+    const categoryElement = toggleElement.closest('.category');
+    const categoryToggle = categoryElement?.querySelector('.category-header .visibility-toggle') as HTMLElement;
+    
+    // Update visibility state
+    if (isVisible) {
+        // Currently visible, hide it
+        this.visibleMarkers.delete(locationName);
+        toggleElement.textContent = 'visibility_off';
+        toggleElement.classList.add('hidden');
+        
+        // Update markers
+        this.markers.forEach(marker => {
+            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+            const pos = marker.getLatLng();
+            
+            if (coords) {
+                // For child markers
+                if (markerName === baseName && pos.lat === coords[1] && pos.lng === coords[0]) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = 'none';
+                    }
+                }
+            } else {
+                // For parent markers
+                if (markerName === locationName) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = 'none';
+                    }
+                }
+            }
+        });
+        
+        // Check siblings for parent toggle update
+        if (categoryElement) {
+            const siblingToggles = categoryElement.querySelectorAll('.location-item .visibility-toggle');
+            const allHidden = Array.from(siblingToggles).every(t => t.classList.contains('hidden'));
+            if (allHidden && categoryToggle) {
+                categoryToggle.textContent = 'visibility_off';
+                categoryToggle.classList.add('hidden');
+            }
+        }
+    } else {
+        // Currently hidden, show it
+        this.visibleMarkers.add(locationName);
+        toggleElement.textContent = 'visibility';
+        toggleElement.classList.remove('hidden');
+        
+        // Update markers
+        this.markers.forEach(marker => {
+            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+            const pos = marker.getLatLng();
+            
+            if (coords) {
+                // For child markers
+                if (markerName === baseName && pos.lat === coords[1] && pos.lng === coords[0]) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = '';
+                    }
+                }
+            } else {
+                // For parent markers
+                if (markerName === locationName) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = '';
+                    }
+                }
+            }
+        });
+        
+        // Update parent category toggle
+        if (categoryToggle) {
+            categoryToggle.textContent = 'visibility';
+            categoryToggle.classList.remove('hidden');
+        }
+    }
+}
+
+private toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement) {
+    const isVisible = this.visibleCategories.has(category);
+    
+    if (isVisible) {
+        // Hide category and all its items
+        this.visibleCategories.delete(category);
+        toggle.textContent = 'visibility_off';
+        toggle.classList.add('hidden');
+        
+        // Update all visibility toggles in this category
+        const categoryElement = toggle.closest('.category');
+        const allToggles = categoryElement?.querySelectorAll('.visibility-toggle');
+        allToggles?.forEach(t => {
+            (t as HTMLElement).textContent = 'visibility_off';
+            t.classList.add('hidden');
+        });
+
+        // Remove all markers in this category from visible set
+        items.forEach(item => {
+            this.visibleMarkers.delete(item.name);
+            if (Array.isArray(item.coordinates[0])) {
+                (item.coordinates as [number, number][]).forEach((_, index) => {
+                    this.visibleMarkers.delete(`${item.name}-${index}`);
+                });
+            }
+            
+            // Update markers visibility
+            this.markers.forEach(marker => {
+                const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+                if (markerName === item.name) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = 'none';
+                    }
+                }
+            });
+        });
+    } else {
+        // Show category and all its items
+        this.visibleCategories.add(category);
+        toggle.textContent = 'visibility';
+        toggle.classList.remove('hidden');
+        
+        // Update all visibility toggles in this category
+        const categoryElement = toggle.closest('.category');
+        const allToggles = categoryElement?.querySelectorAll('.visibility-toggle');
+        allToggles?.forEach(t => {
+            (t as HTMLElement).textContent = 'visibility';
+            t.classList.remove('hidden');
+        });
+
+        // Add all markers in this category to visible set
+        items.forEach(item => {
+            this.visibleMarkers.add(item.name);
+            if (Array.isArray(item.coordinates[0])) {
+                (item.coordinates as [number, number][]).forEach((_, index) => {
+                    this.visibleMarkers.add(`${item.name}-${index}`);
+                });
+            }
+            
+            // Update markers visibility
+            this.markers.forEach(marker => {
+                const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+                if (markerName === item.name) {
+                    const element = marker.getElement();
+                    if (element) {
+                        element.style.display = '';
+                    }
+                }
+            });
+        });
+    }
+}
+
+private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: HTMLElement) {
+    const isVisible = this.visibleMarkers.has(item.name);
+    const coordinates = item.coordinates as [number, number][];
+    
+    if (isVisible) {
+        // Hide main item and all child markers
+        this.visibleMarkers.delete(item.name);
+        toggle.textContent = 'visibility_off';
+        toggle.classList.add('hidden');
+        
+        // Update child toggles
+        const itemElement = toggle.closest('[data-name]');
+        const childToggles = itemElement?.querySelectorAll('.location-item .visibility-toggle');
+        childToggles?.forEach(t => {
+            (t as HTMLElement).textContent = 'visibility_off';
+            t.classList.add('hidden');
+        });
+        
+        // Remove individual coordinate markers from visible set
+        coordinates.forEach((_, index) => {
+            this.visibleMarkers.delete(`${item.name}-${index}`);
+        });
+        
+        // Update marker visibility
+        this.markers.forEach(marker => {
+            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+            if (markerName === item.name) {
+                const element = marker.getElement();
+                if (element) {
+                    element.style.display = 'none';
+                }
+            }
+        });
+    } else {
+        // Show main item and all child markers
+        this.visibleMarkers.add(item.name);
+        toggle.textContent = 'visibility';
+        toggle.classList.remove('hidden');
+        
+        // Update child toggles
+        const itemElement = toggle.closest('[data-name]');
+        const childToggles = itemElement?.querySelectorAll('.location-item .visibility-toggle');
+        childToggles?.forEach(t => {
+            (t as HTMLElement).textContent = 'visibility';
+            t.classList.remove('hidden');
+        });
+        
+        // Add individual coordinate markers to visible set
+        coordinates.forEach((_, index) => {
+            this.visibleMarkers.add(`${item.name}-${index}`);
+        });
+        
+        // Update marker visibility
+        this.markers.forEach(marker => {
+            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
+            if (markerName === item.name) {
+                const element = marker.getElement();
+                if (element) {
+                    element.style.display = '';
+                }
+            }
+        });
+    }
+}
 }

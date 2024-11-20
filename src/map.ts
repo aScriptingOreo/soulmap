@@ -92,14 +92,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         : [location.coordinates] as [number, number][];
 
       // Create a marker for each coordinate
-      coordinatesArray.forEach(([x, y]) => {
+      coordinatesArray.forEach(([x, y], index) => {
         // Use either Font Awesome icon or custom SVG icon
         let icon: L.Icon | L.DivIcon;
         if (location.icon && location.icon.startsWith('fa-')) {
           const sizeMultiplier = location.iconSize || 1;
           icon = L.divIcon({
             className: 'custom-location-icon',
-            html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px black;"></i>`,
+            html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px black;"></i>`, // Remove the marker-number span
             iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
             iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
           });
@@ -117,8 +117,15 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         const marker = L.marker([y, x], { icon }).addTo(map);
         markers.push(marker);
 
+        // Add data attribute for visibility tracking
+        marker.getElement()?.setAttribute('data-location', location.name);
+
         // Bind tooltip with adjusted offset
-        marker.bindTooltip(location.name, { 
+        const tooltipContent = coordinatesArray.length > 1 ? 
+          `${location.name} #${index + 1}` : 
+          location.name;
+        
+        marker.bindTooltip(tooltipContent, { 
           permanent: false, 
           direction: 'top',
           offset: [0, -30], // Move tooltip 30 pixels up

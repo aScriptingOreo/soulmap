@@ -266,9 +266,20 @@ html, body {
   padding: 10px 20px;
   cursor: pointer;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-weight: bold;
+}
+
+.category-header span:first-child {
+  order: 2;
+  flex: 1;
+}
+
+.category-header .visibility-toggle {
+  order: 1;
+}
+
+.category-header i {
+  order: 3;
 }
 
 .category-content {
@@ -281,6 +292,8 @@ html, body {
 }
 
 .location-item {
+  display: flex;
+  align-items: center;
   padding: 8px 20px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -288,6 +301,10 @@ html, body {
 
 .location-item:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.location-item .visibility-toggle {
+  order: 1;
 }
 
 .drawer-collapsed .drawer-content {
@@ -378,4 +395,216 @@ html, body {
 .leaflet-tooltip-top:before {
   border-top-color: rgba(51, 51, 51, 0.95) !important;
   margin-bottom: -15px !important; /* Move tooltip higher */
+}
+
+.visibility-toggle {
+  color: white;
+  opacity: 0.8;
+  cursor: pointer;
+  transition: opacity 0.3s;
+  margin-right: 10px; /* Changed from margin-left */
+}
+
+.visibility-toggle:hover {
+  opacity: 1;
+}
+
+.visibility-toggle.hidden {
+  opacity: 0.4;
+}
+
+.location-name {
+  flex: 1;
+  order: 2;
+}
+
+.location-option {
+  display: flex;
+  align-items: center;
+  padding: 5px 20px;
+  cursor: pointer;
+}
+
+.location-option:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.location-dropdown {
+  display: none;
+  margin-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.location-dropdown.open {
+  display: block;
+}
+
+.category-header .visibility-toggle {
+  margin-right: 10px;
+  order: 1;
+}
+
+.location-item .visibility-toggle {
+  order: 1;
+}
+
+.category-header i {
+  order: 3;
+}
+
+.location-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  cursor: pointer;
+  position: relative;
+}
+
+.location-header span:first-child {
+  order: 1;
+  flex: 1;
+}
+
+.location-header .visibility-toggle {
+  order: 2;
+  margin-left: 10px;
+  margin-right: 0;
+}
+
+.location-header i {
+  order: 3;
+  margin-left: 10px;
+}
+
+.location-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  cursor: pointer;
+  position: relative;
+}
+
+.location-header span:first-child {
+  order: 2;
+  flex: 1;
+}
+
+.location-header .visibility-toggle {
+  order: 1;
+  margin-right: 10px;
+}
+
+.location-header i {
+  margin-left: auto;
+}
+
+.location-option {
+  display: flex;
+  align-items: center;
+  padding: 5px 20px;
+  cursor: pointer;
+}
+
+.location-option span:first-child {
+  order: 2;
+  flex: 1;
+}
+
+.location-option .visibility-toggle {
+  order: 1;
+  margin-right: 10px;
+}
+
+/* Base layout for all header types */
+.location-header,
+.category-header,
+.location-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+
+/* Visibility toggle (left) */
+.visibility-toggle {
+  order: 1;
+  margin-right: 10px;
+}
+
+/* Text content (middle) */
+.category-header span:not(.visibility-toggle),
+.location-header span:not(.visibility-toggle),
+.location-name {
+  order: 2;
+  flex: 1;
+}
+
+/* Chevron icon (right) */
+.category-header i,
+.location-header i {
+  order: 3;
+  margin-left: auto;
+}
+
+/* Dropdown content */
+.location-dropdown {
+  display: none;
+  margin-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.location-dropdown.open {
+  display: block;
+}
+
+/* Hover effect */
+.location-option:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Base layout */
+.location-header,
+.category-header,
+.location-item,
+.location-option {
+  display: flex;
+  align-items: center;
+  padding: 5px 20px;
+  cursor: pointer;
+}
+
+/* Visibility toggle - consistent left position and spacing */
+.visibility-toggle {
+  order: 1;
+  margin-right: 8px;
+  color: white;
+  opacity: 0.8;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+/* Text content */
+.category-header span:not(.visibility-toggle),
+.location-header span:not(.visibility-toggle),
+.location-name {
+  order: 2;
+  flex: 1;
+}
+
+/* Chevron icon */
+.category-header i,
+.location-header i {
+  order: 3;
+  margin-left: 8px;
+}
+
+/* Dropdown content */
+.location-dropdown {
+  display: none;
+  margin-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.location-dropdown.open {
+  display: block;
 }
