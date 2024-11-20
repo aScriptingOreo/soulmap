@@ -85,7 +85,34 @@ async function initMain() {
         
         const marker = document.querySelector(markerSelector);
         if (marker) {
-          marker.dispatchEvent(new Event('click'));
+          map.setView([coords[1], coords[0]], map.getZoom());
+          marker.fire('click');
+          updateMetaTags(location, [coords[0], coords[1]]);
+
+          // Add click handler for marker
+          marker.on('click', () => {
+            // Update sidebar content
+            sidebar.updateContent(location, coords[0], coords[1]);
+
+            // Handle marker highlight
+            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+                el.classList.remove('selected');
+            });
+            marker.getElement()?.classList.add('selected');
+
+            // Get marker index for multi-location items
+            const isMultiLocation = location.coordinates.length > 1;
+            const locationHash = generateLocationHash(location.name);
+            const urlParams = isMultiLocation ? 
+                `?loc=${locationHash}&index=${indexParam}` : 
+                `?loc=${locationHash}`;
+
+            // Update URL with location hash and index if applicable
+            window.history.replaceState({}, '', urlParams);
+
+            // Update meta tags for social sharing
+            updateMetaTags(location, [coords[0], coords[1]]);
+          });
         }
       }
     }

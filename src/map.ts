@@ -16,6 +16,47 @@ function decodeLocationHash(hash: string, locations: (Location & { type: string 
   return locations.find(l => generateLocationHash(l.name) === hash);
 }
 
+function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
+    // Update title
+    document.title = `${location.name} - Soulmap`;
+
+    // Update meta description
+    const description = location.description || 'No description available';
+    document.querySelector('meta[name="description"]')?.setAttribute('content', 
+        `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
+
+    // Update Open Graph meta tags
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', 
+        `${location.name} - Soulmap`);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', 
+        `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
+
+    // Set image based on location type
+    let imageUrl;
+    if (location.imgUrl) {
+        imageUrl = location.imgUrl;
+    } else if (location.icon?.startsWith('fa-')) {
+        // Generate Font Awesome icon image URL
+        const iconClass = location.icon.replace('fa-solid ', '');
+        imageUrl = `https://fa-icons.com/${iconClass}.svg`; // You'll need to use a proper FA icon service
+    } else if (location.icon) {
+        // Use self-hosted icon
+        const baseUrl = window.location.origin;
+        imageUrl = `${baseUrl}${location.icon}.svg`;
+    }
+
+    if (imageUrl) {
+        document.querySelector('meta[property="og:image"]')?.setAttribute('content', imageUrl);
+        document.querySelector('meta[property="twitter:image"]')?.setAttribute('content', imageUrl);
+    }
+
+    // Update Twitter card meta tags
+    document.querySelector('meta[property="twitter:title"]')?.setAttribute('content', 
+        `${location.name} - Soulmap`);
+    document.querySelector('meta[property="twitter:description"]')?.setAttribute('content', 
+        `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
+}
+
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
   // Determine the default zoom level and icon size based on device type
   const deviceType = getDeviceType();
@@ -148,24 +189,27 @@ export async function initializeMap(locations: (Location & { type: string })[], 
 
         // Add click handler for marker
         marker.on('click', () => {
-          // Update sidebar content
-          sidebar.updateContent(location, x, y);
+            // Update sidebar content
+            sidebar.updateContent(location, x, y);
 
-          // Handle marker highlight
-          document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-            el.classList.remove('selected');
-          });
-          marker.getElement()?.classList.add('selected');
+            // Handle marker highlight
+            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+                el.classList.remove('selected');
+            });
+            marker.getElement()?.classList.add('selected');
 
-          // Get marker index for multi-location items
-          const isMultiLocation = coordinatesArray.length > 1;
-          const locationHash = generateLocationHash(location.name);
-          const urlParams = isMultiLocation ? 
-            `?loc=${locationHash}&index=${index}` : 
-            `?loc=${locationHash}`;
+            // Get marker index for multi-location items
+            const isMultiLocation = coordinatesArray.length > 1;
+            const locationHash = generateLocationHash(location.name);
+            const urlParams = isMultiLocation ? 
+                `?loc=${locationHash}&index=${index}` : 
+                `?loc=${locationHash}`;
 
-          // Update URL with location hash and index if applicable
-          window.history.replaceState({}, '', urlParams);
+            // Update URL with location hash and index if applicable
+            window.history.replaceState({}, '', urlParams);
+
+            // Update meta tags for social sharing
+            updateMetaTags(location, [x, y]);
         });
       });
     });
