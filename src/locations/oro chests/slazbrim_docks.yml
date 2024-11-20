@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "Slazbrim docks"
+name: "[oro] Slazbrim docks"
 coordinates: [1383, 1792]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"

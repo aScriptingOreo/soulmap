@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "Near the Bines of Borro"
+name: "[oro] Near the Bines of Borro"
 coordinates: [3135, 2238]
 description: "credits: Sharksashimi"
 icon: "fa-solid fa-chess-rook"

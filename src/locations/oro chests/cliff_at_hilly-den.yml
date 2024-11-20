@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "Cliff at hilly-den"
+name: "[oro] Cliff at hilly-den"
 coordinates: [1535, 1264]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"

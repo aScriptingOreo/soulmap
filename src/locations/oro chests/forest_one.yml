@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "Cozy Forest Chest"
+name: "[oro] Cozy Forest Chest"
 coordinates: [2586, 1749]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"

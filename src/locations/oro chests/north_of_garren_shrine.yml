@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "North of Garren's Shrine"
+name: "[oro] North of Garren's Shrine"
 coordinates: [2640, 1649]
 description: "credits: Icon"
 icon: "fa-solid fa-chess-rook"
