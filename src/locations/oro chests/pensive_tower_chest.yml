@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "Pensive's Chest"
+coordinates: [2353, 577]
+description: "credits: Yuritau"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://media.discordapp.net/attachments/1218432461604782092/1227492904982024212/13.png?ex=673e1e9a&is=673ccd1a&hm=8928324fc75d57e571cfb36a0f4788bb4f5329a71f0c7bd48e57b411ab452c08&=&format=webp&quality=lossless"

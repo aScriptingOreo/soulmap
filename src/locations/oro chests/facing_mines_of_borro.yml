@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "Facing Mines of Borro"
+coordinates: [2975, 1922]
+description: "credits: Dystopia"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://media.discordapp.net/attachments/1218432461604782092/1218659210741416046/Soulframe0360.jpg?ex=673e4855&is=673cf6d5&hm=9c67d4acc8427f25fbe559dfccdaec0db62439ffbebb1434844eb8e135abe5a8&=&format=webp"

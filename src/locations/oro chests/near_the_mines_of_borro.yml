@@ -1,0 +1,9 @@
+# src/locations/loot/ode_chest.yml
+name: "Near the Bines of Borro"
+coordinates: [3135, 2238]
+description: "credits: Sharksashimi"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://media.discordapp.net/attachments/1218432461604782092/1238485295159185468/Soulframe0057.jpg?ex=673de650&is=673c94d0&hm=4f08dceca936fb8a1009b20abf5e59fdc4461000453be53b0d2436161c6538d8&=&format=webp"
+

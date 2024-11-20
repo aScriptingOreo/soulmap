@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "North of Garren's Shrine"
+coordinates: [2640, 1649]
+description: "credits: Icon"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://media.discordapp.net/attachments/1218432461604782092/1307473565943332915/image.png?ex=673e63a5&is=673d1225&hm=c90ff9a9f9f7e4943784d53f908cc0039989a5ac136bfa372d2f19925beee97e&=&format=webp&quality=lossless"
