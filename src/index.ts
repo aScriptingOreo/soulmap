@@ -4,6 +4,16 @@ import { loadLocations } from './loader';
 import { initializeMap } from './map';
 import type { VersionInfo } from './types';
 
+function generateLocationHash(name: string): string {
+  return name.toLowerCase()
+             .replace(/[^a-z0-9]+/g, '-')
+             .replace(/(^-|-$)/g, '');
+}
+
+function decodeLocationHash(hash: string, locations: (Location & { type: string })[]): Location & { type: string } | undefined {
+  return locations.find(l => generateLocationHash(l.name) === hash);
+}
+
 async function loadGreeting() {
   try {
     const versionModule = await import('./mapversion.yml');
@@ -50,9 +60,31 @@ function dismissPopup() {
 async function initMain() {
   const urlParams = new URLSearchParams(window.location.search);
   const debug = urlParams.get('debug') === 'true';
+  const locationParam = urlParams.get('loc');
+  const indexParam = urlParams.get('index');
+  
   const locations = await loadLocations();
   if (locations.length > 0) {
-    initializeMap(locations, debug);
+    // Initialize map and store the promise
+    await initializeMap(locations, debug);
+    
+    // Handle URL parameters after map initialization
+    if (locationParam) {
+      const location = decodeLocationHash(locationParam, locations);
+      if (location) {
+        const coords = Array.isArray(location.coordinates[0]) 
+          ? (indexParam ? 
+              location.coordinates[parseInt(indexParam)] : 
+              location.coordinates[0]) as [number, number]
+          : location.coordinates as [number, number];
+          
+        // Find and click the marker
+        const marker = document.querySelector(`.custom-location-icon[data-location="${location.name}"]`);
+        if (marker) {
+          marker.dispatchEvent(new Event('click'));
+        }
+      }
+    }
   } else {
     console.error("No locations loaded. Map initialization aborted.");
   }

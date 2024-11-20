@@ -5,6 +5,17 @@ import { getDeviceType } from './device';
 import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
 
+function generateLocationHash(name: string): string {
+  // Replace spaces and special characters with dashes, convert to lowercase
+  return name.toLowerCase()
+             .replace(/[^a-z0-9]+/g, '-')
+             .replace(/(^-|-$)/g, '');
+}
+
+function decodeLocationHash(hash: string, locations: (Location & { type: string })[]): Location & { type: string } | undefined {
+  return locations.find(l => generateLocationHash(l.name) === hash);
+}
+
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
   // Determine the default zoom level and icon size based on device type
   const deviceType = getDeviceType();
@@ -142,6 +153,10 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             el.classList.remove('selected');
           });
           marker.getElement()?.classList.add('selected');
+
+          // Update URL with location hash
+          const locationHash = generateLocationHash(location.name);
+          window.history.replaceState({}, '', `?loc=${locationHash}`);
         });
       });
     });
@@ -153,6 +168,34 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       map.on('click', (e) => {
         console.log(`Clicked coordinates: ${Math.round(e.latlng.lng)}, ${Math.round(e.latlng.lat)}`);
       });
+    }
+
+    // Handle URL parameters after map is initialized
+    const urlParams = new URLSearchParams(window.location.search);
+    const locationParam = urlParams.get('loc');
+    const indexParam = urlParams.get('index');
+
+    if (locationParam) {
+        const location = decodeLocationHash(locationParam, locations);
+        
+        if (location) {
+            const coords = Array.isArray(location.coordinates[0]) 
+                ? (indexParam ? 
+                    location.coordinates[parseInt(indexParam)] : 
+                    location.coordinates[0]) as [number, number]
+                : location.coordinates as [number, number];
+                
+            // Find and trigger the marker
+            const marker = markers.find(m => {
+                const pos = m.getLatLng();
+                return pos.lat === coords[1] && pos.lng === coords[0];
+            });
+            
+            if (marker) {
+                map.setView([coords[1], coords[0]], map.getZoom());
+                marker.fire('click');
+            }
+        }
     }
   };
 

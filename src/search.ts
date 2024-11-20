@@ -56,6 +56,10 @@ export function initializeSearch(locations: (Location & { type: string })[], map
 
     map.setView([coords[1], coords[0]], map.getZoom());
 
+    // Update URL with location parameter
+    const encodedLocation = encodeURIComponent(location.name);
+    window.history.replaceState({}, '', `?location=${encodedLocation}`);
+
     // Find and trigger marker
     const marker = markers.find(m => {
       const pos = m.getLatLng();

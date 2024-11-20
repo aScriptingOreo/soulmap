@@ -276,18 +276,32 @@ export class Sidebar {
     this.map.setView([coords[1], coords[0]], this.map.getZoom());
 
     const marker = this.markers.find(m => {
-      const pos = m.getLatLng();
-      return pos.lat === coords[1] && pos.lng === coords[0];
+        const pos = m.getLatLng();
+        return pos.lat === coords[1] && pos.lng === coords[0];
     });
 
     if (marker) {
-      document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-        el.classList.remove('selected');
-      });
-      marker.getElement()?.classList.add('selected');
-      marker.fire('click');
+        document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+            el.classList.remove('selected');
+        });
+        marker.getElement()?.classList.add('selected');
+        marker.fire('click');
+
+        // Get marker index for multi-location items
+        const markerContent = marker.getTooltip()?.getContent() as string;
+        const markerIndex = markerContent.includes('#') ? 
+            parseInt(markerContent.split('#')[1]) - 1 : 
+            undefined;
+
+        // Update URL with location hash and index if applicable
+        const locationHash = generateLocationHash(item.name);
+        const urlParams = markerIndex !== undefined ? 
+            `?loc=${locationHash}&index=${markerIndex}` : 
+            `?loc=${locationHash}`;
+            
+        window.history.replaceState({}, '', urlParams);
     }
-  }
+}
 
   private toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement, coords?: [number, number]) {
     const isVisible = this.visibleMarkers.has(locationName);
