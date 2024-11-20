@@ -1,6 +1,11 @@
+version: "3.8"
+
 networks:
   proxy:
     external: true
+
+#volumes:
+#  soulmap_dev:
 
 services:
   soulmap:
@@ -12,22 +17,64 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
     networks:
       - proxy
     labels:
-      # First domain with SSL
       - traefik.enable=true
       - traefik.http.routers.soulmap-ssl.rule=Host(`soulmap.ascriptingoreo.online`)
       - traefik.http.routers.soulmap-ssl.service=soulmap
       - traefik.http.routers.soulmap-ssl.entrypoints=https
       - traefik.http.routers.soulmap-ssl.tls=true
       - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
-      
-      # Second domain without SSL (for Cloudflare)
       - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
       - traefik.http.routers.soulmap-nossl.service=soulmap
       - traefik.http.routers.soulmap-nossl.entrypoints=http
-      
-      # Shared service configuration
       - traefik.http.services.soulmap.loadbalancer.server.port=5173
+
+#  soulmap-dev:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    container_name: soulmap-dev
+#    volumes:
+#      - soulmap_dev:/target
+#    environment:
+#      - NODE_ENV=development
+#    networks:
+#      - proxy
+#    labels:
+#      - traefik.enable=true
+#      - traefik.http.routers.soulmap-dev.rule=Host(`dev.soulmap.ascriptingoreo.online`)
+#      - traefik.http.routers.soulmap-dev.service=soulmap-dev
+#      - traefik.http.routers.soulmap-dev.entrypoints=https
+#      - traefik.http.routers.soulmap-dev.tls=true
+#      - traefik.http.routers.soulmap-dev.tls.certresolver=letsencrypt
+#      - traefik.http.services.soulmap-dev.loadbalancer.server.port=5173
+#
+#  webhook:
+#    image: almir/webhook
+#    container_name: webhook
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+#      - ./deployment/hooks.json:/etc/webhook/hooks.json
+#      - ./deployment/hooks.dev.json:/etc/webhook/hooks.dev.json
+#
+#      - ./:prod_target/
+#      - soulmap_dev:/dev_target/
+#    networks:
+#      - proxy
+#    labels:
+#      - traefik.enable=true
+#      - traefik.http.routers.webhook-prod.rule=Host(`soulmap.ascriptingoreo.online`) && PathPrefix(`/VersionUpdate`)
+#      - traefik.http.routers.webhook-prod.service=webhook
+#      - traefik.http.routers.webhook-prod.entrypoints=https
+#      - traefik.http.routers.webhook-prod.tls=true
+#      - traefik.http.routers.webhook-prod.tls.certresolver=letsencrypt
+#      - traefik.http.routers.webhook-dev.rule=Host(`dev.soulmap.ascriptingoreo.online`) && PathPrefix(`/VersionUpdate`)
+#      - traefik.http.routers.webhook-dev.service=webhook
+#      - traefik.http.routers.webhook-dev.entrypoints=https
+#      - traefik.http.routers.webhook-dev.tls=true
+#      - traefik.http.routers.webhook-dev.tls.certresolver=letsencrypt
+#      - traefik.http.services.webhook.loadbalancer.server.port=9000
+#    command: ["-hooks", "/etc/webhook/hooks.json,/etc/webhook/hooks.dev.json", "-verbose"]

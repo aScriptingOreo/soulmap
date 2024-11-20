@@ -175,3 +175,6 @@ dist
 .DS_Store
 
 node_modules
+deployment/hooks.dev.json
+deployment/hooks.json
+dist

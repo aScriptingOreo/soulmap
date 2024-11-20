@@ -1,0 +1,10 @@
+name = "soulmap"
+compatibility_date = "2024-01-01"
+main = "dist/index.html"
+
+[build]
+command = "bun run build"
+output_dir = "dist"
+
+[env]
+NODE_VERSION = "20"

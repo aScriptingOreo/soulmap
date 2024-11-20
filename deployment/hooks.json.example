@@ -1,0 +1,26 @@
+[
+    {
+      "id": "update-soulmap-prod",
+      "execute-command": "/usr/bin/git",
+      "command-working-directory": "/target",
+      "response-message": "Pulling latest production code...",
+      "trigger-rule": {
+        "match": {
+          "type": "value",
+          "value": "YOUR_PROD_SECRET_TOKEN",
+          "parameter": {
+            "source": "header",
+            "name": "X-Hub-Signature"
+          }
+        }
+      },
+      "pass-arguments-to-command": [
+        {
+          "source": "string",
+          "name": "pull",
+          "value": "origin main"
+        }
+      ],
+      "trigger-path": "/"
+    }
+  ]
