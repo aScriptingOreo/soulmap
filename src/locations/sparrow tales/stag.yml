@@ -1,9 +1,9 @@
-name: "Tormented Stag"
+name: "Vadagar Stag"
 coordinates:
   - [2981, 2500]
   - [2019, 3001]
 
-description: "Chance to spawn the tormented stag"
+description: "Chance to spawn the Vadagar Stag"
 icon: "fa-solid fa-crown"
 iconSize: 0.75
 iconColor: "#f0d57f"

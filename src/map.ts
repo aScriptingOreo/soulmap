@@ -60,7 +60,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
   // Create the map with the default zoom level
   const map = L.map('map', {
     crs: L.CRS.Simple,
-    minZoom: -5,
+    minZoom: -2,
     zoom: defaultZoom
   });
 
