@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "[oro] Wiking's tower chest"
+coordinates: [3035, 1198]
+description: "credits: Wiking"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://media.discordapp.net/attachments/1308496207026585610/1308876692512833567/image.png?ex=673f89e9&is=673e3869&hm=ad2ef7689a04129ef267bb39847b70aef872e557ddd5214f4b712669705091af&=&format=webp&quality=lossless"
