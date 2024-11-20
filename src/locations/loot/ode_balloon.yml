@@ -1,0 +1,16 @@
+# src/locations/loot/ode_chest.yml
+name: "Ode Balloon"
+coordinates:
+  - [2956, 826]
+  - [3266, 812]
+  - [3289, 788]
+  - [3454, 1584]
+  - [3414, 1087]
+  - [2995, 1247]
+  - [3210, 1558]
+  - [3033, 2062]
+
+description: "These Balloons are not guaranteed spawns"
+icon: "fa-solid fa-diamond"
+iconSize: 0.25
+iconColor: "#5885e0"
