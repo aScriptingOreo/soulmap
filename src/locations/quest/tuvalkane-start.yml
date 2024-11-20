@@ -3,4 +3,4 @@ coordinates: [4165, 1234]
 description: "Pick up the fallen helmet in the center of the quarry and carry it to Tuvalkane End"
 icon: "fa-solid fa-hammer"
 iconSize: 0.75
-iconColor: "#800080"
+iconColor: "#FF72FF"
