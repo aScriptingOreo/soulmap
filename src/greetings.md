@@ -7,3 +7,4 @@ if you have any suggestions of content please ``@aHappyOreo`` in the preludes se
 - Some markers have been moved around
 - New sidebar feature that allows you to toggle marker visibility
 - Added numerical indication for repeating markers, so it's easier to reference them
+- Added hashes to the header so users can share direct locations
