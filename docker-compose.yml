@@ -16,10 +16,18 @@ services:
     networks:
       - proxy
     labels:
+      # First domain with SSL
       - traefik.enable=true
-      - traefik.http.routers.soulmap.rule=Host(`soulmap.ascriptingoreo.online`)
-      - traefik.http.services.soulmap.loadbalancer.server.port=5173
-      - traefik.http.routers.soulmap.entrypoints=https
-      - traefik.http.routers.soulmap.tls=true
-      - traefik.http.routers.soulmap.tls.certresolver=letsencrypt
+      - traefik.http.routers.soulmap-ssl.rule=Host(`soulmap.ascriptingoreo.online`)
+      - traefik.http.routers.soulmap-ssl.service=soulmap
+      - traefik.http.routers.soulmap-ssl.entrypoints=https
+      - traefik.http.routers.soulmap-ssl.tls=true
+      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
       
+      # Second domain without SSL (for Cloudflare)
+      - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
+      - traefik.http.routers.soulmap-nossl.service=soulmap
+      - traefik.http.routers.soulmap-nossl.entrypoints=http
+      
+      # Shared service configuration
+      - traefik.http.services.soulmap.loadbalancer.server.port=5173
