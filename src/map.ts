@@ -128,8 +128,11 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         const marker = L.marker([y, x], { icon }).addTo(map);
         markers.push(marker);
 
-        // Add data attribute for visibility tracking
+        // Add data attributes for visibility tracking and indexing
         marker.getElement()?.setAttribute('data-location', location.name);
+        if (coordinatesArray.length > 1) {
+            marker.getElement()?.setAttribute('data-index', index.toString());
+        }
 
         // Bind tooltip with adjusted offset
         const tooltipContent = coordinatesArray.length > 1 ? 
@@ -154,9 +157,15 @@ export async function initializeMap(locations: (Location & { type: string })[], 
           });
           marker.getElement()?.classList.add('selected');
 
-          // Update URL with location hash
+          // Get marker index for multi-location items
+          const isMultiLocation = coordinatesArray.length > 1;
           const locationHash = generateLocationHash(location.name);
-          window.history.replaceState({}, '', `?loc=${locationHash}`);
+          const urlParams = isMultiLocation ? 
+            `?loc=${locationHash}&index=${index}` : 
+            `?loc=${locationHash}`;
+
+          // Update URL with location hash and index if applicable
+          window.history.replaceState({}, '', urlParams);
         });
       });
     });

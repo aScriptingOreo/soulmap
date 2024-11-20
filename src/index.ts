@@ -78,8 +78,12 @@ async function initMain() {
               location.coordinates[0]) as [number, number]
           : location.coordinates as [number, number];
           
-        // Find and click the marker
-        const marker = document.querySelector(`.custom-location-icon[data-location="${location.name}"]`);
+        // Find and click the marker with the specific index if it exists
+        const markerSelector = indexParam 
+          ? `.custom-location-icon[data-location="${location.name}"][data-index="${indexParam}"]`
+          : `.custom-location-icon[data-location="${location.name}"]`;
+        
+        const marker = document.querySelector(markerSelector);
         if (marker) {
           marker.dispatchEvent(new Event('click'));
         }
