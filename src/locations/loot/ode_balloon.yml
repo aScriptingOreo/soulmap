@@ -9,6 +9,7 @@ coordinates:
   - [2995, 1247]
   - [3210, 1558]
   - [3033, 2062]
+  - [2514, 1971]
 
 description: "These Balloons are not guaranteed spawns"
 icon: "fa-solid fa-diamond"
