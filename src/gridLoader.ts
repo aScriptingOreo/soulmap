@@ -27,7 +27,7 @@ export class GridLoader {
                 console.log(`Loading tile ${i} at [${row}, ${col}]`);
 
                 // Create image overlay
-                const overlay = L.imageOverlay(
+                L.imageOverlay(
                     imgPath,
                     bounds,
                     { 
@@ -35,23 +35,6 @@ export class GridLoader {
                         className: 'map-tile'
                     }
                 ).addTo(map);
-
-                // Add interactive debug rectangle over the tile
-                const debugRect = L.rectangle(bounds, {
-                    color: 'red',
-                    weight: 1,
-                    fill: false,
-                    opacity: 0.5,
-                    className: 'debug-outline',
-                    interactive: true
-                }).addTo(map);
-
-                // Add hover tooltip
-                debugRect.bindTooltip(`TerrainZone${i}_cmm.png`, {
-                    permanent: false,
-                    direction: 'top',
-                    className: 'debug-tooltip'
-                });
             } catch (error) {
                 console.error(`Error loading tile ${i}:`, error);
             }
@@ -59,9 +42,9 @@ export class GridLoader {
     }
 }
 
-export async function initializeGrid(map: L.Map, debug: boolean = false): Promise<void> {
+export async function initializeGrid(map: L.Map): Promise<void> {
     const grid = new GridLoader();
-    await grid.createOverlays(map, debug);
+    await grid.createOverlays(map);
     
     // Set bounds for the entire map
     const totalRows = Math.ceil(grid.TOTAL_TILES / grid.GRID_WIDTH);
