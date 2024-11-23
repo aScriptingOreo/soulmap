@@ -1,10 +1,10 @@
 # src/locations/loot/ode_chest.yml
 name: "Avakot"
 coordinates: 
-  - [2322, 492]
-  - [1651, 1115]
-  - [2645, 2011]
-  - [3987, 1230]
+  - [2463, 3069]
+  - [2034, 3457]
+  - [2664, 4026]
+  - [3464, 3526]
 description: ""
 icon: "/SF_avakot"
 iconSize: 0.5
