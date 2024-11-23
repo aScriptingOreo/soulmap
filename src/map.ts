@@ -255,4 +255,13 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         console.log(`Clicked coordinates: [${x}, ${y}]`); // Updated debug log format too
       }
     });
+
+    // After map initialization
+    const devOverlay = new DevelopmentOverlay(map);
+    devOverlay.createOverlay([
+        [2322, 492],
+        [1651, 1115],
+        [2645, 2011],
+        [3987, 1230]
+    ]);
 }
