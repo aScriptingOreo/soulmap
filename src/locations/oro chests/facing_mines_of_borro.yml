@@ -1,6 +1,6 @@
 # src/locations/loot/ode_chest.yml
 name: "[oro] Facing Mines of Borro"
-coordinates: [2975, 1922]
+coordinates: [2883, 3960]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"
 iconSize: 0.5
