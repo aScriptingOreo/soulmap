@@ -1,6 +1,6 @@
 # src/locations/loot/ode_chest.yml
 name: "[oro] Pensive's Chest"
-coordinates: [2353, 577]
+coordinates: [2474, 3122]
 description: "credits: Yuritau"
 icon: "fa-solid fa-chess-rook"
 iconSize: 0.5

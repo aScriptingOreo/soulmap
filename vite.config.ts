@@ -4,26 +4,28 @@ import yaml from '@rollup/plugin-yaml';
 import path from 'path';
 
 export default defineConfig({
-  root: path.resolve(__dirname, 'src'),
-  publicDir: path.resolve(__dirname, 'res'),
+  root: path.resolve(__dirname, 'src'),  // Set root to src directory
+  publicDir: path.resolve(__dirname, 'res'), // Keep res as public dir
   build: {
-    outDir: '../dist',
+    outDir: '../dist',  // Output to parent dist directory
     emptyOutDir: true,
   },
   plugins: [
     yaml({
-      include: ['src/**/*.yml', 'src/**/*.yaml', 'src/mapversion.yml'] // Explicitly include mapversion.yml
+      include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
     })
   ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'res': path.resolve(__dirname, './res')
     },
-    extensions: ['.js', '.ts', '.json', '.yaml', '.yml']
+    extensions: ['.js', '.ts', '.json', '.yaml', '.yml', '.png']
   },
   server: {
     fs: {
-      allow: ['..']
+      allow: ['..']  // Allow access to parent directory
     }
-  }
+  },
+  assetsInclude: ['**/*.png']
 });
