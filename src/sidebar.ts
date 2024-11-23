@@ -303,90 +303,30 @@ export class Sidebar {
     }
 }
 
-  private toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement, coords?: [number, number]) {
+  private toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): void {
+    console.log('Toggling visibility for:', locationName);
     const isVisible = this.visibleMarkers.has(locationName);
-    const [baseName] = locationName.split('-');
     
-    // Find parent category and its toggle
-    const categoryElement = toggleElement.closest('.category');
-    const categoryToggle = categoryElement?.querySelector('.category-header .visibility-toggle') as HTMLElement;
-    
-    // Update visibility state
-    if (isVisible) {
-        // Currently visible, hide it
-        this.visibleMarkers.delete(locationName);
-        toggleElement.textContent = 'visibility_off';
-        toggleElement.classList.add('hidden');
+    this.markers.forEach(marker => {
+        const markerElement = marker.getElement();
+        if (!markerElement) return;
         
-        // Update markers
-        this.markers.forEach(marker => {
-            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
-            const pos = marker.getLatLng();
-            
-            if (coords) {
-                // For child markers
-                if (markerName === baseName && pos.lat === coords[1] && pos.lng === coords[0]) {
-                    const element = marker.getElement();
-                    if (element) {
-                        element.style.display = 'none';
-                    }
-                }
+        const markerLocation = markerElement.getAttribute('data-location');
+        if (markerLocation === locationName) {
+            if (isVisible) {
+                markerElement.style.display = 'none';
+                this.visibleMarkers.delete(locationName);
+                toggleElement.classList.add('hidden');
             } else {
-                // For parent markers
-                if (markerName === locationName) {
-                    const element = marker.getElement();
-                    if (element) {
-                        element.style.display = 'none';
-                    }
-                }
-            }
-        });
-        
-        // Check siblings for parent toggle update
-        if (categoryElement) {
-            const siblingToggles = categoryElement.querySelectorAll('.location-item .visibility-toggle');
-            const allHidden = Array.from(siblingToggles).every(t => t.classList.contains('hidden'));
-            if (allHidden && categoryToggle) {
-                categoryToggle.textContent = 'visibility_off';
-                categoryToggle.classList.add('hidden');
+                markerElement.style.display = '';
+                this.visibleMarkers.add(locationName);
+                toggleElement.classList.remove('hidden');
             }
         }
-    } else {
-        // Currently hidden, show it
-        this.visibleMarkers.add(locationName);
-        toggleElement.textContent = 'visibility';
-        toggleElement.classList.remove('hidden');
-        
-        // Update markers
-        this.markers.forEach(marker => {
-            const markerName = marker.getTooltip()?.getContent().split('#')[0].trim();
-            const pos = marker.getLatLng();
-            
-            if (coords) {
-                // For child markers
-                if (markerName === baseName && pos.lat === coords[1] && pos.lng === coords[0]) {
-                    const element = marker.getElement();
-                    if (element) {
-                        element.style.display = '';
-                    }
-                }
-            } else {
-                // For parent markers
-                if (markerName === locationName) {
-                    const element = marker.getElement();
-                    if (element) {
-                        element.style.display = '';
-                    }
-                }
-            }
-        });
-        
-        // Update parent category toggle
-        if (categoryToggle) {
-            categoryToggle.textContent = 'visibility';
-            categoryToggle.classList.remove('hidden');
-        }
-    }
+    });
+
+    // Update category toggle state
+    this.updateCategoryVisibility(toggleElement);
 }
 
 private toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement) {

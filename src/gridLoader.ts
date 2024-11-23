@@ -23,7 +23,7 @@ export class GridLoader {
             ];
 
             try {
-                const imgPath = `map/TerrainZone${i}_cmm.png`;
+                const imgPath = `map/${i}.png`;
                 console.log(`Loading tile ${i} at [${row}, ${col}]`);
 
                 // Create image overlay

@@ -81,15 +81,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     // Initialize grid before markers
     await initializeGrid(map);
 
-    // Initialize sidebar after grid is loaded
-    const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
-    const sidebar = new Sidebar({
-        element: sidebarElement,
-        locations,
-        map,
-        markers: []
-    });
-
     // Initialize locations and markers
     const markers: L.Marker[] = [];
 
@@ -172,6 +163,15 @@ export async function initializeMap(locations: (Location & { type: string })[], 
 
     // Initialize search functionality
     initializeSearch(locations, map, markers);
+
+    // Initialize sidebar after markers are created
+    const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
+    const sidebar = new Sidebar({
+        element: sidebarElement,
+        locations,
+        map,
+        markers
+    });
 
     if (debug) {
       map.on('click', (e) => {
