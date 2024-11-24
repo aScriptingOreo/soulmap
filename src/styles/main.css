@@ -188,7 +188,7 @@ html, body {
   transition: background-color 0.3s;
 }
 
-.close-button:hover {
+close-button:hover {
   background: rgba(0, 0, 0, 0.9);
 }
 
@@ -742,4 +742,34 @@ html, body {
   letter-spacing: 5px;
   line-height: 100px;
   z-index: 401;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  left: -48px;
+  top: 20px;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50% 0 0 50%;
+  background: #fff;
+  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+  z-index: 999;
+}
+
+.sidebar-toggle .material-icons {
+  transition: transform 0.3s ease;
+}
+
+.sidebar-toggle.collapsed .material-icons {
+  transform: rotate(180deg);
+}
+
+.sidebar {
+  transition: transform 0.3s ease;
+}
+
+.sidebar.collapsed {
+  transform: translateX(100%);
 }

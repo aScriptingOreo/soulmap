@@ -66,7 +66,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     // Create the map with proper CRS settings
       const map = L.map('map', {
         crs: L.CRS.Simple,
-        minZoom: -2,
+        minZoom: -3,
         maxZoom: 2,
         zoom: defaultZoom,
         zoomDelta: 0.5,

@@ -46,6 +46,7 @@ export class Sidebar {
 
     this.initializeImageHandlers();
     this.initializeLocationDrawer();
+    this.initializeSidebarToggle(); // Add this line
 
     // Initialize visibility sets
     this.visibleMarkers = new Set(this.locations.map(l => l.name));
@@ -466,5 +467,24 @@ private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: H
             }
         });
     }
+}
+
+private initializeSidebarToggle() {
+  const toggleButton = document.getElementById('sidebar-toggle');
+  
+  if (!toggleButton) return;
+
+  toggleButton.addEventListener('click', () => {
+    this.element.classList.toggle('collapsed');
+    toggleButton.classList.toggle('collapsed');
+  });
+
+  // Add keyboard shortcut (Ctrl + B)
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'b') {
+      e.preventDefault();
+      toggleButton.click();
+    }
+  });
 }
 }
