@@ -5,4 +5,4 @@ if you have any suggestions of content please check out the preludes discord ser
 
 
 # Changelog 
-- Better map!
+- Better map! A community member that decided to remain annonymous submitted us a bunch of images to compose a map grid :)
