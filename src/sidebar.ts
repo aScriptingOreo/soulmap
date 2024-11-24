@@ -48,7 +48,7 @@ export class Sidebar {
     // Create and add toggle button with right-pointing arrow initially
     this.toggleButton = document.createElement('button');
     this.toggleButton.id = 'sidebar-toggle';
-    this.toggleButton.className = 'sidebar-toggle';
+    this.toggleButton.className = 'sidebar-toggle collapsed'; // Add collapsed initially
     
     const icon = document.createElement('span');
     icon.className = 'material-icons';
@@ -56,6 +56,9 @@ export class Sidebar {
     this.toggleButton.appendChild(icon);
     
     document.body.appendChild(this.toggleButton); // Append to body instead
+
+    // Add collapsed class to sidebar initially
+    this.element.classList.add('collapsed');
 
     this.initializeImageHandlers();
     this.initializeLocationDrawer();
