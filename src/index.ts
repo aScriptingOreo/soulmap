@@ -18,22 +18,35 @@ async function loadGreeting() {
   try {
     const versionModule = await import('./mapversion.yml');
     const versionData = versionModule.default as VersionInfo;
-    const response = await fetch('./greetings.md');
-    let markdown = await response.text();
+    const lastSeenVersion = localStorage.getItem('lastSeenVersion');
     
-    // Replace version placeholders
-    markdown = markdown.replace('{version}', versionData.version)
-                      .replace('{game_version}', versionData.game_version);
-    
-    const html = marked(markdown);
-    
-    const popupText = document.getElementById('popup-text');
-    if (popupText) {
-      popupText.innerHTML = html;
-      document.getElementById('popup-overlay')!.style.display = 'flex';
+    // Only show popup if version is different
+    if (lastSeenVersion !== versionData.version) {
+      const response = await fetch('./greetings.md');
+      let markdown = await response.text();
+      
+      // Replace version placeholders
+      markdown = markdown.replace('{version}', versionData.version)
+                       .replace('{game_version}', versionData.game_version);
+      
+      const html = marked(markdown);
+      
+      const popupText = document.getElementById('popup-text');
+      if (popupText) {
+        popupText.innerHTML = html;
+        document.getElementById('popup-overlay')!.style.display = 'flex';
+      }
+      
+      // Store the new version
+      localStorage.setItem('lastSeenVersion', versionData.version);
+    } else {
+      // If same version, skip popup and initialize map directly
+      initMain();
     }
   } catch (error) {
     console.error('Error loading greeting:', error);
+    // Fallback to init main in case of error
+    initMain();
   }
 }
 

@@ -2,6 +2,7 @@ name: "Vadagar Stag"
 coordinates:
   - [2872, 4369]
   - [2302, 4674]
+  - [3080, 4356]
 
 description: "Chance to spawn the Vadagar Stag"
 icon: "fa-solid fa-crown"

@@ -6,14 +6,60 @@ export class GridLoader {
     private readonly GRID_WIDTH = 15;
     private readonly TOTAL_TILES = 196;
     private readonly OFFSET = 0;
+    private readonly CACHE_NAME = 'map-tiles-v0.6.0'; // Match with mapversion.yml
+    private readonly isCachingAvailable: boolean;
+
+    constructor() {
+        // Check if caching is available
+        this.isCachingAvailable = typeof caches !== 'undefined';
+    }
+
+    private async getCachedTile(path: string): Promise<Response | undefined> {
+        if (!this.isCachingAvailable) return undefined;
+        
+        try {
+            const cache = await caches.open(this.CACHE_NAME);
+            const cachedResponse = await cache.match(path);
+            return cachedResponse;
+        } catch (error) {
+            console.warn('Cache access failed, falling back to network:', error);
+            return undefined;
+        }
+    }
+
+    private async cacheTile(path: string, response: Response): Promise<void> {
+        if (!this.isCachingAvailable) return;
+        
+        try {
+            const cache = await caches.open(this.CACHE_NAME);
+            await cache.put(path, response.clone());
+        } catch (error) {
+            console.warn('Failed to cache tile:', error);
+        }
+    }
+
+    private async cleanOldCaches(): Promise<void> {
+        if (!this.isCachingAvailable) return;
+
+        try {
+            const cacheKeys = await caches.keys();
+            const oldCaches = cacheKeys.filter(key => 
+                key.startsWith('map-tiles-') && key !== this.CACHE_NAME
+            );
+            
+            await Promise.all(oldCaches.map(key => caches.delete(key)));
+        } catch (error) {
+            console.warn('Failed to clean old caches:', error);
+        }
+    }
 
     public async createOverlays(map: L.Map): Promise<void> {
-        const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
-        console.log(`Grid dimensions: ${this.GRID_WIDTH} columns x ${rows} rows`);
+        // Clean old caches on initialization
+        await this.cleanOldCaches();
 
-        // Adjust loop to account for offset
+        const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
+        
         for (let i = this.OFFSET; i < this.TOTAL_TILES + this.OFFSET; i++) {
-            // Column-major ordering: go down columns first
             const col = Math.floor((i - this.OFFSET) / rows);
             const row = (i - this.OFFSET) % rows;
             
@@ -24,17 +70,20 @@ export class GridLoader {
 
             try {
                 const imgPath = `map/${i}.png`;
-                console.log(`Loading tile ${i} at [${row}, ${col}]`);
+                let response = await this.getCachedTile(imgPath);
+                
+                if (!response) {
+                    response = await fetch(imgPath);
+                    await this.cacheTile(imgPath, response);
+                }
 
-                // Create image overlay
-                L.imageOverlay(
-                    imgPath,
-                    bounds,
-                    { 
+                if (response.ok) {
+                    const blobUrl = URL.createObjectURL(await response.clone().blob());
+                    L.imageOverlay(blobUrl, bounds, { 
                         interactive: false,
                         className: 'map-tile'
-                    }
-                ).addTo(map);
+                    }).addTo(map);
+                }
             } catch (error) {
                 console.error(`Error loading tile ${i}:`, error);
             }

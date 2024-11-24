@@ -25,6 +25,7 @@ export class Sidebar {
   private locationDrawer: HTMLElement;
   private visibleMarkers: Set<string> = new Set();
   private visibleCategories: Set<string> = new Set();
+  private toggleButton: HTMLButtonElement;
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -44,8 +45,24 @@ export class Sidebar {
     this.closeButton = document.querySelector('.close-button') as HTMLElement;
     this.locationDrawer = this.element.querySelector('.location-drawer') as HTMLElement;
 
+    // Create and add toggle button with right-pointing arrow initially
+    this.toggleButton = document.createElement('button');
+    this.toggleButton.id = 'sidebar-toggle';
+    this.toggleButton.className = 'sidebar-toggle collapsed'; // Add collapsed initially
+    
+    const icon = document.createElement('span');
+    icon.className = 'material-icons';
+    icon.textContent = 'chevron_left'; // The rotation in CSS will make it point right
+    this.toggleButton.appendChild(icon);
+    
+    document.body.appendChild(this.toggleButton); // Append to body instead
+
+    // Add collapsed class to sidebar initially
+    this.element.classList.add('collapsed');
+
     this.initializeImageHandlers();
     this.initializeLocationDrawer();
+    this.initializeSidebarToggle();
 
     // Initialize visibility sets
     this.visibleMarkers = new Set(this.locations.map(l => l.name));
@@ -466,5 +483,29 @@ private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: H
             }
         });
     }
+}
+
+private initializeSidebarToggle() {
+  if (!this.toggleButton) return;
+
+  const toggleSidebar = () => {
+    this.element.classList.toggle('collapsed');
+    this.toggleButton.classList.toggle('collapsed');
+  };
+
+  // Click handler with console log for debugging
+  this.toggleButton.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent event bubbling
+    console.log('Toggle button clicked'); // Debug log
+    toggleSidebar();
+  });
+
+  // Keyboard shortcut (Ctrl + B)
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'b') {
+      e.preventDefault();
+      toggleSidebar();
+    }
+  });
 }
 }

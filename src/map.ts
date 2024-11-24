@@ -62,24 +62,65 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const deviceType = getDeviceType();
     const defaultZoom = deviceType === 'mobile' ? -1 : 0;
     const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
+    const zoomedViewZoom = 0; // Higher zoom level for when viewing specific locations
 
     // Create the map with proper CRS settings
-      const map = L.map('map', {
+    const map = L.map('map', {
         crs: L.CRS.Simple,
-        minZoom: -2,
+        minZoom: -3,
         maxZoom: 2,
         zoom: defaultZoom,
         zoomDelta: 0.5,
         zoomSnap: 0.5,
         wheelPxPerZoomLevel: 120,
         maxBounds: [
-            [0, 0],
-            [196 * 512, 13 * 512]
-        ]
+            [-512, -512], // Top-left (lat/y, lng/x) - Negative y to prevent scrolling up
+            [100352, 7680] // Bottom-right (lat/y, lng/x)
+        ],
+        maxBoundsViscosity: 1.0,
+        inertia: true,
+        bounceAtZoomLimits: true
     });
 
     // Initialize grid before markers
     await initializeGrid(map);
+
+    // Check URL parameters early
+    const urlParams = new URLSearchParams(window.location.search);
+    const locationParam = urlParams.get('loc');
+    const indexParam = urlParams.get('index');
+    const coordParam = urlParams.get('coord');
+
+    // Handle coordinate parameter
+    if (coordParam) {
+        const [x, y] = coordParam.split(',').map(Number);
+        if (!isNaN(x) && !isNaN(y)) {
+            map.setView([y, x], zoomedViewZoom);
+            // Update sidebar with generic location info
+            const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
+            const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
+            const descEl = sidebar.querySelector('.location-description') as HTMLElement;
+            const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
+            
+            titleEl.textContent = 'Map Location';
+            descEl.textContent = 'Custom map coordinate';
+            coordEl.textContent = `[${x}, ${y}]`;
+        }
+    }
+
+    // Handle location parameter
+    if (locationParam) {
+        const location = decodeLocationHash(locationParam, locations);
+        if (location) {
+            const coords = Array.isArray(location.coordinates[0]) 
+                ? (indexParam ? 
+                    location.coordinates[parseInt(indexParam)] : 
+                    location.coordinates[0]) as [number, number]
+                : location.coordinates as [number, number];
+            
+            map.setView([coords[1], coords[0]], zoomedViewZoom);
+        }
+    }
 
     // Initialize locations and markers
     const markers: L.Marker[] = [];
@@ -179,34 +220,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       });
     }
 
-    // Handle URL parameters after map is initialized
-    const urlParams = new URLSearchParams(window.location.search);
-    const locationParam = urlParams.get('loc');
-    const indexParam = urlParams.get('index');
-
-    if (locationParam) {
-        const location = decodeLocationHash(locationParam, locations);
-        
-        if (location) {
-            const coords = Array.isArray(location.coordinates[0]) 
-                ? (indexParam ? 
-                    location.coordinates[parseInt(indexParam)] : 
-                    location.coordinates[0]) as [number, number]
-                : location.coordinates as [number, number];
-                
-            // Find and trigger the marker
-            const marker = markers.find(m => {
-                const pos = m.getLatLng();
-                return pos.lat === coords[1] && pos.lng === coords[0];
-            });
-            
-            if (marker) {
-                map.setView([coords[1], coords[0]], map.getZoom());
-                marker.fire('click');
-            }
-        }
-    }
-
     // Add map click handler for coordinates
     map.on('click', (e) => {
       const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
@@ -229,27 +242,29 @@ export async function initializeMap(locations: (Location & { type: string })[], 
 
     // Add map click handler for coordinates
     map.on('click', (e) => {
+      const x = Math.round(e.latlng.lng);
+      const y = Math.round(e.latlng.lat);
+      
+      // Update URL with coordinates
+      window.history.replaceState({}, '', `?coord=${x},${y}`);
+      
+      // Clear any selected markers
+      document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+          el.classList.remove('selected');
+      });
+
+      // Update sidebar content
       const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
       const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
       const descEl = sidebar.querySelector('.location-description') as HTMLElement;
       const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
       const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
 
-      // Update coordinates display
-      const x = Math.round(e.latlng.lng);
-      const y = Math.round(e.latlng.lat);
       titleEl.textContent = 'Map Location';
-      descEl.textContent = 'Click on a marker to see location details';
-      coordEl.textContent = `[${x}, ${y}]`; // Updated to YAML format
-      
-      // Clear image if any
+      descEl.textContent = 'Custom map coordinate';
+      coordEl.textContent = `[${x}, ${y}]`;
       imgEl.style.display = 'none';
       imgEl.src = '';
-
-      // Clear any selected markers
-      document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-        el.classList.remove('selected');
-      });
 
       if (debug) {
         console.log(`Clicked coordinates: [${x}, ${y}]`); // Updated debug log format too

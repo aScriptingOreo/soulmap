@@ -2,9 +2,10 @@
 name: "Avakot"
 coordinates: 
   - [2463, 3069]
-  - [2034, 3457]
   - [2664, 4026]
   - [3464, 3526]
-description: ""
-icon: "/SF_avakot"
-iconSize: 0.5
+description: "Avakot sells items for Dracs"
+icon: "fa-solid fa-seedling"
+iconColor: "#40bd63"
+imgUrl: "https://i.imgur.com/TwZet5j.png"
+iconSize: 1
