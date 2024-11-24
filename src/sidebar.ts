@@ -25,6 +25,7 @@ export class Sidebar {
   private locationDrawer: HTMLElement;
   private visibleMarkers: Set<string> = new Set();
   private visibleCategories: Set<string> = new Set();
+  private toggleButton: HTMLButtonElement;
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -44,9 +45,21 @@ export class Sidebar {
     this.closeButton = document.querySelector('.close-button') as HTMLElement;
     this.locationDrawer = this.element.querySelector('.location-drawer') as HTMLElement;
 
+    // Create and add toggle button with right-pointing arrow initially
+    this.toggleButton = document.createElement('button');
+    this.toggleButton.id = 'sidebar-toggle';
+    this.toggleButton.className = 'sidebar-toggle';
+    
+    const icon = document.createElement('span');
+    icon.className = 'material-icons';
+    icon.textContent = 'chevron_left'; // The rotation in CSS will make it point right
+    this.toggleButton.appendChild(icon);
+    
+    document.body.appendChild(this.toggleButton); // Append to body instead
+
     this.initializeImageHandlers();
     this.initializeLocationDrawer();
-    this.initializeSidebarToggle(); // Add this line
+    this.initializeSidebarToggle();
 
     // Initialize visibility sets
     this.visibleMarkers = new Set(this.locations.map(l => l.name));
@@ -470,20 +483,25 @@ private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: H
 }
 
 private initializeSidebarToggle() {
-  const toggleButton = document.getElementById('sidebar-toggle');
-  
-  if (!toggleButton) return;
+  if (!this.toggleButton) return;
 
-  toggleButton.addEventListener('click', () => {
+  const toggleSidebar = () => {
     this.element.classList.toggle('collapsed');
-    toggleButton.classList.toggle('collapsed');
+    this.toggleButton.classList.toggle('collapsed');
+  };
+
+  // Click handler with console log for debugging
+  this.toggleButton.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent event bubbling
+    console.log('Toggle button clicked'); // Debug log
+    toggleSidebar();
   });
 
-  // Add keyboard shortcut (Ctrl + B)
+  // Keyboard shortcut (Ctrl + B)
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 'b') {
       e.preventDefault();
-      toggleButton.click();
+      toggleSidebar();
     }
   });
 }

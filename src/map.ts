@@ -64,7 +64,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
 
     // Create the map with proper CRS settings
-      const map = L.map('map', {
+    const map = L.map('map', {
         crs: L.CRS.Simple,
         minZoom: -3,
         maxZoom: 2,
@@ -73,9 +73,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         zoomSnap: 0.5,
         wheelPxPerZoomLevel: 120,
         maxBounds: [
-            [0, 0],
-            [196 * 512, 13 * 512]
-        ]
+            [-512, -512], // Top-left (lat/y, lng/x) - Negative y to prevent scrolling up
+            [100352, 7680] // Bottom-right (lat/y, lng/x)
+        ],
+        maxBoundsViscosity: 1.0,
+        inertia: true,
+        bounceAtZoomLimits: true
     });
 
     // Initialize grid before markers

@@ -1,7 +1,7 @@
 html, body {
   height: 100%;
   margin: 0;
-  font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+  font-family: 'Roboto',a sans-serif; /* Apply Roboto font */ 
 }
 #map {
   height: 100%;
@@ -119,6 +119,12 @@ html, body {
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
   padding: 20px;
   font-family: 'Roboto', sans-serif;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+}
+
+.right-sidebar.collapsed {
+  transform: translateX(100%); /* Slide fully out of view */
 }
 
 .coordinates-display {
@@ -744,10 +750,11 @@ close-button:hover {
   z-index: 401;
 }
 
+/* Sidebar toggle button styling */
 .sidebar-toggle {
-  position: absolute;
-  left: -48px;
+  position: fixed;
   top: 20px;
+  right: 341px;
   width: 48px;
   height: 48px;
   border: none;
@@ -755,21 +762,22 @@ close-button:hover {
   background: #fff;
   box-shadow: -2px 0 4px rgba(0,0,0,0.2);
   cursor: pointer;
-  z-index: 999;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: right 0.3s ease;
+}
+
+.sidebar-toggle.collapsed {
+  right: 0;
 }
 
 .sidebar-toggle .material-icons {
+  transform: rotate(180deg);
   transition: transform 0.3s ease;
 }
 
 .sidebar-toggle.collapsed .material-icons {
-  transform: rotate(180deg);
-}
-
-.sidebar {
-  transition: transform 0.3s ease;
-}
-
-.sidebar.collapsed {
-  transform: translateX(100%);
+  transform: rotate(0deg);
 }
