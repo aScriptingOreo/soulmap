@@ -23,10 +23,10 @@ services:
     restart: always
     labels:
       - traefik.enable=true
-      - traefik.http.routers.soulmap-ssl.rule=Host(`soulmap.ascriptingoreo.online`)
-      - traefik.http.routers.soulmap-ssl.service=soulmap
-      - traefik.http.routers.soulmap-ssl.entrypoints=https
-      - traefik.http.routers.soulmap-ssl.tls=true
+      #- traefik.http.routers.soulmap-ssl.rule=Host(`soulmap.ascriptingoreo.online`)
+      #- traefik.http.routers.soulmap-ssl.service=soulmap
+      #- traefik.http.routers.soulmap-ssl.entrypoints=https
+      #- traefik.http.routers.soulmap-ssl.tls=true
       - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
       - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
       - traefik.http.routers.soulmap-nossl.service=soulmap
