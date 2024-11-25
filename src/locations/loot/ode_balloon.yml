@@ -11,5 +11,5 @@ coordinates:
   - [2617, 4002]
 description: "These Balloons are not guaranteed spawns"
 icon: "fa-solid fa-diamond"
-iconSize: 0.5
+iconSize: 0.75
 iconColor: "#5885e0"
