@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "[oro] Scenic Seaside"
+coordinates: [1728, 3571]
+description: "credits: Flaminux"
+icon: "fa-solid fa-chess-rook"
+iconSize: 0.5
+iconColor: "#87ffc9"
+imgUrl: "https://i.imgur.com/lDQqhIX.png"
