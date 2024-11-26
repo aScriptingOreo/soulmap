@@ -9,24 +9,33 @@ export interface SidebarOptions {
   markers: L.Marker[];
 }
 
+interface CachedVisibilityState {
+  version: string;
+  markers: string[];
+  categories: string[];
+}
+
 export class Sidebar {
   private element: HTMLElement;
   private locations: (Location & { type: string })[];
   private map: L.Map;
   private markers: L.Marker[];
-  private titleEl: HTMLElement;
-  private descEl: HTMLElement;
-  private coordEl: HTMLElement;
-  private imgEl: HTMLImageElement;
-  private imageModal: HTMLElement;
-  private modalImage: HTMLImageElement;
-  private modalTitle: HTMLElement;
-  private modalDescription: HTMLElement;
-  private closeButton: HTMLElement;
-  private locationDrawer: HTMLElement;
+  private titleEl!: HTMLElement;
+  private descEl!: HTMLElement;
+  private coordEl!: HTMLElement;
+  private imgEl!: HTMLImageElement;
+  private imageModal!: HTMLElement;
+  private modalImage!: HTMLImageElement;
+  private modalTitle!: HTMLElement;
+  private modalDescription!: HTMLElement;
+  private closeButton!: HTMLElement;
+  private locationDrawer!: HTMLElement;
   private visibleMarkers: Set<string> = new Set();
   private visibleCategories: Set<string> = new Set();
-  private toggleButton: HTMLButtonElement;
+  private toggleButton!: HTMLButtonElement;
+  private initialized = false;
+  private initializationPromise: Promise<void> | null = null;
+  private readonly VISIBILITY_CACHE_KEY = 'soulmap_visibility_cache';
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -34,47 +43,174 @@ export class Sidebar {
     this.map = options.map;
     this.markers = options.markers;
 
-    // Get references to DOM elements
-    this.titleEl = this.element.querySelector('.location-title') as HTMLElement;
-    this.descEl = this.element.querySelector('.location-description') as HTMLElement;
-    this.coordEl = this.element.querySelector('.coordinates-display') as HTMLElement;
-    this.imgEl = this.element.querySelector('#sidebar-image') as HTMLImageElement;
-    this.imageModal = document.querySelector('#image-modal') as HTMLElement;
-    this.modalImage = document.querySelector('#modal-image') as HTMLImageElement;
-    this.modalTitle = document.querySelector('.modal-title') as HTMLElement;
-    this.modalDescription = document.querySelector('.modal-description') as HTMLElement;
-    this.closeButton = document.querySelector('.close-button') as HTMLElement;
-    this.locationDrawer = this.element.querySelector('.location-drawer') as HTMLElement;
+    // Create and add toggle button immediately
+    this.createToggleButton();
+  }
 
-    // Create and add toggle button with right-pointing arrow initially
+  private createToggleButton(): void {
     this.toggleButton = document.createElement('button');
     this.toggleButton.id = 'sidebar-toggle';
-    this.toggleButton.className = 'sidebar-toggle collapsed'; // Add collapsed initially
+    this.toggleButton.className = 'sidebar-toggle collapsed';
     
     const icon = document.createElement('span');
     icon.className = 'material-icons';
-    icon.textContent = 'chevron_left'; // The rotation in CSS will make it point right
+    icon.textContent = 'chevron_left';
     this.toggleButton.appendChild(icon);
     
-    document.body.appendChild(this.toggleButton); // Append to body instead
+    document.body.appendChild(this.toggleButton);
+    
+    // Initialize toggle functionality
+    this.toggleButton.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.ensureInitialized();
+        this.element.classList.toggle('collapsed');
+        this.toggleButton.classList.toggle('collapsed');
+    });
 
-    // Add collapsed class to sidebar initially
-    this.element.classList.add('collapsed');
+    // Add keyboard shortcut
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'b') {
+            e.preventDefault();
+            this.toggleButton.click();
+        }
+    });
 
-    this.initializeImageHandlers();
-    this.initializeLocationDrawer();
-    this.initializeSidebarToggle();
+    // Make button visible immediately
+    requestAnimationFrame(() => {
+        this.toggleButton.classList.add('loaded');
+    });
+}
 
-    // Initialize visibility sets
+  // Add this new method
+  private showSidebar(): void {
+    this.element.classList.remove('collapsed');
+    this.toggleButton.classList.remove('collapsed');
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.initialize();
+    }
+    
+    return this.initializationPromise;
+  }
+
+  private async initialize(): Promise<void> {
+    // Initialize elements synchronously
+    this.initializeElements();
+    
+    // Load cached visibility state if available
+    await this.loadVisibilityState();
+    
+    // Initialize components asynchronously
+    await this.initializeComponentsAsync();
+    
+    // Mark as initialized
+    this.initialized = true;
+
+    // Always show loaded state
+    requestAnimationFrame(() => {
+        this.element.classList.add('loaded');
+        this.toggleButton.classList.add('loaded');
+    });
+}
+
+// Helper method to find closest location
+private findClosestLocation(coords: [number, number]): (Location & { type: string }) | undefined {
+    let closest = this.locations[0];
+    let minDist = Infinity;
+
+    this.locations.forEach(location => {
+        const locCoords = Array.isArray(location.coordinates[0]) 
+            ? location.coordinates[0] 
+            : location.coordinates as [number, number];
+        
+        const dist = Math.hypot(coords[0] - locCoords[0], coords[1] - locCoords[1]);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = location;
+        }
+    });
+
+    return closest;
+}
+
+  private async loadVisibilityState(): Promise<void> {
+    try {
+      const cachedData = localStorage.getItem(this.VISIBILITY_CACHE_KEY);
+      if (cachedData) {
+        const state = JSON.parse(cachedData) as CachedVisibilityState;
+        const versionModule = await import('./mapversion.yml');
+        if (state.version === versionModule.default.version) {
+          this.visibleMarkers = new Set(state.markers);
+          this.visibleCategories = new Set(state.categories);
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load visibility state:', error);
+    }
+    
+    // Default: make everything visible
     this.visibleMarkers = new Set(this.locations.map(l => l.name));
     this.visibleCategories = new Set(this.locations.map(l => l.type));
   }
 
-  // Update sidebar content
-  updateContent(location: Location & { type: string }, x: number, y: number) {
+  private async saveVisibilityState(): Promise<void> {
+    try {
+      const state: CachedVisibilityState = {
+        version: (await import('./mapversion.yml')).default.version,
+        markers: Array.from(this.visibleMarkers),
+        categories: Array.from(this.visibleCategories)
+      };
+      localStorage.setItem(this.VISIBILITY_CACHE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.warn('Failed to save visibility state:', error);
+    }
+  }
+
+  private async initializeComponentsAsync(): Promise<void> {
+    // Group locations by type first
+    const groupedLocations = this.locations.reduce((acc, location) => {
+      if (!acc[location.type]) acc[location.type] = [];
+      acc[location.type].push(location);
+      return acc;
+    }, {} as Record<string, (Location & { type: string })[]>);
+
+    // Initialize handlers that don't depend on DOM creation
+    this.initializeImageHandlers();
+
+    // Create location drawer elements asynchronously in chunks
+    const categoriesContainer = this.element.querySelector('.categories') as HTMLElement;
+    const chunkSize = 10; // Process 10 categories at a time
+
+    for (let i = 0; i < Object.entries(groupedLocations).length; i += chunkSize) {
+      const chunk = Object.entries(groupedLocations).slice(i, i + chunkSize);
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          chunk.forEach(([category, items]) => {
+            this.createCategorySection(category, items, categoriesContainer);
+          });
+          resolve();
+        });
+      });
+    }
+
+    // Initialize drawer toggle after all elements are created
+    const drawerToggle = this.element.querySelector('#drawer-toggle') as HTMLElement;
+    drawerToggle?.addEventListener('click', () => {
+      this.locationDrawer.classList.toggle('drawer-collapsed');
+    });
+  }
+
+  // Update this method to ensure initialization before updating content
+  async updateContent(location: Location & { type: string }, x: number, y: number) {
+    await this.ensureInitialized();
     this.titleEl.textContent = location.name;
     this.descEl.textContent = location.description || 'No description available';
-    this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`; // Changed format to match YAML
+    this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
 
     if (location.imgUrl) {
       this.imgEl.src = location.imgUrl;
@@ -83,6 +219,9 @@ export class Sidebar {
       this.imgEl.style.display = 'none';
       this.imgEl.src = '';
     }
+
+    // Show sidebar when updating content
+    this.showSidebar();
   }
 
   // Initialize image modal handlers
@@ -226,7 +365,7 @@ export class Sidebar {
         coordSpan.textContent = `#${index + 1}`;
         
         const coordToggle = document.createElement('span');
-        coordToggle.className = 'material-icons visibility-toggle';
+        coordToggle.className = 'material-icons visibilityz-toggle';
         coordToggle.textContent = 'visibility';
         
         locationOption.appendChild(coordSpan);
@@ -321,7 +460,7 @@ export class Sidebar {
     }
 }
 
-  private toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): void {
+  private async toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): Promise<void> {
     console.log('Toggling visibility for:', locationName);
     const isVisible = this.visibleMarkers.has(locationName);
     
@@ -345,9 +484,10 @@ export class Sidebar {
 
     // Update category toggle state
     this.updateCategoryVisibility(toggleElement);
+    this.saveVisibilityState();
 }
 
-private toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement) {
+private async toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement): Promise<void> {
     const isVisible = this.visibleCategories.has(category);
     
     if (isVisible) {
@@ -419,9 +559,10 @@ private toggleCategoryVisibility(category: string, items: (Location & { type: st
             });
         });
     }
+    this.saveVisibilityState();
 }
 
-private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: HTMLElement) {
+private async toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: HTMLElement): Promise<void> {
     const isVisible = this.visibleMarkers.has(item.name);
     const coordinates = item.coordinates as [number, number][];
     
@@ -484,29 +625,44 @@ private toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: H
             }
         });
     }
+    this.saveVisibilityState();
 }
 
-private initializeSidebarToggle() {
-  if (!this.toggleButton) return;
+// private initializeSidebarToggle() {
+//   if (!this.toggleButton) return;
+// 
+//   const toggleSidebar = () => {
+//     this.element.classList.toggle('collapsed');
+//     this.toggleButton.classList.toggle('collapsed');
+//   };
+// 
+//   // Click handler with console log for debugging
+//   this.toggleButton.addEventListener('click', (e) => {
+//     e.stopPropagation(); // Prevent event bubbling
+//     console.log('Toggle button clicked'); // Debug log
+//     toggleSidebar();
+//   });
+// 
+//   // Keyboard shortcut (Ctrl + B)
+//   document.addEventListener('keydown', (e) => {
+//     if (e.ctrlKey && e.key === 'b') {
+//       e.preventDefault();
+//       toggleSidebar();
+//     }
+//   });
+// }
 
-  const toggleSidebar = () => {
-    this.element.classList.toggle('collapsed');
-    this.toggleButton.classList.toggle('collapsed');
-  };
-
-  // Click handler with console log for debugging
-  this.toggleButton.addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevent event bubbling
-    console.log('Toggle button clicked'); // Debug log
-    toggleSidebar();
-  });
-
-  // Keyboard shortcut (Ctrl + B)
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 'b') {
-      e.preventDefault();
-      toggleSidebar();
-    }
-  });
+private initializeElements(): void {
+  // Get references to DOM elements
+  this.titleEl = this.element.querySelector('.location-title') as HTMLElement;
+  this.descEl = this.element.querySelector('.location-description') as HTMLElement;
+  this.coordEl = this.element.querySelector('.coordinates-display') as HTMLElement;
+  this.imgEl = this.element.querySelector('#sidebar-image') as HTMLImageElement;
+  this.imageModal = document.querySelector('#image-modal') as HTMLElement;
+  this.modalImage = document.querySelector('#modal-image') as HTMLImageElement;
+  this.modalTitle = document.querySelector('.modal-title') as HTMLElement;
+  this.modalDescription = document.querySelector('.modal-description') as HTMLElement;
+  this.closeButton = document.querySelector('.close-button') as HTMLElement;
+  this.locationDrawer = this.element.querySelector('.location-drawer') as HTMLElement;
 }
 }

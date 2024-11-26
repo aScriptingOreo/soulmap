@@ -78,68 +78,17 @@ async function checkForUpdates() {
 }
 
 async function initMain() {
-  await checkForUpdates(); // Add this line at the start
-  const urlParams = new URLSearchParams(window.location.search);
-  const debug = urlParams.get('debug') === 'true';
-  const locationParam = urlParams.get('loc');
-  const indexParam = urlParams.get('index');
-  
-  const locations = await loadLocations();
-  if (locations.length > 0) {
-    // Initialize map and store the promise
-    await initializeMap(locations, debug);
+    await checkForUpdates();
+    const urlParams = new URLSearchParams(window.location.search);
+    const debug = urlParams.get('debug') === 'true';
     
-    // Handle URL parameters after map initialization
-    if (locationParam) {
-      const location = decodeLocationHash(locationParam, locations);
-      if (location) {
-        const coords = Array.isArray(location.coordinates[0]) 
-          ? (indexParam ? 
-              location.coordinates[parseInt(indexParam)] : 
-              location.coordinates[0]) as [number, number]
-          : location.coordinates as [number, number];
-          
-        // Find and click the marker with the specific index if it exists
-        const markerSelector = indexParam 
-          ? `.custom-location-icon[data-location="${location.name}"][data-index="${indexParam}"]`
-          : `.custom-location-icon[data-location="${location.name}"]`;
-        
-        const marker = document.querySelector(markerSelector);
-        if (marker) {
-          map.setView([coords[1], coords[0]], map.getZoom());
-          marker.fire('click');
-          updateMetaTags(location, [coords[0], coords[1]]);
-
-          // Add click handler for marker
-          marker.on('click', () => {
-            // Update sidebar content
-            sidebar.updateContent(location, coords[0], coords[1]);
-
-            // Handle marker highlight
-            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-                el.classList.remove('selected');
-            });
-            marker.getElement()?.classList.add('selected');
-
-            // Get marker index for multi-location items
-            const isMultiLocation = location.coordinates.length > 1;
-            const locationHash = generateLocationHash(location.name);
-            const urlParams = isMultiLocation ? 
-                `?loc=${locationHash}&index=${indexParam}` : 
-                `?loc=${locationHash}`;
-
-            // Update URL with location hash and index if applicable
-            window.history.replaceState({}, '', urlParams);
-
-            // Update meta tags for social sharing
-            updateMetaTags(location, [coords[0], coords[1]]);
-          });
-        }
-      }
+    const locations = await loadLocations();
+    if (locations.length > 0) {
+        // Initialize map with locations
+        await initializeMap(locations, debug);
+    } else {
+        console.error("No locations loaded. Map initialization aborted.");
     }
-  } else {
-    console.error("No locations loaded. Map initialization aborted.");
-  }
 }
 
 // Wait for DOM to load

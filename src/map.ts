@@ -49,7 +49,93 @@ function updateMetaTags(location: Location & { type: string }, coords: [number, 
 }
 
 function isInBounds(coords: [number, number], bounds: L.LatLngBounds): boolean {
-    return bounds.contains([coords[1], coords[0]]);
+    // Add padding to the bounds (about 50% of the viewport size)
+    const padFactor = 0.5; // 50% padding
+    
+    const originalBounds = bounds;
+    const sw = originalBounds.getSouthWest();
+    const ne = originalBounds.getNorthEast();
+    
+    // Calculate padding amounts
+    const latPadding = (ne.lat - sw.lat) * padFactor;
+    const lngPadding = (ne.lng - sw.lng) * padFactor;
+    
+    // Create expanded bounds
+    const paddedBounds = L.latLngBounds(
+        L.latLng(sw.lat - latPadding, sw.lng - lngPadding),
+        L.latLng(ne.lat + latPadding, ne.lng + lngPadding)
+    );
+
+    return paddedBounds.contains([coords[1], coords[0]]);
+}
+
+async function handleUrlNavigation(
+    map: L.Map,
+    sidebar: Sidebar,
+    locations: (Location & { type: string })[],
+    urlParams: URLSearchParams
+): Promise<void> {
+    const locationParam = urlParams.get('loc');
+    const coordParam = urlParams.get('coord');
+    const indexParam = urlParams.get('index');
+
+    let targetLocation: (Location & { type: string }) | undefined;
+    let targetCoords: [number, number] | undefined;
+
+    if (locationParam) {
+        // Handle location-based navigation
+        targetLocation = locations.find(l => generateLocationHash(l.name) === locationParam);
+        if (targetLocation) {
+            targetCoords = Array.isArray(targetLocation.coordinates[0])
+                ? (indexParam 
+                    ? targetLocation.coordinates[parseInt(indexParam)]
+                    : targetLocation.coordinates[0]) as [number, number]
+                : targetLocation.coordinates as [number, number];
+        }
+    } else if (coordParam) {
+        // Handle coordinate-based navigation
+        const [x, y] = coordParam.split(',').map(Number);
+        if (!isNaN(x) && !isNaN(y)) {
+            targetCoords = [x, y];
+            // Find closest location to these coordinates
+            targetLocation = locations.reduce((closest, loc) => {
+                const locCoords = Array.isArray(loc.coordinates[0]) 
+                    ? loc.coordinates[0] 
+                    : loc.coordinates as [number, number];
+                
+                const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
+                const closestDist = closest ? Math.hypot(
+                    x - (Array.isArray(closest.coordinates[0]) 
+                        ? closest.coordinates[0][0] 
+                        : closest.coordinates[0]),
+                    y - (Array.isArray(closest.coordinates[0])
+                        ? closest.coordinates[0][1]
+                        : closest.coordinates[1])
+                ) : Infinity;
+
+                return currentDist < closestDist ? loc : closest;
+            });
+        }
+    }
+
+    if (targetCoords && targetLocation) {
+        // Center map and zoom
+        map.setView([targetCoords[1], targetCoords[0]], 0);
+        
+        // Update sidebar and meta information
+        sidebar.updateContent(targetLocation, targetCoords[0], targetCoords[1]);
+        updateMetaTags(targetLocation, targetCoords);
+
+        // Update URL without reloading
+        const newUrl = new URL(window.location.href);
+        if (locationParam) {
+            newUrl.searchParams.set('loc', generateLocationHash(targetLocation.name));
+            if (indexParam) newUrl.searchParams.set('index', indexParam);
+        } else {
+            newUrl.searchParams.set('coord', `${targetCoords[0]},${targetCoords[1]}`);
+        }
+        window.history.replaceState({}, '', newUrl.toString());
+    }
 }
 
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
@@ -73,13 +159,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         const deviceType = getDeviceType();
         const defaultZoom = deviceType === 'mobile' ? -1 : 0;
         const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
-        const zoomedViewZoom = 0;
 
         const map = L.map('map', {
             crs: L.CRS.Simple,
             minZoom: -3,
             maxZoom: 2,
-            zoom: defaultZoom,
+            zoom: 0, // Always start at zoom 0
             zoomDelta: 0.5,
             zoomSnap: 0.5,
             wheelPxPerZoomLevel: 120,
@@ -189,8 +274,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         // Phase 4: Initialize interface (90-100%)
         updateProgress(90, 'Initializing interface...');
         
-        // Initialize search and sidebar
-        initializeSearch(locations, map, markers);
+        // Initialize sidebar first
         const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
         const sidebar = new Sidebar({
             element: sidebarElement,
@@ -198,6 +282,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             map,
             markers
         });
+
+        // Handle URL navigation parameters
+        await handleUrlNavigation(map, sidebar, locations, new URLSearchParams(window.location.search));
+
+        // Initialize search after handling URL params
+        initializeSearch(locations, map, markers);
 
         // Initial marker update after everything is ready
         updateVisibleMarkers();
