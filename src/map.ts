@@ -6,6 +6,8 @@ import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
 import { initializeGrid } from './gridLoader';
 import { generateLocationHash, decodeLocationHash } from './utils';
+import { CustomMarkerService } from './services/customMarkers';
+import { MarkerModal } from './components/MarkerModal';
 
 function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
     // Update title
@@ -152,6 +154,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         }
     };
 
+    const customMarkerService = new CustomMarkerService();
+    const markerModal = new MarkerModal();
+
     try {
         // Phase 1: Initialize map (50-60%)
         updateProgress(50, 'Initializing map...');
@@ -237,6 +242,37 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 sidebar.updateContent(null, coords[0], coords[1]);
             }
         });
+
+        // Add right-click handler
+        map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+            const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
+            markerModal.show(coords);
+        });
+
+        // Handle new marker creation
+        markerModal.onSubmit = (data) => {
+            const newMarker = customMarkerService.addMarker({
+                ...data,
+                coordinates: data.coordinates as [number, number]
+            });
+            
+            // Add marker to map and update UI
+            const customLocation = { ...newMarker, type: 'custom' };
+            locations.push(customLocation);
+            
+            // Force update visible markers
+            updateVisibleMarkers();
+            
+            // Update existing sidebar instead of creating a new one
+            sidebar.addCustomMarker(customLocation); // Add this method to Sidebar class
+
+            // Focus on new marker
+            map.setView([data.coordinates[1], data.coordinates[0]], map.getZoom());
+        };
+
+        // Load existing custom markers
+        const customMarkers = customMarkerService.getAllMarkers();
+        locations.push(...customMarkers.map(m => ({ ...m, type: 'custom' })));
 
         // Remove these event listeners as they're no longer needed
         // map.on('zoomstart', () => {

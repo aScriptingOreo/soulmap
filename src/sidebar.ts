@@ -1,6 +1,7 @@
 import * as L from 'leaflet';
 import type { Location } from './types';
 import { generateLocationHash } from './utils';
+import { CustomMarkerService } from './services/customMarkers';
 
 export interface SidebarOptions {
   element: HTMLElement;
@@ -29,15 +30,27 @@ export class Sidebar {
   private toggleButton!: HTMLButtonElement;
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private customMarkerService: CustomMarkerService;
+  private hasCustomCategory: boolean = false; // Add this flag
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
     this.locations = options.locations;
     this.map = options.map;
     this.markers = options.markers;
+    this.customMarkerService = new CustomMarkerService();
 
     // Create and add toggle button immediately
     this.createToggleButton();
+
+    // Add listener for empty custom markers
+    window.addEventListener('customMarkersEmpty', () => {
+      const customCategory = this.element.querySelector('[data-category="custom"]');
+      if (customCategory) {
+        customCategory.remove();
+        this.hasCustomCategory = false; // Update flag when removing category
+      }
+    });
   }
 
   private createToggleButton(): void {
@@ -95,10 +108,12 @@ export class Sidebar {
 
   // Update showSidebar method to ensure consistent state
   private showSidebar(): void {
-    requestAnimationFrame(() => {
-        this.element.classList.remove('collapsed');
-        this.toggleButton.classList.remove('collapsed');
-    });
+    this.element.classList.remove('collapsed');
+    this.toggleButton.classList.remove('collapsed');
+    // Add loaded class if not already present
+    if (!this.element.classList.contains('loaded')) {
+        this.element.classList.add('loaded');
+    }
 }
 
   private async ensureInitialized(): Promise<void> {
@@ -252,32 +267,37 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
   // Initialize location drawer
   private initializeLocationDrawer() {
     const categoriesContainer = this.element.querySelector('.categories') as HTMLElement;
-    const drawerToggle = this.element.querySelector('#drawer-toggle') as HTMLElement;
 
     // Group locations by type
     const groupedLocations = this.locations.reduce((acc, location) => {
-      if (!acc[location.type]) {
-        acc[location.type] = [];
-      }
-      acc[location.type].push(location);
-      return acc;
+        if (!acc[location.type]) {
+            acc[location.type] = [];
+        }
+        acc[location.type].push(location);
+        return acc;
     }, {} as { [key: string]: (Location & { type: string })[] });
 
-    // Create category sections
+    // Always create custom category first, regardless of whether there are custom markers
+    this.createCategorySection('custom', 
+        groupedLocations['custom'] || [], 
+        categoriesContainer
+    );
+    delete groupedLocations['custom']; // Remove custom from grouped locations
+
+    // Create other category sections
     Object.entries(groupedLocations).forEach(([category, items]) => {
-      this.createCategorySection(category, items, categoriesContainer);
+        this.createCategorySection(category, items, categoriesContainer);
     });
 
-    // Toggle drawer
-    drawerToggle.addEventListener('click', () => {
-      this.locationDrawer.classList.toggle('drawer-collapsed');
-    });
-  }
+    // Remove the empty category event listener since we want to keep the category
+    window.removeEventListener('customMarkersEmpty', () => {});
+}
 
   // Create category section
   private createCategorySection(category: string, items: (Location & { type: string })[], container: HTMLElement) {
     const categoryDiv = document.createElement('div');
     categoryDiv.className = 'category';
+    categoryDiv.setAttribute('data-category', category);
     
     const categoryHeader = document.createElement('div');
     categoryHeader.className = 'category-header';
@@ -299,37 +319,89 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
     const categoryContent = document.createElement('div');
     categoryContent.className = 'category-content';
 
+    // Special handling for custom category
+    if (category === 'custom') {
+        if (items.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'custom-category-empty';
+            emptyMessage.innerHTML = `
+                <i class="fa-solid fa-right-click"></i>
+                <span>To add a custom marker, right click the location on the map</span>
+            `;
+            categoryContent.appendChild(emptyMessage);
+        } else {
+            items.forEach(item => this.createLocationItem(item, categoryContent));
+        }
+    } else {
+        items.forEach(item => this.createLocationItem(item, categoryContent));
+    }
+
     // Add category visibility toggle
     visibilityToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleCategoryVisibility(category, items, visibilityToggle);
+        e.stopPropagation();
+        this.toggleCategoryVisibility(category, items, visibilityToggle);
     });
 
-    items.forEach((item) => {
-      this.createLocationItem(item, categoryContent);
-    });
-
-    // Existing category click handler...
     categoryHeader.addEventListener('click', () => {
-      categoryContent.classList.toggle('open');
-      chevronIcon.classList.toggle('fa-chevron-up');
+        categoryContent.classList.toggle('open');
+        chevronIcon.classList.toggle('fa-chevron-up');
     });
 
     categoryDiv.appendChild(categoryHeader);
     categoryDiv.appendChild(categoryContent);
     container.appendChild(categoryDiv);
-  }
+}
 
   // Create location item
   private createLocationItem(item: Location & { type: string }, container: HTMLElement) {
     const hasMultipleCoords = Array.isArray(item.coordinates[0]);
+    let itemDiv: HTMLElement;
 
     if (hasMultipleCoords) {
-      this.createMultiLocationItem(item, container);
+        this.createMultiLocationItem(item, container);
+        return;
     } else {
-      this.createSingleLocationItem(item, container);
+        itemDiv = this.createSingleLocationItem(item, container);
     }
-  }
+
+    if (item.type === 'custom' && itemDiv) {
+        const actions = document.createElement('div');
+        actions.className = 'custom-marker-actions';
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.customMarkerService.deleteMarker((item as CustomMarker).id); // Add this.
+            container.removeChild(itemDiv);
+            // Remove marker from map
+            const coords = item.coordinates as [number, number];
+            const marker = this.markers.find(m => {
+                const pos = m.getLatLng();
+                return pos.lat === coords[1] && pos.lng === coords[0];
+            });
+            if (marker) marker.remove();
+        });
+
+        const exportBtn = document.createElement('button');
+        exportBtn.innerHTML = '<i class="fa-solid fa-file-export"></i>';
+        exportBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const yaml = this.customMarkerService.exportMarkerAsYaml((item as CustomMarker).id); // Add this.
+            const blob = new Blob([yaml], { type: 'text/yaml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.yml`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        actions.appendChild(deleteBtn);
+        actions.appendChild(exportBtn);
+        itemDiv.appendChild(actions);
+    }
+}
 
   // Create multi-location item
   private createMultiLocationItem(item: Location & { type: string }, container: HTMLElement) {
@@ -401,7 +473,7 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
 }
 
   // Create single location item
-  private createSingleLocationItem(item: Location & { type: string }, container: HTMLElement) {
+  private createSingleLocationItem(item: Location & { type: string }, container: HTMLElement): HTMLElement {
     const itemDiv = document.createElement('div');
     itemDiv.className = 'location-item';
     
@@ -427,6 +499,7 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
     });
 
     container.appendChild(itemDiv);
+    return itemDiv;
   }
 
   // Handle location click
@@ -523,25 +596,26 @@ private calculateAnimationDuration(distance: number): number {
 }
 
   private async toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): Promise<void> {
-    console.log('Toggling visibility for:', locationName);
     const isVisible = this.visibleMarkers.has(locationName);
     
     this.markers.forEach(marker => {
-        const markerElement = marker.getElement();
-        if (!markerElement) return;
-        
-        const markerLocation = markerElement.getAttribute('data-location');
-        if (markerLocation === locationName) {
-            if (isVisible) {
-                markerElement.style.display = 'none';
-                this.visibleMarkers.delete(locationName);
-                toggleElement.classList.add('hidden');
-            } else {
-                markerElement.style.display = '';
-                this.visibleMarkers.add(locationName);
-                toggleElement.classList.remove('hidden');
-            }
+      const markerElement = marker.getElement();
+      if (!markerElement) return;
+      
+      const markerLocation = markerElement.getAttribute('data-location');
+      if (markerLocation === locationName) {
+        if (isVisible) {
+          markerElement.style.display = 'none';
+          this.visibleMarkers.delete(locationName);
+          toggleElement.textContent = 'visibility_off';
+          toggleElement.classList.add('hidden');
+        } else {
+          markerElement.style.display = '';
+          this.visibleMarkers.add(locationName);
+          toggleElement.textContent = 'visibility';
+          toggleElement.classList.remove('hidden');
         }
+      }
     });
 
     // Update category toggle state
@@ -687,29 +761,28 @@ private async toggleMultiMarkerVisibility(item: Location & { type: string }, tog
     }
 }
 
-// private initializeSidebarToggle() {
-//   if (!this.toggleButton) return;
-// 
-//   const toggleSidebar = () => {
-//     this.element.classList.toggle('collapsed');
-//     this.toggleButton.classList.toggle('collapsed');
-//   };
-// 
-//   // Click handler with console log for debugging
-//   this.toggleButton.addEventListener('click', (e) => {
-//     e.stopPropagation(); // Prevent event bubbling
-//     console.log('Toggle button clicked'); // Debug log
-//     toggleSidebar();
-//   });
-// 
-//   // Keyboard shortcut (Ctrl + B)
-//   document.addEventListener('keydown', (e) => {
-//     if (e.ctrlKey && e.key === 'b') {
-//       e.preventDefault();
-//       toggleSidebar();
-//     }
-//   });
-// }
+public async addCustomMarker(marker: Location & { type: string }): Promise<void> {
+    await this.ensureInitialized();
+    
+    // Add to locations array
+    this.locations.push(marker);
+    
+    // Find custom category (it should always exist)
+    const customCategory = this.element.querySelector('[data-category="custom"]');
+    if (customCategory) {
+        const categoryContent = customCategory.querySelector('.category-content');
+        if (categoryContent) {
+            if (categoryContent.querySelector('.custom-category-empty')) {
+                categoryContent.innerHTML = '';
+            }
+            this.createLocationItem(marker, categoryContent);
+        }
+    }
+
+    // Make marker visible by default
+    this.visibleMarkers.add(marker.name);
+    this.visibleCategories.add('custom');
+}
 
 private initializeElements(): void {
   // Get references to DOM elements
@@ -723,5 +796,31 @@ private initializeElements(): void {
   this.modalDescription = document.querySelector('.modal-description') as HTMLElement;
   this.closeButton = document.querySelector('.close-button') as HTMLElement;
   this.locationDrawer = this.element.querySelector('.location-drawer') as HTMLElement;
+}
+
+private updateCategoryVisibility(toggleElement: HTMLElement): void {
+    const categoryElement = toggleElement.closest('.category');
+    if (!categoryElement) return;
+
+    const category = categoryElement.getAttribute('data-category');
+    if (!category) return;
+
+    // Check if all items in category are hidden
+    const itemToggles = categoryElement.querySelectorAll('.visibility-toggle');
+    const allHidden = Array.from(itemToggles).every(t => t.classList.contains('hidden'));
+
+    // Update category visibility toggle
+    const categoryToggle = categoryElement.querySelector('.category-header .visibility-toggle');
+    if (categoryToggle) {
+        if (allHidden) {
+            categoryToggle.textContent = 'visibility_off';
+            categoryToggle.classList.add('hidden');
+            this.visibleCategories.delete(category);
+        } else {
+            categoryToggle.textContent = 'visibility';
+            categoryToggle.classList.remove('hidden');
+            this.visibleCategories.add(category);
+        }
+    }
 }
 }
