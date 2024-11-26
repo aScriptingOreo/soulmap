@@ -212,13 +212,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 return currentDist < closestDist ? loc : closest;
             });
 
-            // Update URL with raw coordinates
-            const urlParams = new URLSearchParams();
-            urlParams.set('coord', `${Math.round(coords[0])},${Math.round(coords[1])}`);
-            window.history.replaceState({}, '', `?${urlParams.toString()}`);
-
             // If clicked very close to a marker, show that location
-            const minDistance = 50; // Adjust this threshold as needed
+            const minDistance = 50;
             const closestDistance = Math.hypot(
                 coords[0] - (Array.isArray(closest.coordinates[0]) 
                     ? closest.coordinates[0][0] 
@@ -232,7 +227,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 // Update meta tags and sidebar with location
                 updateMetaTags(closest, coords);
                 sidebar.updateContent(closest, coords[0], coords[1]);
+                // Don't update URL here as sidebar.updateContent will handle it
             } else {
+                // Only update URL for coordinate clicks when not near a marker
+                const urlParams = new URLSearchParams();
+                urlParams.set('coord', `${Math.round(coords[0])},${Math.round(coords[1])}`);
+                window.history.replaceState({}, '', `?${urlParams.toString()}`);
                 // Show coordinate-only view
                 sidebar.updateContent(null, coords[0], coords[1]);
             }
