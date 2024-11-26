@@ -372,6 +372,7 @@ close-button:hover {
   transform: rotate(180deg);
 }
 
+/* Update transitions for smooth animation */
 .search-container {
   position: fixed;
   top: 20px;
@@ -381,10 +382,14 @@ close-button:hover {
   z-index: 1600;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform, width, top;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
+}
+
+/* Only modify search container when expanded */
+.search-container.expanded {
+  width: 600px;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* When sidebar is not collapsed (open), reduce search bar width */
@@ -426,15 +431,12 @@ close-button:hover {
   -webkit-backface-visibility: hidden;
 }
 
-#location-search::placeholder {
-  color: rgba(255, 255, 255, 0.6);
-}
-
+/* Update search results styles */
 .search-results {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  left: -20px;  /* Adjust this value to move results more to the left */
+  right: -200px; /* Keep this matching left for symmetry */
   margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
   border-radius: 12px;
@@ -442,7 +444,82 @@ close-button:hover {
   display: none;
   max-height: 400px;
   overflow-y: auto;
-  z-index: 1600; /* Match search container */
+  z-index: 1600;
+  width: 100%;
+  padding: 0;
+}
+
+/* Search result sizing */
+.search-result {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+/* Update expanded container to maintain proper width */
+.search-container.expanded .search-results {
+  width: calc(100% + 40px);
+  max-width: calc(100% + 40px);
+}
+
+/* Maintain center alignment when sidebar is open */
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%); /* Keep results centered under search */
+}
+
+/* When sidebar is not collapsed (open) */
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) {
+  width: 150px;
+  left: calc(50% - 150px); /* Adjust for sidebar being open */
+}
+
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%); /* Keep results centered under search */
+}
+
+/* When sidebar is collapsed (closed) */
+.right-sidebar.collapsed ~ .search-container:not(.expanded) {
+  width: 300px;
+  left: 50%;
+}
+
+.right-sidebar.collapsed ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%);
+}
+
+/* Expanded search state */
+.search-container.expanded .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%);
+}
+
+#location-search::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Update search results styles in main.css */
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;  /* Reset left position */
+  right: 0;  /* Reset right position */
+  margin-top: 8px;
+  background: rgba(51, 51, 51, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: none;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1600;
+  width: 100%;  /* Make it full width of container */
+  padding: 0;   /* Reset padding */
 }
 
 .search-result {
@@ -466,6 +543,12 @@ close-button:hover {
   align-items: center;
   justify-content: center;
   color: #fff;
+}
+
+.search-result-icon img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 .search-result-content {
@@ -1000,4 +1083,75 @@ close-button:hover {
   opacity: 1;
   visibility: visible;
   transition: opacity 0.3s ease;
+}
+
+/* Base search container */
+.search-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  z-index: 1600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Search input */
+#location-search {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 24px;
+  background: rgba(51, 51, 51, 0.95);
+  color: #ffffff;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Search results container - normal state */
+.search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 21px;  /* Default left offset for normal state */
+  right: 0; /* Default right offset for normal state */
+  margin-top: 1px;
+  background: rgba(51, 51, 51, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: none;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1600;
+  width: 100%;
+  padding: 0;
+}
+
+/* Expanded state needs different positioning */
+.search-container.expanded .search-results {
+  left: 318px; /* Specific offset for expanded state */
+  transform: translateX(-50%);
+  width: calc(100% + 40px);
+}
+
+/* Expanded state */
+.search-container.expanded {
+  width: 600px;
+  top: 20%;
+  transform: translate(-50%, -50%);
+}
+
+.search-container.expanded .search-results {
+  width: 640px; /* Slightly wider than the expanded search bar */
+}
+
+/* Search result styling */
+.search-result {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
 }

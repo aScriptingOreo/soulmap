@@ -52,13 +52,14 @@ export function initializeSearch(locations: (Location & { type: string })[], map
   function updateResults(results: SearchResult[]) {
     if (results.length > 0) {
       resultsContainer.innerHTML = results
-        .slice(0, 8) // Show more results
+        .slice(0, 8)
         .map((result, index) => `
           <div class="search-result ${index === selectedIndex ? 'selected' : ''}" data-name="${result.location.name}">
             <div class="search-result-icon">
               ${result.location.icon?.startsWith('fa-') 
-                ? `<i class="${result.location.icon}" style="color: ${result.location.iconColor || '#FFFFFF'}"></i>`
-                : ''}
+                ? `<i class="${result.location.icon}" style="color: ${result.location.iconColor || '#FFFFFF'}; font-size: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;"></i>`
+                : `<img src="${result.location.icon}.svg" style="width: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px; height: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;" alt="">`
+              }
             </div>
             <div class="search-result-content">
               <div class="result-name">${result.location.name}</div>
