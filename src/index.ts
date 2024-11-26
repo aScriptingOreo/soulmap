@@ -3,7 +3,6 @@ import { marked } from 'marked';
 import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
 import type { VersionInfo } from './types';
-import { generateLocationHash, decodeLocationHash } from './utils';
 
 async function loadGreeting() {
   try {
@@ -62,19 +61,20 @@ function dismissPopup() {
 }
 
 async function checkForUpdates() {
-  try {
-    const versionModule = await import('./mapversion.yml');
-    const currentVersion = versionModule.default.version;
-    const lastVersion = localStorage.getItem('soulmap_version');
+    try {
+        const versionModule = await import('./mapversion.yml');
+        const currentVersion = versionModule.default.version;
+        const lastVersion = localStorage.getItem('soulmap_version');
 
-    if (lastVersion !== currentVersion) {
-      // Clear location cache if version changed
-      clearLocationsCache();
-      localStorage.setItem('soulmap_version', currentVersion);
+        if (lastVersion !== currentVersion) {
+            // Clear both location and tile caches if version changed
+            clearLocationsCache();
+            clearTileCache();
+            localStorage.setItem('soulmap_version', currentVersion);
+        }
+    } catch (error) {
+        console.error('Error checking for updates:', error);
     }
-  } catch (error) {
-    console.error('Error checking for updates:', error);
-  }
 }
 
 async function initMain() {
