@@ -1,5 +1,6 @@
 import * as L from 'leaflet';
 import type { Location } from './types';
+import { generateLocationHash } from './utils';
 
 export interface SidebarOptions {
   element: HTMLElement;

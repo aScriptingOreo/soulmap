@@ -5,17 +5,7 @@ import { getDeviceType } from './device';
 import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
 import { initializeGrid } from './gridLoader';
-
-function generateLocationHash(name: string): string {
-  // Replace spaces and special characters with dashes, convert to lowercase
-  return name.toLowerCase()
-             .replace(/[^a-z0-9]+/g, '-')
-             .replace(/(^-|-$)/g, '');
-}
-
-function decodeLocationHash(hash: string, locations: (Location & { type: string })[]): Location & { type: string } | undefined {
-  return locations.find(l => generateLocationHash(l.name) === hash);
-}
+import { generateLocationHash, decodeLocationHash } from './utils';
 
 function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
     // Update title
@@ -59,7 +49,7 @@ function updateMetaTags(location: Location & { type: string }, coords: [number, 
 }
 
 function isInBounds(coords: [number, number], bounds: L.LatLngBounds): boolean {
-  return bounds.contains([coords[1], coords[0]]);
+    return bounds.contains([coords[1], coords[0]]);
 }
 
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
@@ -130,7 +120,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                             const sizeMultiplier = location.iconSize || 1;
                             icon = L.divIcon({
                                 className: 'custom-location-icon',
-                                html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}"></i>`,
+                                html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`,
                                 iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
                                 iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
                             });

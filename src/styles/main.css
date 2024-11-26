@@ -22,8 +22,13 @@ html, body {
 /* Custom styles for the location marker */
 .custom-location-icon {
   filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
   transition: transform 0.3s ease, filter 0.3s ease;
-  z-index: 102; /* Ensure icons are above the overlay */
+  z-index: 102;
+}
+
+.custom-location-icon i {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
 }
 
 .custom-location-icon:hover,

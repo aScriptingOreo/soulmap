@@ -1,18 +1,9 @@
 // src/index.ts
 import { marked } from 'marked';
-import { loadLocations } from './loader';
+import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
 import type { VersionInfo } from './types';
-
-function generateLocationHash(name: string): string {
-  return name.toLowerCase()
-             .replace(/[^a-z0-9]+/g, '-')
-             .replace(/(^-|-$)/g, '');
-}
-
-function decodeLocationHash(hash: string, locations: (Location & { type: string })[]): Location & { type: string } | undefined {
-  return locations.find(l => generateLocationHash(l.name) === hash);
-}
+import { generateLocationHash, decodeLocationHash } from './utils';
 
 async function loadGreeting() {
   try {
@@ -70,7 +61,24 @@ function dismissPopup() {
   initMain();
 }
 
+async function checkForUpdates() {
+  try {
+    const versionModule = await import('./mapversion.yml');
+    const currentVersion = versionModule.default.version;
+    const lastVersion = localStorage.getItem('soulmap_version');
+
+    if (lastVersion !== currentVersion) {
+      // Clear location cache if version changed
+      clearLocationsCache();
+      localStorage.setItem('soulmap_version', currentVersion);
+    }
+  } catch (error) {
+    console.error('Error checking for updates:', error);
+  }
+}
+
 async function initMain() {
+  await checkForUpdates(); // Add this line at the start
   const urlParams = new URLSearchParams(window.location.search);
   const debug = urlParams.get('debug') === 'true';
   const locationParam = urlParams.get('loc');
