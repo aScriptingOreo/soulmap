@@ -1,7 +1,7 @@
 // src/map.ts
 import * as L from 'leaflet';
 import type { Location } from './types';
-import { getDeviceType } from './device';
+import  { getDeviceType } from './device';
 import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
 import { initializeGrid } from './gridLoader';
@@ -164,7 +164,11 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             crs: L.CRS.Simple,
             minZoom: -3,
             maxZoom: 2,
-            zoom: 0, // Always start at zoom 0
+            zoom: defaultZoom,
+            // Remove or modify animation options
+            zoomAnimation: false,  // Disable zoom animation
+            fadeAnimation: false,  // Disable fade animation
+            markerZoomAnimation: true, // Keep marker animations
             zoomDelta: 0.5,
             zoomSnap: 0.5,
             wheelPxPerZoomLevel: 120,
@@ -172,8 +176,80 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 [-512, -512],
                 [100352, 7680]
             ],
-            maxBoundsViscosity: 1.0
+            maxBoundsViscosity: 1.0,
+            // Add these options
+            preferCanvas: true,
+            renderer: L.canvas(),
+            // Treat all tiles as one layer
+            updateWhenZooming: false,
+            updateWhenIdle: true
         });
+
+        // Add map click handler
+        map.on('click', (e: L.LeafletMouseEvent) => {
+            const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
+            
+            // Find closest location for sidebar display
+            const closest = locations.reduce((closest, loc) => {
+                const locCoords = Array.isArray(loc.coordinates[0]) 
+                    ? loc.coordinates[0] 
+                    : loc.coordinates as [number, number];
+                
+                const currentDist = Math.hypot(
+                    coords[0] - locCoords[0],
+                    coords[1] - locCoords[1]
+                );
+                
+                const closestDist = closest ? Math.hypot(
+                    coords[0] - (Array.isArray(closest.coordinates[0]) 
+                        ? closest.coordinates[0][0] 
+                        : closest.coordinates[0]),
+                    coords[1] - (Array.isArray(closest.coordinates[0])
+                        ? closest.coordinates[0][1]
+                        : closest.coordinates[1])
+                ) : Infinity;
+
+                return currentDist < closestDist ? loc : closest;
+            });
+
+            // Update URL with raw coordinates
+            const urlParams = new URLSearchParams();
+            urlParams.set('coord', `${Math.round(coords[0])},${Math.round(coords[1])}`);
+            window.history.replaceState({}, '', `?${urlParams.toString()}`);
+
+            // If clicked very close to a marker, show that location
+            const minDistance = 50; // Adjust this threshold as needed
+            const closestDistance = Math.hypot(
+                coords[0] - (Array.isArray(closest.coordinates[0]) 
+                    ? closest.coordinates[0][0] 
+                    : closest.coordinates[0]),
+                coords[1] - (Array.isArray(closest.coordinates[0])
+                    ? closest.coordinates[0][1]
+                    : closest.coordinates[1])
+            );
+
+            if (closestDistance < minDistance) {
+                // Update meta tags and sidebar with location
+                updateMetaTags(closest, coords);
+                sidebar.updateContent(closest, coords[0], coords[1]);
+            } else {
+                // Show coordinate-only view
+                sidebar.updateContent(null, coords[0], coords[1]);
+            }
+        });
+
+        // Remove these event listeners as they're no longer needed
+        // map.on('zoomstart', () => {
+        //     requestAnimationFrame(() => {
+        //         document.querySelector('.leaflet-marker-pane')?.classList.add('smooth-zoom');
+        //     });
+        // });
+
+        // map.on('zoomend', () => {
+        //     requestAnimationFrame(() => {
+        //         document.querySelector('.leaflet-marker-pane')?.classList.remove('smooth-zoom');
+        //     });
+        // });
 
         // Phase 2: Load grid (60-75%)
         updateProgress(60, 'Loading map tiles...');
@@ -222,13 +298,20 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                         // Create and add marker
                         const marker = L.marker([coord[1], coord[0]], { 
                             icon,
-                            // Add these options
                             riseOnHover: true,
                             riseOffset: 100,
                             autoPanOnFocus: false,
                             keyboard: false,
-                            // Prevent animations during map movements
-                            snapToPixel: true
+                            // Add these options
+                            snapToPixel: true,
+                            zIndexOffset: 1000,
+                            // Disable default animations
+                            animate: false,
+                            // Important: This makes markers move instantly with the map
+                            renderer: L.canvas({ padding: 0.5 }),
+                            // Add these options for better performance
+                            pane: 'markerPane',
+                            bubblingMouseEvents: false
                         });
                         marker.getElement()?.setAttribute('data-location', location.name);
                         if (coords.length > 1) {
@@ -277,7 +360,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         }
 
         // Add event listeners for map movement
+        map.on('move', updateVisibleMarkers); // Add this line
         map.on('moveend', updateVisibleMarkers);
+        map.on('zoom', updateVisibleMarkers);  // Add this line
         map.on('zoomend', updateVisibleMarkers);
 
         // Phase 4: Initialize interface (90-100%)

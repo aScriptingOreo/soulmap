@@ -7,11 +7,6 @@ let CACHE_VERSION: string;
 
 export async function loadLocations(): Promise<(Location & { type: string })[]> {
   try {
-    // Get version from mapversion.yml
-    const versionModule = await import('./mapversion.yml');
-    const versionData = versionModule.default as VersionInfo;
-    CACHE_VERSION = versionData.version;
-
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
@@ -30,18 +25,7 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
       loadingOverlay.style.display = 'flex';
     }
 
-    // Check cache with dynamic version
-    const cachedData = localStorage.getItem(CACHE_KEY);
-    const cachedVersion = localStorage.getItem(`${CACHE_KEY}_version`);
-    
-    if (cachedData && cachedVersion === CACHE_VERSION) {
-      updateProgress(25, 'Loading cached data...');
-      const locations = JSON.parse(cachedData);
-      updateProgress(50, 'Initializing map...');
-      return locations;
-    }
-
-    // If no cache or outdated, load from files
+    // Load location data directly
     updateProgress(0, 'Loading location data...');
     const importLocations = import.meta.glob('./locations/*/*.y?(a)ml');
     const totalFiles = Object.keys(importLocations).length;
@@ -55,14 +39,6 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
         return { ...module.default, type: path.split('/')[2] };
       })
     );
-
-    // Cache the loaded data
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(locations));
-      localStorage.setItem(`${CACHE_KEY}_version`, CACHE_VERSION);
-    } catch (error) {
-      console.warn('Failed to cache locations:', error);
-    }
 
     updateProgress(50, 'Initializing map...');
     return locations;

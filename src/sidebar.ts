@@ -9,12 +9,6 @@ export interface SidebarOptions {
   markers: L.Marker[];
 }
 
-interface CachedVisibilityState {
-  version: string;
-  markers: string[];
-  categories: string[];
-}
-
 export class Sidebar {
   private element: HTMLElement;
   private locations: (Location & { type: string })[];
@@ -35,7 +29,6 @@ export class Sidebar {
   private toggleButton!: HTMLButtonElement;
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
-  private readonly VISIBILITY_CACHE_KEY = 'soulmap_visibility_cache';
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -50,7 +43,9 @@ export class Sidebar {
   private createToggleButton(): void {
     this.toggleButton = document.createElement('button');
     this.toggleButton.id = 'sidebar-toggle';
+    // Start with both sidebar and button collapsed
     this.toggleButton.className = 'sidebar-toggle collapsed';
+    this.element.classList.add('collapsed');
     
     const icon = document.createElement('span');
     icon.className = 'material-icons';
@@ -63,8 +58,24 @@ export class Sidebar {
     this.toggleButton.addEventListener('click', async (e) => {
         e.stopPropagation();
         await this.ensureInitialized();
-        this.element.classList.toggle('collapsed');
-        this.toggleButton.classList.toggle('collapsed');
+        
+        const isCollapsed = this.element.classList.contains('collapsed');
+        if (isCollapsed) {
+            // Opening sidebar
+            this.element.classList.remove('collapsed');
+            this.toggleButton.classList.remove('collapsed');
+        } else {
+            // Closing sidebar
+            this.element.classList.add('collapsed');
+            this.toggleButton.classList.add('collapsed');
+            // Clear URL parameters
+            window.history.replaceState({}, '', window.location.pathname);
+            
+            // Remove selected state from markers
+            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+                el.classList.remove('selected');
+            });
+        }
     });
 
     // Add keyboard shortcut
@@ -75,17 +86,20 @@ export class Sidebar {
         }
     });
 
-    // Make button visible immediately
+    // Make button visible immediately with correct initial state
     requestAnimationFrame(() => {
         this.toggleButton.classList.add('loaded');
+        this.element.classList.add('loaded');
     });
 }
 
-  // Add this new method
+  // Update showSidebar method to ensure consistent state
   private showSidebar(): void {
-    this.element.classList.remove('collapsed');
-    this.toggleButton.classList.remove('collapsed');
-  }
+    requestAnimationFrame(() => {
+        this.element.classList.remove('collapsed');
+        this.toggleButton.classList.remove('collapsed');
+    });
+}
 
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
@@ -138,37 +152,9 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
 }
 
   private async loadVisibilityState(): Promise<void> {
-    try {
-      const cachedData = localStorage.getItem(this.VISIBILITY_CACHE_KEY);
-      if (cachedData) {
-        const state = JSON.parse(cachedData) as CachedVisibilityState;
-        const versionModule = await import('./mapversion.yml');
-        if (state.version === versionModule.default.version) {
-          this.visibleMarkers = new Set(state.markers);
-          this.visibleCategories = new Set(state.categories);
-          return;
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load visibility state:', error);
-    }
-    
     // Default: make everything visible
     this.visibleMarkers = new Set(this.locations.map(l => l.name));
     this.visibleCategories = new Set(this.locations.map(l => l.type));
-  }
-
-  private async saveVisibilityState(): Promise<void> {
-    try {
-      const state: CachedVisibilityState = {
-        version: (await import('./mapversion.yml')).default.version,
-        markers: Array.from(this.visibleMarkers),
-        categories: Array.from(this.visibleCategories)
-      };
-      localStorage.setItem(this.VISIBILITY_CACHE_KEY, JSON.stringify(state));
-    } catch (error) {
-      console.warn('Failed to save visibility state:', error);
-    }
   }
 
   private async initializeComponentsAsync(): Promise<void> {
@@ -206,18 +192,33 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
   }
 
   // Update this method to ensure initialization before updating content
-  async updateContent(location: Location & { type: string }, x: number, y: number) {
+  async updateContent(location: Location & { type: string } | null, x: number, y: number) {
     await this.ensureInitialized();
-    this.titleEl.textContent = location.name;
-    this.descEl.textContent = location.description || 'No description available';
-    this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
 
-    if (location.imgUrl) {
-      this.imgEl.src = location.imgUrl;
-      this.imgEl.style.display = 'block';
-    } else {
+    if (!location) {
+      // Handle coordinate-only display
+      this.titleEl.textContent = "Current Coordinate";
+      this.descEl.textContent = "No location marker at this position";
+      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
       this.imgEl.style.display = 'none';
       this.imgEl.src = '';
+
+      // Update URL with raw coordinates
+      const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
+      window.history.replaceState({}, '', urlParams);
+    } else {
+      // Regular location display
+      this.titleEl.textContent = location.name;
+      this.descEl.textContent = location.description || 'No description available';
+      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
+
+      if (location.imgUrl) {
+        this.imgEl.src = location.imgUrl;
+        this.imgEl.style.display = 'block';
+      } else {
+        this.imgEl.style.display = 'none';
+        this.imgEl.src = '';
+      }
     }
 
     // Show sidebar when updating content
@@ -439,7 +440,15 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
     const targetZoom = this.calculateOptimalZoom(distance);
     const duration = this.calculateAnimationDuration(distance);
     
-    // Update flyTo options
+    // Disable marker animations during flyTo
+    this.map.once('movestart', () => {
+        document.querySelector('.leaflet-marker-pane')?.classList.add('leaflet-zoom-hide');
+    });
+
+    this.map.once('moveend', () => {
+        document.querySelector('.leaflet-marker-pane')?.classList.remove('leaflet-zoom-hide');
+    });
+
     this.map.flyTo(
         [coords[1], coords[0]], 
         targetZoom,
@@ -448,7 +457,6 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
             easeLinearity: 0.25,
             noMoveStart: true,
             animate: true,
-            // Add these options
             keepPixelPosition: true,
             updateDragInertia: false,
             inertiaDeceleration: 3000,
@@ -538,8 +546,7 @@ private calculateAnimationDuration(distance: number): number {
 
     // Update category toggle state
     this.updateCategoryVisibility(toggleElement);
-    this.saveVisibilityState();
-}
+  }
 
 private async toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement): Promise<void> {
     const isVisible = this.visibleCategories.has(category);
@@ -613,7 +620,6 @@ private async toggleCategoryVisibility(category: string, items: (Location & { ty
             });
         });
     }
-    this.saveVisibilityState();
 }
 
 private async toggleMultiMarkerVisibility(item: Location & { type: string }, toggle: HTMLElement): Promise<void> {
@@ -679,7 +685,6 @@ private async toggleMultiMarkerVisibility(item: Location & { type: string }, tog
             }
         });
     }
-    this.saveVisibilityState();
 }
 
 // private initializeSidebarToggle() {
