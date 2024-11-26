@@ -58,6 +58,10 @@ function updateMetaTags(location: Location & { type: string }, coords: [number, 
         `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
 }
 
+function isInBounds(coords: [number, number], bounds: L.LatLngBounds): boolean {
+  return bounds.contains([coords[1], coords[0]]);
+}
+
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
@@ -72,166 +76,131 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         }
     };
 
-    const deviceType = getDeviceType();
-    const defaultZoom = deviceType === 'mobile' ? -1 : 0;
-    const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
-    const zoomedViewZoom = 0; // Higher zoom level for when viewing specific locations
-
-    const oldHandler = console.warn;
-    console.warn = function(msg: string) {
-        if (msg.includes('mozPressure') || msg.includes('mozInputSource')) {
-            return; // Suppress these specific warnings
-        }
-        oldHandler.apply(console, arguments as any);
-    };
-
-    // Create the map with proper CRS settings
-    const map = L.map('map', {
-        crs: L.CRS.Simple,
-        minZoom: -3,
-        maxZoom: 2,
-        zoom: defaultZoom,
-        zoomDelta: 0.5,
-        zoomSnap: 0.5,
-        wheelPxPerZoomLevel: 120,
-        maxBounds: [
-            [-512, -512],
-            [100352, 7680]
-        ],
-        maxBoundsViscosity: 1.0,
-        inertia: true,
-        bounceAtZoomLimits: true
-    });
-
     try {
-        // Initialize grid (50-70%)
-        updateProgress(50, 'Loading map tiles...');
-        await initializeGrid(map);
-        updateProgress(70, 'Creating markers...');
+        // Phase 1: Initialize map (50-60%)
+        updateProgress(50, 'Initializing map...');
+        
+        const deviceType = getDeviceType();
+        const defaultZoom = deviceType === 'mobile' ? -1 : 0;
+        const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
+        const zoomedViewZoom = 0;
 
-        // Check URL parameters early
-        const urlParams = new URLSearchParams(window.location.search);
-        const locationParam = urlParams.get('loc');
-        const indexParam = urlParams.get('index');
-        const coordParam = urlParams.get('coord');
-
-        // Handle coordinate parameter
-        if (coordParam) {
-            const [x, y] = coordParam.split(',').map(Number);
-            if (!isNaN(x) && !isNaN(y)) {
-                map.setView([y, x], zoomedViewZoom);
-                // Update sidebar with generic location info
-                const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
-                const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
-                const descEl = sidebar.querySelector('.location-description') as HTMLElement;
-                const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
-                
-                titleEl.textContent = 'Map Location';
-                descEl.textContent = 'Custom map coordinate';
-                coordEl.textContent = `[${x}, ${y}]`;
-            }
-        }
-
-        // Handle location parameter
-        if (locationParam) {
-            const location = decodeLocationHash(locationParam, locations);
-            if (location) {
-                const coords = Array.isArray(location.coordinates[0]) 
-                    ? (indexParam ? 
-                        location.coordinates[parseInt(indexParam)] : 
-                        location.coordinates[0]) as [number, number]
-                    : location.coordinates as [number, number];
-                
-                map.setView([coords[1], coords[0]], zoomedViewZoom);
-            }
-        }
-
-        // Initialize locations and markers
-        const markers: L.Marker[] = [];
-
-        locations.forEach((location) => {
-            // Handle multiple coordinates
-            const coordinatesArray = Array.isArray(location.coordinates[0]) 
-              ? location.coordinates as [number, number][]
-              : [location.coordinates] as [number, number][];
-
-            // Create a marker for each coordinate
-            coordinatesArray.forEach(([x, y], index) => {
-              // Use either Font Awesome icon or custom SVG icon
-              let icon: L.Icon | L.DivIcon;
-              if (location.icon && location.icon.startsWith('fa-')) {
-                const sizeMultiplier = location.iconSize || 1;
-                icon = L.divIcon({
-                  className: 'custom-location-icon',
-                  html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px black;"></i>`, // Remove the marker-number span
-                  iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
-                  iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
-                });
-              } else {
-                const sizeMultiplier = location.iconSize || 1;
-                icon = L.icon({
-                  iconUrl: `${location.icon}.svg`,
-                  iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
-                  iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
-                  className: 'custom-location-icon'
-                });
-              }
-
-              // Create and add marker to map
-              const marker = L.marker([y, x], { icon }).addTo(map);
-              markers.push(marker);
-
-              // Add data attributes for visibility tracking and indexing
-              marker.getElement()?.setAttribute('data-location', location.name);
-              if (coordinatesArray.length > 1) {
-                  marker.getElement()?.setAttribute('data-index', index.toString());
-              }
-
-              // Bind tooltip with adjusted offset
-              const tooltipContent = coordinatesArray.length > 1 ? 
-                `${location.name} #${index + 1}` : 
-                location.name;
-              
-              marker.bindTooltip(tooltipContent, { 
-                permanent: false, 
-                direction: 'top',
-                offset: [0, -30], // Move tooltip 30 pixels up
-                className: 'leaflet-tooltip' // Ensure our custom styles are applied
-              });
-
-              // Add click handler for marker
-              marker.on('click', () => {
-                  // Update sidebar content
-                  sidebar.updateContent(location, x, y);
-
-                  // Handle marker highlight
-                  document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-                      el.classList.remove('selected');
-                  });
-                  marker.getElement()?.classList.add('selected');
-
-                  // Get marker index for multi-location items
-                  const isMultiLocation = coordinatesArray.length > 1;
-                  const locationHash = generateLocationHash(location.name);
-                  const urlParams = isMultiLocation ? 
-                      `?loc=${locationHash}&index=${index}` : 
-                      `?loc=${locationHash}`;
-
-                  // Update URL with location hash and index if applicable
-                  window.history.replaceState({}, '', urlParams);
-
-                  // Update meta tags for social sharing
-                  updateMetaTags(location, [x, y]);
-              });
-            });
+        const map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -3,
+            maxZoom: 2,
+            zoom: defaultZoom,
+            zoomDelta: 0.5,
+            zoomSnap: 0.5,
+            wheelPxPerZoomLevel: 120,
+            maxBounds: [
+                [-512, -512],
+                [100352, 7680]
+            ],
+            maxBoundsViscosity: 1.0
         });
 
-        updateProgress(85, 'Initializing interface...');
+        // Phase 2: Load grid (60-75%)
+        updateProgress(60, 'Loading map tiles...');
+        await initializeGrid(map);
+        
+        // Phase 3: Initialize markers (75-90%)
+        updateProgress(75, 'Creating markers...');
+        const markerGroup = L.layerGroup().addTo(map);
+        const markers: L.Marker[] = [];
+        const activeMarkers = new Set<string>();
 
-        // Initialize search functionality
+        // Now that the map is initialized, set up the update function
+        function updateVisibleMarkers() {
+            const bounds = map.getBounds();
+            
+            locations.forEach(location => {
+                const coords = Array.isArray(location.coordinates[0]) 
+                    ? location.coordinates as [number, number][]
+                    : [location.coordinates] as [number, number][];
+        
+                coords.forEach((coord, index) => {
+                    const markerId = `${location.name}-${index}`;
+                    const isVisible = isInBounds(coord, bounds);
+        
+                    if (isVisible && !activeMarkers.has(markerId)) {
+                        // Create marker icon
+                        let icon: L.Icon | L.DivIcon;
+                        if (location.icon && location.icon.startsWith('fa-')) {
+                            const sizeMultiplier = location.iconSize || 1;
+                            icon = L.divIcon({
+                                className: 'custom-location-icon',
+                                html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}"></i>`,
+                                iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+                                iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
+                            });
+                        } else {
+                            const sizeMultiplier = location.iconSize || 1;
+                            icon = L.icon({
+                                iconUrl: `${location.icon}.svg`,
+                                iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+                                iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
+                                className: 'custom-location-icon'
+                            });
+                        }
+        
+                        // Create and add marker
+                        const marker = L.marker([coord[1], coord[0]], { icon });
+                        marker.getElement()?.setAttribute('data-location', location.name);
+                        if (coords.length > 1) {
+                            marker.getElement()?.setAttribute('data-index', index.toString());
+                        }
+        
+                        marker.bindTooltip(coords.length > 1 ? `${location.name} #${index + 1}` : location.name, {
+                            permanent: false,
+                            direction: 'top',
+                            offset: [0, -30],
+                            className: 'leaflet-tooltip'
+                        });
+        
+                        marker.on('click', () => {
+                            sidebar.updateContent(location, coord[0], coord[1]);
+                            document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
+                                el.classList.remove('selected');
+                            });
+                            marker.getElement()?.classList.add('selected');
+        
+                            const locationHash = generateLocationHash(location.name);
+                            const urlParams = coords.length > 1 ? 
+                                `?loc=${locationHash}&index=${index}` : 
+                                `?loc=${locationHash}`;
+                            window.history.replaceState({}, '', urlParams);
+                            updateMetaTags(location, coord);
+                        });
+        
+                        marker.addTo(markerGroup);
+                        markers.push(marker);
+                        activeMarkers.add(markerId);
+                    } else if (!isVisible && activeMarkers.has(markerId)) {
+                        // Remove out-of-bounds marker
+                        const markerIndex = markers.findIndex(m => {
+                            const pos = m.getLatLng();
+                            return pos.lat === coord[1] && pos.lng === coord[0];
+                        });
+                        if (markerIndex !== -1) {
+                            markerGroup.removeLayer(markers[markerIndex]);
+                            markers.splice(markerIndex, 1);
+                            activeMarkers.delete(markerId);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Add event listeners for map movement
+        map.on('moveend', updateVisibleMarkers);
+        map.on('zoomend', updateVisibleMarkers);
+
+        // Phase 4: Initialize interface (90-100%)
+        updateProgress(90, 'Initializing interface...');
+        
+        // Initialize search and sidebar
         initializeSearch(locations, map, markers);
-
-        // Initialize sidebar after markers are created
         const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
         const sidebar = new Sidebar({
             element: sidebarElement,
@@ -239,6 +208,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             map,
             markers
         });
+
+        // Initial marker update after everything is ready
+        updateVisibleMarkers();
 
         updateProgress(100, 'Ready!');
         
@@ -255,70 +227,4 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             loadingOverlay.style.display = 'none';
         }
     }
-
-    if (debug) {
-      map.on('click', (e) => {
-        console.log(`Clicked coordinates: ${Math.round(e.latlng.lng)}, ${Math.round(e.latlng.lat)}`);
-      });
-    }
-
-    // Add map click handler for coordinates
-    map.on('click', (e) => {
-      const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
-      const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
-      const descEl = sidebar.querySelector('.location-description') as HTMLElement;
-      const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
-      const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
-
-      // Update coordinates display
-      const x = Math.round(e.latlng.lng);
-      const y = Math.round(e.latlng.lat);
-      titleEl.textContent = 'Map Location';
-      descEl.textContent = 'Click on a marker to see location details';
-      coordEl.textContent = `[${x}, ${y}]`; // Changed format to match YAML
-      
-      // Clear image if any
-      imgEl.style.display = 'none';
-      imgEl.src = '';
-    });
-
-    // Add map click handler for coordinates
-    map.on('click', (e) => {
-      const x = Math.round(e.latlng.lng);
-      const y = Math.round(e.latlng.lat);
-      
-      // Update URL with coordinates
-      window.history.replaceState({}, '', `?coord=${x},${y}`);
-      
-      // Clear any selected markers
-      document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-          el.classList.remove('selected');
-      });
-
-      // Update sidebar content
-      const sidebar = document.querySelector('.right-sidebar') as HTMLElement;
-      const titleEl = sidebar.querySelector('.location-title') as HTMLElement;
-      const descEl = sidebar.querySelector('.location-description') as HTMLElement;
-      const coordEl = sidebar.querySelector('.coordinates-display') as HTMLElement;
-      const imgEl = sidebar.querySelector('#sidebar-image') as HTMLImageElement;
-
-      titleEl.textContent = 'Map Location';
-      descEl.textContent = 'Custom map coordinate';
-      coordEl.textContent = `[${x}, ${y}]`;
-      imgEl.style.display = 'none';
-      imgEl.src = '';
-
-      if (debug) {
-        console.log(`Clicked coordinates: [${x}, ${y}]`); // Updated debug log format too
-      }
-    });
-
-    // After map initialization
-    const devOverlay = new DevelopmentOverlay(map);
-    devOverlay.createOverlay([
-        [2322, 492],
-        [1651, 1115],
-        [2645, 2011],
-        [3987, 1230]
-    ]);
 }
