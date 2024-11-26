@@ -1,18 +1,8 @@
 // src/index.ts
 import { marked } from 'marked';
-import { loadLocations } from './loader';
+import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
 import type { VersionInfo } from './types';
-
-function generateLocationHash(name: string): string {
-  return name.toLowerCase()
-             .replace(/[^a-z0-9]+/g, '-')
-             .replace(/(^-|-$)/g, '');
-}
-
-function decodeLocationHash(hash: string, locations: (Location & { type: string })[]): Location & { type: string } | undefined {
-  return locations.find(l => generateLocationHash(l.name) === hash);
-}
 
 async function loadGreeting() {
   try {
@@ -70,68 +60,35 @@ function dismissPopup() {
   initMain();
 }
 
-async function initMain() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const debug = urlParams.get('debug') === 'true';
-  const locationParam = urlParams.get('loc');
-  const indexParam = urlParams.get('index');
-  
-  const locations = await loadLocations();
-  if (locations.length > 0) {
-    // Initialize map and store the promise
-    await initializeMap(locations, debug);
-    
-    // Handle URL parameters after map initialization
-    if (locationParam) {
-      const location = decodeLocationHash(locationParam, locations);
-      if (location) {
-        const coords = Array.isArray(location.coordinates[0]) 
-          ? (indexParam ? 
-              location.coordinates[parseInt(indexParam)] : 
-              location.coordinates[0]) as [number, number]
-          : location.coordinates as [number, number];
-          
-        // Find and click the marker with the specific index if it exists
-        const markerSelector = indexParam 
-          ? `.custom-location-icon[data-location="${location.name}"][data-index="${indexParam}"]`
-          : `.custom-location-icon[data-location="${location.name}"]`;
-        
-        const marker = document.querySelector(markerSelector);
-        if (marker) {
-          map.setView([coords[1], coords[0]], map.getZoom());
-          marker.fire('click');
-          updateMetaTags(location, [coords[0], coords[1]]);
+async function checkForUpdates() {
+    try {
+        const versionModule = await import('./mapversion.yml');
+        const currentVersion = versionModule.default.version;
+        const lastVersion = localStorage.getItem('soulmap_version');
 
-          // Add click handler for marker
-          marker.on('click', () => {
-            // Update sidebar content
-            sidebar.updateContent(location, coords[0], coords[1]);
-
-            // Handle marker highlight
-            document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-                el.classList.remove('selected');
-            });
-            marker.getElement()?.classList.add('selected');
-
-            // Get marker index for multi-location items
-            const isMultiLocation = location.coordinates.length > 1;
-            const locationHash = generateLocationHash(location.name);
-            const urlParams = isMultiLocation ? 
-                `?loc=${locationHash}&index=${indexParam}` : 
-                `?loc=${locationHash}`;
-
-            // Update URL with location hash and index if applicable
-            window.history.replaceState({}, '', urlParams);
-
-            // Update meta tags for social sharing
-            updateMetaTags(location, [coords[0], coords[1]]);
-          });
+        if (lastVersion !== currentVersion) {
+            // Clear both location and tile caches if version changed
+            clearLocationsCache();
+            clearTileCache();
+            localStorage.setItem('soulmap_version', currentVersion);
         }
-      }
+    } catch (error) {
+        console.error('Error checking for updates:', error);
     }
-  } else {
-    console.error("No locations loaded. Map initialization aborted.");
-  }
+}
+
+async function initMain() {
+    await checkForUpdates();
+    const urlParams = new URLSearchParams(window.location.search);
+    const debug = urlParams.get('debug') === 'true';
+    
+    const locations = await loadLocations();
+    if (locations.length > 0) {
+        // Initialize map with locations
+        await initializeMap(locations, debug);
+    } else {
+        console.error("No locations loaded. Map initialization aborted.");
+    }
 }
 
 // Wait for DOM to load

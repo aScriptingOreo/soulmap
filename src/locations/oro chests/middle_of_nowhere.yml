@@ -1,9 +1,0 @@
-# src/locations/loot/ode_chest.yml
-name: "[oro] Middle of Nowhere"
-coordinates: [1892, 3930]
-description: "credits: Blackdrago"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.5
-iconColor: "#87ffc9"
-imgUrl: "https://media.discordapp.net/attachments/1308496207026585610/1308629069209800794/Screenshot_2024-11-19_200229.png?ex=673ea34b&is=673d51cb&hm=20d6d68a35f9cb505b8a1e1b601ce1a59efbe57e5eee3ba4701bee6b275e15d9&=&format=webp&quality=lossless"
-

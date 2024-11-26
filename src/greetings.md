@@ -5,8 +5,8 @@ if you have any suggestions of content please check out the preludes discord ser
 
 
 # Changelog 
-- Better map! A community member that decided to remain annonymous submitted us a bunch of images to compose a map grid
-- Added a new sidebar toggle so you can take better screenshots!
-- This message only shows up when there is new information to be displayed!
-- Now you can click anywhere and share the link to that location
-- Better loadtimes
+- Using localforage as caching handler for map tiles
+- Custom markers(very much a beta feature)
+- New beefed up search bar
+- Small updates to markers
+- New caching for the map(this should increase load performance by 700%)

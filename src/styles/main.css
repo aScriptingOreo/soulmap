@@ -1,35 +1,31 @@
+/* Reset default margins and ensure full viewport coverage */
 html, body {
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   margin: 0;
-  font-family: 'Roboto',a sans-serif; /* Apply Roboto font */ 
+  padding: 0;
+  overflow: hidden;
+  font-family: 'Roboto', sans-serif;
 }
+
 #map {
   height: 100%;
   width: 100%;
-  position: relative;
-  z-index: 100; /* Ensure the map is at z-index 100 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  background: #000; /* Add black background to prevent white edges */
 }
+
 #overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.8); /* 80% see-through dark overlay */
-  z-index: 101; /* Ensure it's above the map but below the icons */
-}
-
-/* Custom styles for the location marker */
-.custom-location-icon {
-  filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
-  transition: transform 0.3s ease, filter 0.3s ease;
-  z-index: 102; /* Ensure icons are above the overlay */
-}
-
-.custom-location-icon:hover,
-.custom-location-icon.selected {
-  transform: scale(1.5);
-  filter: drop-shadow(0 0 10px yellow);
+  background-color: rgba(0, 0, 0, 0.0); /* 80% see-through dark overlay */
+  z-index: 2; /* Ensure it's above the map but below the icons */
 }
 
 /* Styles for cursor position display */
@@ -121,6 +117,61 @@ html, body {
   font-family: 'Roboto', sans-serif;
   transform: translateX(0);
   transition: transform 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateX(100%);
+  transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
+  will-change: transform, opacity; /* Optimize GPU rendering */
+}
+
+.right-sidebar.loaded {
+  opacity: 1;
+  pointer-events: all;
+  visibility: visible;
+  transform: translateX(0);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.sidebar-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, right 0.3s ease;
+  position: fixed;
+  top: 20px;
+  right: 341px; /* Position relative to sidebar width (300px + padding) */
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50% 0 0 50%;
+  background: #fff;
+  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(341px);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.sidebar-toggle.loaded {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(0);
+}
+
+.sidebar-toggle.collapsed {
+  transform: translateX(341px);
+}
+
+.right-sidebar.loaded {
+  opacity: 1;
+  pointer-events: all;
+  visibility: visible;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .right-sidebar.collapsed {
@@ -321,62 +372,210 @@ close-button:hover {
   transform: rotate(180deg);
 }
 
+/* Update transitions for smooth animation */
 .search-container {
-  position: absolute;
+  position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   width: 300px;
-  z-index: 1000;
+  z-index: 1600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, width, top;
 }
 
+/* Only modify search container when expanded */
+.search-container.expanded {
+  width: 600px;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* When sidebar is not collapsed (open), reduce search bar width */
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) {
+  width: 150px;
+  left: calc(50% - 150px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When sidebar is collapsed (closed), restore search bar width */
+.right-sidebar.collapsed ~ .search-container:not(.expanded) {
+  width: 300px;
+  left: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Keep expanded search centered and full width regardless of sidebar state */
+.search-container.expanded {
+  width: 600px;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Add smooth transitions for the search input */
 #location-search {
   width: 100%;
-  padding: 10px 15px;
+  padding: 12px 20px;
   border: none;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  font-size: 14px;
+  border-radius: 24px;
+  background: rgba(51, 51, 51, 0.95);
+  color: #ffffff;
+  font-size: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
+/* Update search results styles */
 .search-results {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 5px;
+  left: -20px;  /* Adjust this value to move results more to the left */
+  right: -200px; /* Keep this matching left for symmetry */
+  margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   display: none;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
+  z-index: 1600;
+  width: 100%;
+  padding: 0;
+}
+
+/* Search result sizing */
+.search-result {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+/* Update expanded container to maintain proper width */
+.search-container.expanded .search-results {
+  width: calc(100% + 40px);
+  max-width: calc(100% + 40px);
+}
+
+/* Maintain center alignment when sidebar is open */
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%); /* Keep results centered under search */
+}
+
+/* When sidebar is not collapsed (open) */
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) {
+  width: 150px;
+  left: calc(50% - 150px); /* Adjust for sidebar being open */
+}
+
+.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%); /* Keep results centered under search */
+}
+
+/* When sidebar is collapsed (closed) */
+.right-sidebar.collapsed ~ .search-container:not(.expanded) {
+  width: 300px;
+  left: 50%;
+}
+
+.right-sidebar.collapsed ~ .search-container:not(.expanded) .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%);
+}
+
+/* Expanded search state */
+.search-container.expanded .search-results {
+  width: calc(100% + 40px);
+  transform: translateX(-50%);
+}
+
+#location-search::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Update search results styles in main.css */
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;  /* Reset left position */
+  right: 0;  /* Reset right position */
+  margin-top: 8px;
+  background: rgba(51, 51, 51, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: none;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1600;
+  width: 100%;  /* Make it full width of container */
+  padding: 0;   /* Reset padding */
 }
 
 .search-result {
-  padding: 10px 15px;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
   cursor: pointer;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
+  align-items: center;
 }
 
-.search-result:last-child {
-  border-bottom: none;
+.search-result.selected {
+  background: rgba(255, 255, 255, 0.15);
 }
 
-.search-result:hover {
-  background: rgba(255, 255, 255, 0.1);
+.search-result-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.search-result-icon img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.search-result-content {
+  flex: 1;
+}
+
+.search-result-image {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
 .result-name {
-  font-weight: bold;
-  margin-bottom: 2px;
+  color: #ffffff;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .result-description {
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
   opacity: 0.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .no-results {
@@ -754,7 +953,7 @@ close-button:hover {
 .sidebar-toggle {
   position: fixed;
   top: 20px;
-  right: 341px;
+  right: 341px; /* Position relative to sidebar width (300px + padding) */
   width: 48px;
   height: 48px;
   border: none;
@@ -766,18 +965,295 @@ close-button:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: right 0.3s ease;
+  transition: right 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(341px);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.sidebar-toggle.loaded {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(0);
 }
 
 .sidebar-toggle.collapsed {
-  right: 0;
+  transform: translateX(341px);
 }
 
 .sidebar-toggle .material-icons {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
   transition: transform 0.3s ease;
 }
 
-.sidebar-toggle.collapsed .material-icons {
-  transform: rotate(0deg);
+.sidebar-toggle:not(.collapsed) .material-icons {
+  transform: rotate(180deg);
+}
+
+#loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.loading-container {
+  width: 80%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.loading-text {
+  color: white;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.loading-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loading-progress {
+  width: 0%;
+  height: 100%;
+  background: #4CAF50;
+  transition: width 0.3s ease;
+}
+
+.loading-percentage {
+  color: white;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+
+.smooth-zoom {
+  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+}
+
+.leaflet-zoom-animated {
+  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  will-change: transform;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  will-change: transform;
+}
+
+/* Fix Leaflet container to ensure full coverage */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #000;
+}
+
+/* Remove any default Leaflet margins */
+.leaflet-pane {
+  z-index: 100;
+}
+
+.search-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+  z-index: 1500; /* Lower than search container */
+}
+
+.search-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease;
+}
+
+/* Base search container */
+.search-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  z-index: 1600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Search input */
+#location-search {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 24px;
+  background: rgba(51, 51, 51, 0.95);
+  color: #ffffff;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Search results container - normal state */
+.search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 21px;  /* Default left offset for normal state */
+  right: 0; /* Default right offset for normal state */
+  margin-top: 1px;
+  background: rgba(51, 51, 51, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: none;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1600;
+  width: 100%;
+  padding: 0;
+}
+
+/* Expanded state needs different positioning */
+.search-container.expanded .search-results {
+  left: 318px; /* Specific offset for expanded state */
+  transform: translateX(-50%);
+  width: calc(100% + 40px);
+}
+
+/* Expanded state */
+.search-container.expanded {
+  width: 600px;
+  top: 20%;
+  transform: translate(-50%, -50%);
+}
+
+.search-container.expanded .search-results {
+  width: 640px; /* Slightly wider than the expanded search bar */
+}
+
+/* Search result styling */
+.search-result {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+.marker-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.marker-modal-content {
+  background: rgba(51, 51, 51, 0.95);
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  color: white;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  color: white;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.custom-marker-actions {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.custom-marker-actions button {
+  background: none;
+  border: none;
+  color: white;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.custom-marker-actions button:hover {
+  opacity: 1;
+}
+
+.export-all-btn {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-all-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.custom-category-empty {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+    gap: 10px;
+}
+
+.custom-category-empty i {
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+.custom-category-empty span {
+    font-size: 14px;
 }

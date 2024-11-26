@@ -1,92 +1,111 @@
 // src/gridLoader.ts
 import * as L from 'leaflet';
+import localforage from 'localforage';
 
 export class GridLoader {
     private readonly TILE_SIZE = 512;
     private readonly GRID_WIDTH = 15;
     private readonly TOTAL_TILES = 196;
     private readonly OFFSET = 0;
-    private readonly CACHE_NAME = 'map-tiles-v0.6.0'; // Match with mapversion.yml
-    private readonly isCachingAvailable: boolean;
+    private readonly MAX_RETRIES = 3;
+    private readonly RETRY_DELAY = 1000;
+    private tileStore: LocalForage;
 
     constructor() {
-        // Check if caching is available
-        this.isCachingAvailable = typeof caches !== 'undefined';
+        // Initialize localforage instance
+        this.tileStore = localforage.createInstance({
+            name: 'soulmap-tiles'
+        });
     }
 
-    private async getCachedTile(path: string): Promise<Response | undefined> {
-        if (!this.isCachingAvailable) return undefined;
-        
-        try {
-            const cache = await caches.open(this.CACHE_NAME);
-            const cachedResponse = await cache.match(path);
-            return cachedResponse;
-        } catch (error) {
-            console.warn('Cache access failed, falling back to network:', error);
-            return undefined;
-        }
+    private async getTileKey(imgPath: string, gameVersion: string): string {
+        return `${gameVersion}:${imgPath}`;
     }
 
-    private async cacheTile(path: string, response: Response): Promise<void> {
-        if (!this.isCachingAvailable) return;
-        
-        try {
-            const cache = await caches.open(this.CACHE_NAME);
-            await cache.put(path, response.clone());
-        } catch (error) {
-            console.warn('Failed to cache tile:', error);
-        }
-    }
-
-    private async cleanOldCaches(): Promise<void> {
-        if (!this.isCachingAvailable) return;
+    private async loadTileWithRetry(imgPath: string, gameVersion: string, retryCount = 0): Promise<string> {
+        const tileKey = await this.getTileKey(imgPath, gameVersion);
 
         try {
-            const cacheKeys = await caches.keys();
-            const oldCaches = cacheKeys.filter(key => 
-                key.startsWith('map-tiles-') && key !== this.CACHE_NAME
-            );
+            // Try stored version first
+            const storedBlob = await this.tileStore.getItem<Blob>(tileKey);
+            if (storedBlob) {
+                return URL.createObjectURL(storedBlob);
+            }
+
+            // Fetch with retry
+            const response = await fetch(imgPath);
+            if (!response.ok) {
+                throw new Error(`Failed to load tile: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
             
-            await Promise.all(oldCaches.map(key => caches.delete(key)));
+            // Store the successful response
+            await this.tileStore.setItem(tileKey, blob);
+            return blobUrl;
+
         } catch (error) {
-            console.warn('Failed to clean old caches:', error);
+            if (retryCount < this.MAX_RETRIES) {
+                await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+                return this.loadTileWithRetry(imgPath, gameVersion, retryCount + 1);
+            }
+            throw error;
         }
     }
 
     public async createOverlays(map: L.Map): Promise<void> {
-        // Clean old caches on initialization
-        await this.cleanOldCaches();
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+        }
 
-        const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
-        
-        for (let i = this.OFFSET; i < this.TOTAL_TILES + this.OFFSET; i++) {
-            const col = Math.floor((i - this.OFFSET) / rows);
-            const row = (i - this.OFFSET) % rows;
-            
-            const bounds: [[number, number], [number, number]] = [
-                [row * this.TILE_SIZE, col * this.TILE_SIZE],
-                [(row + 1) * this.TILE_SIZE, (col + 1) * this.TILE_SIZE]
-            ];
+        try {
+            const versionModule = await import('./mapversion.yml');
+            const gameVersion = versionModule.default.game_version;
+            const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
 
-            try {
-                const imgPath = `map/${i}.png`;
-                let response = await this.getCachedTile(imgPath);
+            for (let i = this.OFFSET; i < this.TOTAL_TILES + this.OFFSET; i++) {
+                const col = Math.floor((i - this.OFFSET) / rows);
+                const row = (i - this.OFFSET) % rows;
                 
-                if (!response) {
-                    response = await fetch(imgPath);
-                    await this.cacheTile(imgPath, response);
-                }
+                const bounds: [[number, number], [number, number]] = [
+                    [row * this.TILE_SIZE, col * this.TILE_SIZE],
+                    [(row + 1) * this.TILE_SIZE, (col + 1) * this.TILE_SIZE]
+                ];
 
-                if (response.ok) {
-                    const blobUrl = URL.createObjectURL(await response.clone().blob());
+                const imgPath = `map/${i}.png`;
+                
+                try {
+                    const blobUrl = await this.loadTileWithRetry(imgPath, gameVersion);
                     L.imageOverlay(blobUrl, bounds, { 
                         interactive: false,
                         className: 'map-tile'
                     }).addTo(map);
+
+                    if (loadingOverlay) {
+                        const progress = ((i + 1) / this.TOTAL_TILES) * 100;
+                        const progressBar = loadingOverlay.querySelector('.loading-progress') as HTMLElement;
+                        if (progressBar) {
+                            progressBar.style.width = `${progress}%`;
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Failed to load tile ${i}:`, error);
                 }
-            } catch (error) {
-                console.error(`Error loading tile ${i}:`, error);
             }
+        } finally {
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
+        }
+    }
+
+    public async clearTileCache(): Promise<void> {
+        try {
+            await this.tileStore.clear();
+        } catch (error) {
+            console.warn('Failed to clear tile cache:', error);
         }
     }
 }
@@ -95,7 +114,6 @@ export async function initializeGrid(map: L.Map): Promise<void> {
     const grid = new GridLoader();
     await grid.createOverlays(map);
     
-    // Set bounds for the entire map
     const totalRows = Math.ceil(grid.TOTAL_TILES / grid.GRID_WIDTH);
     map.fitBounds([
         [0, 0],

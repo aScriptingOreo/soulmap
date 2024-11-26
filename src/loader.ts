@@ -1,29 +1,60 @@
 // src/loader.ts
-import type { Location } from './types';
+import type { Location, VersionInfo } from './types';
 
-// Function to load all location YAML files
+const CACHE_KEY = 'soulmap_locations_cache';
+// Remove the hardcoded version and import from mapversion.yml
+let CACHE_VERSION: string;
+
 export async function loadLocations(): Promise<(Location & { type: string })[]> {
-  const importLocations = import.meta.glob('./locations/*/*.y?(a)ml');
-  const locationPromises: Promise<Location & { type: string }>[] = [];
+  try {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const progressBar = document.querySelector('.loading-progress') as HTMLElement;
+    const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
+    const loadingText = document.querySelector('.loading-text') as HTMLElement;
 
-  for (const path in importLocations) {
-    console.log(`Importing: ${path}`); // Log each path
-    locationPromises.push(
-      importLocations[path]().then((module) => {
-        const loadedModule = module as { default: Location };
-        const type = path.split('/')[2]; // Extract type from directory name
-        console.log(`Loaded module from ${path}:`, loadedModule.default);
-        return { ...loadedModule.default, type };
+    const updateProgress = (progress: number, text: string) => {
+      if (progressBar && percentageText && loadingText) {
+        progressBar.style.width = `${progress}%`;
+        percentageText.textContent = `${Math.round(progress)}%`;
+        loadingText.textContent = text;
+      }
+    };
+
+    // Show loading overlay
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'flex';
+    }
+
+    // Load location data directly
+    updateProgress(0, 'Loading location data...');
+    const importLocations = import.meta.glob('./locations/*/*.y?(a)ml');
+    const totalFiles = Object.keys(importLocations).length;
+    let loaded = 0;
+
+    const locations = await Promise.all(
+      Object.entries(importLocations).map(async ([path, importFn]) => {
+        const module = await importFn();
+        loaded++;
+        updateProgress((loaded / totalFiles) * 50, 'Loading location data...');
+        return { ...module.default, type: path.split('/')[2] };
       })
     );
-  }
 
-  try {
-    const locations = await Promise.all(locationPromises);
-    console.log("All locations loaded:", locations);
+    updateProgress(50, 'Initializing map...');
     return locations;
+
   } catch (error) {
     console.error("Error loading location files:", error);
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'none';
+    }
     return [];
   }
+}
+
+// Add a function to clear the cache if needed
+export function clearLocationsCache(): void {
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(`${CACHE_KEY}_version`);
 }

@@ -52,6 +52,9 @@
   <div id="map">
     <div id="overlay"></div>
   </div>
+  <div class="search-overlay"></div>
+  <div class="search-container">
+  </div>
   <div id="image-dropdown" style="position: absolute; top: 10px; right: 10px; display: none;">
     <img id="dropdown-image" src="" alt="Imagem da Localização" style="max-width: 200px; max-height: 200px;">
   </div>
@@ -95,6 +98,15 @@
   <div id="debug-info" style="display: none;">
     <div class="debug-coordinates"></div>
     <div class="debug-grid"></div>
+  </div>
+  <div id="loading-overlay">
+    <div class="loading-container">
+      <div class="loading-text">Loading map...</div>
+      <div class="loading-bar">
+        <div class="loading-progress"></div>
+      </div>
+      <div class="loading-percentage">0%</div>
+    </div>
   </div>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script type="module" src="./index.ts"></script> <!-- Entry point -->

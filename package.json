@@ -5,7 +5,8 @@
   "scripts": {
     "start": "tsc && bun src/index.ts",
     "dev": "vite --host",
-    "build": "vite build"
+    "build": "vite build",
+    "serve": "bun run build && bun run --bun http-server dist --port 5173 --gzip"
   },
   "devDependencies": {
     "@rollup/plugin-yaml": "^4.1.2",
@@ -16,8 +17,11 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "http-server": "^14.1.1",
     "js-yaml": "^4.1.0",
+    "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
+    "localforage": "^1.10.0",
     "marked": "^15.0.1",
     "vite": "^5.4.11",
     "vite-plugin-glob": "^0.3.2"

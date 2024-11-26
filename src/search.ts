@@ -7,39 +7,39 @@ interface SearchResult {
 }
 
 export function initializeSearch(locations: (Location & { type: string })[], map: L.Map, markers: L.Marker[]) {
-  // Add search bar to the DOM
-  const searchContainer = document.createElement('div');
-  searchContainer.className = 'search-container';
+  const searchContainer = document.querySelector('.search-container') as HTMLElement;
+  const searchOverlay = document.querySelector('.search-overlay') as HTMLElement;
+  
   searchContainer.innerHTML = `
-    <input type="text" id="location-search" placeholder="Search locations...">
+    <input type="text" id="location-search" placeholder="Press Ctrl + Space to search...">
     <div class="search-results"></div>
   `;
-  document.querySelector('#map')?.appendChild(searchContainer);
 
   const searchInput = document.getElementById('location-search') as HTMLInputElement;
   const resultsContainer = document.querySelector('.search-results') as HTMLDivElement;
+  let selectedIndex = -1;
 
-  // Search functionality
   function searchLocations(query: string): SearchResult[] {
     const results: SearchResult[] = [];
     const normalizedQuery = query.toLowerCase();
+    const terms = normalizedQuery.split(' ').filter(term => term.length > 0);
 
     locations.forEach(location => {
       let score = 0;
       const name = location.name.toLowerCase();
       const description = (location.description || '').toLowerCase();
 
-      // Exact matches get highest score
-      if (name === normalizedQuery) score += 100;
-      if (description === normalizedQuery) score += 50;
+      terms.forEach(term => {
+        // Name matches
+        if (name === term) score += 100;
+        if (name.includes(term)) score += 75;
+        if (name.split(' ').some(word => word.startsWith(term))) score += 60;
 
-      // Partial matches
-      if (name.includes(normalizedQuery)) score += 75;
-      if (description.includes(normalizedQuery)) score += 25;
-
-      // Word boundary matches
-      if (name.split(' ').some(word => word.startsWith(normalizedQuery))) score += 60;
-      if (description.split(' ').some(word => word.startsWith(normalizedQuery))) score += 20;
+        // Description matches
+        if (description === term) score += 50;
+        if (description.includes(term)) score += 25;
+        if (description.split(' ').some(word => word.startsWith(term))) score += 20;
+      });
 
       if (score > 0) {
         results.push({ location, score });
@@ -47,6 +47,36 @@ export function initializeSearch(locations: (Location & { type: string })[], map
     });
 
     return results.sort((a, b) => b.score - a.score);
+  }
+
+  function updateResults(results: SearchResult[]) {
+    if (results.length > 0) {
+      resultsContainer.innerHTML = results
+        .slice(0, 8)
+        .map((result, index) => `
+          <div class="search-result ${index === selectedIndex ? 'selected' : ''}" data-name="${result.location.name}">
+            <div class="search-result-icon">
+              ${result.location.icon?.startsWith('fa-') 
+                ? `<i class="${result.location.icon}" style="color: ${result.location.iconColor || '#FFFFFF'}; font-size: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;"></i>`
+                : `<img src="${result.location.icon}.svg" style="width: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px; height: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;" alt="">`
+              }
+            </div>
+            <div class="search-result-content">
+              <div class="result-name">${result.location.name}</div>
+              ${result.location.description 
+                ? `<div class="result-description">${result.location.description}</div>` 
+                : ''}
+            </div>
+            ${result.location.imgUrl 
+              ? `<img class="search-result-image" src="${result.location.imgUrl}" alt="${result.location.name}">` 
+              : ''}
+          </div>
+        `)
+        .join('');
+    } else {
+      resultsContainer.innerHTML = '<div class="no-results">No locations found</div>';
+    }
+    resultsContainer.style.display = 'block';
   }
 
   function selectLocation(location: Location & { type: string }) {
@@ -72,74 +102,86 @@ export function initializeSearch(locations: (Location & { type: string })[], map
       });
       marker.getElement()?.classList.add('selected');
       marker.fire('click');
-
-      // Expand corresponding category and item in the locations list
-      const categoryContent = document.querySelector(`.category:has([data-name="${location.name}"]) .category-content`);
-      if (categoryContent) {
-        categoryContent.classList.add('open');
-        
-        // If item has multiple coordinates, expand its dropdown
-        const locationItem = document.querySelector(`[data-name="${location.name}"]`);
-        if (locationItem && Array.isArray(location.coordinates[0])) {
-          const dropdownContent = locationItem.querySelector('.location-dropdown');
-          if (dropdownContent instanceof HTMLElement) {
-            dropdownContent.style.display = 'block';
-            locationItem.querySelector('i')?.classList.add('fa-chevron-up');
-          }
-        }
-      }
     }
 
-    // Clear search
-    searchInput.value = '';
-    resultsContainer.style.display = 'none';
+    // Close search after selection
+    closeSearch();
   }
 
-  // Event listeners
+  // Handle keyboard navigation
+  searchInput.addEventListener('keydown', (e) => {
+    const results = resultsContainer.querySelectorAll('.search-result');
+    const maxIndex = results.length - 1;
+
+    switch(e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, maxIndex);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0) {
+          const selected = results[selectedIndex];
+          const locationName = selected.getAttribute('data-name');
+          const location = locations.find(l => l.name === locationName);
+          if (location) {
+            selectLocation(location);
+          }
+        }
+        break;
+      case 'Escape':
+        closeSearch();
+        break;
+    }
+
+    // Update selected state
+    results.forEach((result, index) => {
+      result.classList.toggle('selected', index === selectedIndex);
+    });
+  });
+
+  // Add input handler
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim();
-    if (query.length < 2) {
-      resultsContainer.style.display = 'none';
-      return;
-    }
-
-    const results = searchLocations(query);
-    if (results.length > 0) {
-      resultsContainer.innerHTML = results
-        .slice(0, 5) // Limit to top 5 results
-        .map(result => `
-          <div class="search-result" data-name="${result.location.name}">
-            <div class="result-name">${result.location.name}</div>
-            ${result.location.description ? 
-              `<div class="result-description">${result.location.description}</div>` : 
-              ''}
-          </div>
-        `)
-        .join('');
-      resultsContainer.style.display = 'block';
+    if (query.length > 0) {
+      const results = searchLocations(query);
+      updateResults(results);
     } else {
-      resultsContainer.innerHTML = '<div class="no-results">No locations found</div>';
-      resultsContainer.style.display = 'block';
+      resultsContainer.style.display = 'none';
     }
   });
 
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const firstResult = resultsContainer.querySelector('.search-result');
-      if (firstResult) {
-        const locationName = firstResult.getAttribute('data-name');
-        const location = locations.find(l => l.name === locationName);
-        if (location) {
-          selectLocation(location);
-        }
-      }
+  function openSearch() {
+    searchContainer.classList.add('expanded');
+    searchOverlay.classList.add('active');
+    searchInput.focus();
+    selectedIndex = -1;
+  }
+
+  function closeSearch() {
+    searchContainer.classList.remove('expanded');
+    searchOverlay.classList.remove('active');
+    resultsContainer.style.display = 'none';
+    searchInput.value = '';
+    selectedIndex = -1;
+  }
+
+  // Click handler for overlay
+  searchOverlay.addEventListener('click', (e) => {
+    if (e.target === searchOverlay) {
+      closeSearch();
     }
   });
 
+  // Click handlers for results
   resultsContainer.addEventListener('click', (e) => {
-    const resultEl = (e.target as HTMLElement).closest('.search-result');
-    if (resultEl) {
-      const locationName = resultEl.getAttribute('data-name');
+    const resultElement = (e.target as HTMLElement).closest('.search-result');
+    if (resultElement) {
+      const locationName = resultElement.getAttribute('data-name');
       const location = locations.find(l => l.name === locationName);
       if (location) {
         selectLocation(location);
@@ -147,10 +189,27 @@ export function initializeSearch(locations: (Location & { type: string })[], map
     }
   });
 
-  // Close results when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!searchContainer.contains(e.target as Node)) {
-      resultsContainer.style.display = 'none';
+  // Keyboard shortcut
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === ' ') {
+      e.preventDefault();
+      // Toggle search state
+      if (searchContainer.classList.contains('expanded')) {
+        closeSearch();
+      } else {
+        openSearch();
+      }
+    } else if (e.key === 'Escape') {
+      closeSearch();
     }
   });
+
+  // Close when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!searchContainer.contains(e.target as Node)) {
+      closeSearch();
+    }
+  });
+
+  // Rest of the existing event listeners...
 }

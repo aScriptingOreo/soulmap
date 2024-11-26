@@ -16,6 +16,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - /app/dist
     environment:
       - NODE_ENV=production
     networks:
