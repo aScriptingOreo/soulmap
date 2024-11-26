@@ -64,6 +64,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
     const zoomedViewZoom = 0; // Higher zoom level for when viewing specific locations
 
+    const oldHandler = console.warn;
+    console.warn = function(msg: string) {
+        if (msg.includes('mozPressure') || msg.includes('mozInputSource')) {
+            return; // Suppress these specific warnings
+        }
+        oldHandler.apply(console, arguments as any);
+    };
+
     // Create the map with proper CRS settings
     const map = L.map('map', {
         crs: L.CRS.Simple,
@@ -74,8 +82,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         zoomSnap: 0.5,
         wheelPxPerZoomLevel: 120,
         maxBounds: [
-            [-512, -512], // Top-left (lat/y, lng/x) - Negative y to prevent scrolling up
-            [100352, 7680] // Bottom-right (lat/y, lng/x)
+            [-512, -512],
+            [100352, 7680]
         ],
         maxBoundsViscosity: 1.0,
         inertia: true,
