@@ -14,8 +14,16 @@ export class GridLoader {
     constructor() {
         // Initialize localforage instance
         this.tileStore = localforage.createInstance({
-            name: 'soulmap-tiles'
+            name: 'soulmap-tiles',
+            description: 'Cache for map tiles'
         });
+    }
+
+    public async initialize(): Promise<void> {
+        // Load version and ensure store is ready
+        const versionModule = await import('./mapversion.yml');
+        await this.tileStore.ready();
+        return;
     }
 
     private async getTileKey(imgPath: string, gameVersion: string): string {
@@ -55,49 +63,55 @@ export class GridLoader {
     }
 
     public async createOverlays(map: L.Map): Promise<void> {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) {
-            loadingOverlay.style.display = 'flex';
-        }
+        let loadingOverlay = document.getElementById('loading-overlay');
+        const updateProgress = (progress: number) => {
+            if (loadingOverlay) {
+                const progressBar = loadingOverlay.querySelector('.loading-progress') as HTMLElement;
+                const percentageText = loadingOverlay.querySelector('.loading-percentage') as HTMLElement;
+                if (progressBar && percentageText) {
+                    progressBar.style.width = `${progress}%`;
+                    percentageText.textContent = `${Math.round(progress)}%`;
+                }
+            }
+        };
 
         try {
             const versionModule = await import('./mapversion.yml');
             const gameVersion = versionModule.default.game_version;
             const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
 
-            for (let i = this.OFFSET; i < this.TOTAL_TILES + this.OFFSET; i++) {
-                const col = Math.floor((i - this.OFFSET) / rows);
-                const row = (i - this.OFFSET) % rows;
+            // Load tiles in smaller chunks for better progress feedback
+            const chunkSize = 10;
+            for (let i = this.OFFSET; i < this.TOTAL_TILES + this.OFFSET; i += chunkSize) {
+                const chunk = Array.from({ length: Math.min(chunkSize, this.TOTAL_TILES - i) }, (_, j) => i + j);
                 
-                const bounds: [[number, number], [number, number]] = [
-                    [row * this.TILE_SIZE, col * this.TILE_SIZE],
-                    [(row + 1) * this.TILE_SIZE, (col + 1) * this.TILE_SIZE]
-                ];
+                await Promise.all(chunk.map(async (tileIndex) => {
+                    const col = Math.floor((tileIndex - this.OFFSET) / rows);
+                    const row = (tileIndex - this.OFFSET) % rows;
+                    
+                    const bounds: [[number, number], [number, number]] = [
+                        [row * this.TILE_SIZE, col * this.TILE_SIZE],
+                        [(row + 1) * this.TILE_SIZE, (col + 1) * this.TILE_SIZE]
+                    ];
 
-                const imgPath = `map/${i}.png`;
-                
-                try {
-                    const blobUrl = await this.loadTileWithRetry(imgPath, gameVersion);
-                    L.imageOverlay(blobUrl, bounds, { 
-                        interactive: false,
-                        className: 'map-tile'
-                    }).addTo(map);
+                    const imgPath = `map/${tileIndex}.png`;
+                    
+                    try {
+                        const blobUrl = await this.loadTileWithRetry(imgPath, gameVersion);
+                        L.imageOverlay(blobUrl, bounds, { 
+                            interactive: false,
+                            className: 'map-tile'
+                        }).addTo(map);
 
-                    if (loadingOverlay) {
-                        const progress = ((i + 1) / this.TOTAL_TILES) * 100;
-                        const progressBar = loadingOverlay.querySelector('.loading-progress') as HTMLElement;
-                        if (progressBar) {
-                            progressBar.style.width = `${progress}%`;
-                        }
+                        const progress = ((tileIndex + 1) / this.TOTAL_TILES) * 100;
+                        updateProgress(progress);
+                    } catch (error) {
+                        console.error(`Failed to load tile ${tileIndex}:`, error);
                     }
-                } catch (error) {
-                    console.error(`Failed to load tile ${i}:`, error);
-                }
+                }));
             }
         } finally {
-            if (loadingOverlay) {
-                loadingOverlay.style.display = 'none';
-            }
+            // Don't hide overlay here - let the main initialization handle it
         }
     }
 
@@ -110,8 +124,23 @@ export class GridLoader {
     }
 }
 
+// Export this function to be used in index.ts
+export async function clearTileCache(): Promise<void> {
+    const tileStore = localforage.createInstance({
+        name: 'soulmap-tiles',
+        description: 'Cache for map tiles'
+    });
+    
+    try {
+        await tileStore.clear();
+    } catch (error) {
+        console.warn('Failed to clear tile cache:', error);
+    }
+}
+
 export async function initializeGrid(map: L.Map): Promise<void> {
     const grid = new GridLoader();
+    await grid.initialize(); // Add initialization step
     await grid.createOverlays(map);
     
     const totalRows = Math.ceil(grid.TOTAL_TILES / grid.GRID_WIDTH);
@@ -119,4 +148,8 @@ export async function initializeGrid(map: L.Map): Promise<void> {
         [0, 0],
         [totalRows * grid.TILE_SIZE, grid.GRID_WIDTH * grid.TILE_SIZE]
     ]);
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
 }
