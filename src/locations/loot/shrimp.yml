@@ -3,5 +3,5 @@ name: "Shrimp Spawn"
 coordinates: [2703, 3179]
 description: "Spawn not guaranteed, come at night.  Credit: Hellpr"
 icon: "fa-solid fa-shrimp"
-iconSize: 1
+iconSize: 1.25
 iconColor: "#f04d73"
