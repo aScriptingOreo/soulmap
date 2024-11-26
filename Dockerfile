@@ -1,21 +1,16 @@
-# Dockerfile
-# Use the official Node.js image as the base image
-FROM node:20
-
-# Set the working directory inside the container
+# Build stage
+FROM node:20 AS builder
 WORKDIR /app
-
-# Copy package.json and bun.lockb files to the working directory
 COPY package.json bun.lockb ./
-
-# Install dependencies
 RUN npm install -g bun && bun install
-
-# Copy the rest of the application code to the working directory
 COPY . .
+RUN bun run build
 
-# Expose the port the app runs on
+# Production stage
+FROM node:20-slim
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY package.json bun.lockb ./
+RUN npm install -g bun && bun install --production
 EXPOSE 5173
-
-# Command to run the application
-CMD ["bun", "run", "dev"]
+CMD ["bun", "run", "serve"]

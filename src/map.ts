@@ -220,7 +220,16 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                         }
         
                         // Create and add marker
-                        const marker = L.marker([coord[1], coord[0]], { icon });
+                        const marker = L.marker([coord[1], coord[0]], { 
+                            icon,
+                            // Add these options
+                            riseOnHover: true,
+                            riseOffset: 100,
+                            autoPanOnFocus: false,
+                            keyboard: false,
+                            // Prevent animations during map movements
+                            snapToPixel: true
+                        });
                         marker.getElement()?.setAttribute('data-location', location.name);
                         if (coords.length > 1) {
                             marker.getElement()?.setAttribute('data-index', index.toString());

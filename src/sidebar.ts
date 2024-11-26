@@ -430,7 +430,32 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
 
   // Handle location click
   private handleLocationClick(coords: [number, number], item: Location & { type: string }) {
-    this.map.setView([coords[1], coords[0]], this.map.getZoom());
+    const currentCenter = this.map.getCenter();
+    const distance = this.map.distance(
+        [currentCenter.lat, currentCenter.lng],
+        [coords[1], coords[0]]
+    );
+    
+    const targetZoom = this.calculateOptimalZoom(distance);
+    const duration = this.calculateAnimationDuration(distance);
+    
+    // Update flyTo options
+    this.map.flyTo(
+        [coords[1], coords[0]], 
+        targetZoom,
+        {
+            duration: duration,
+            easeLinearity: 0.25,
+            noMoveStart: true,
+            animate: true,
+            // Add these options
+            keepPixelPosition: true,
+            updateDragInertia: false,
+            inertiaDeceleration: 3000,
+            inertiaMaxSpeed: 3000,
+            animateZoom: true
+        }
+    );
 
     const marker = this.markers.find(m => {
         const pos = m.getLatLng();
@@ -442,7 +467,12 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
             el.classList.remove('selected');
         });
         marker.getElement()?.classList.add('selected');
-        marker.fire('click');
+        
+        // Delay the marker click event until the animation is complete
+        const animationDuration = this.calculateAnimationDuration(distance);
+        setTimeout(() => {
+            marker.fire('click');
+        }, animationDuration * 1000);
 
         // Get marker index for multi-location items
         const markerContent = marker.getTooltip()?.getContent() as string;
@@ -458,6 +488,30 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
             
         window.history.replaceState({}, '', urlParams);
     }
+}
+
+// Add these improved helper methods to the Sidebar class
+private calculateOptimalZoom(distance: number): number {
+    // Adjust zoom based on distance to target
+    if (distance > 10000) return -2;
+    if (distance > 5000) return -1;
+    if (distance > 2000) return 0;
+    if (distance > 1000) return 1;
+    return 2;
+}
+
+private calculateAnimationDuration(distance: number): number {
+    // Base duration in seconds
+    const baseDuration = 1.2;
+    // Additional duration based on distance and zoom difference
+    const distanceFactor = Math.min(distance / 5000, 1);
+    const currentZoom = this.map.getZoom();
+    const targetZoom = this.calculateOptimalZoom(distance);
+    const zoomDiff = Math.abs(currentZoom - targetZoom);
+    const zoomFactor = Math.min(zoomDiff / 3, 1); // Normalize zoom difference
+
+    // Combine distance and zoom factors
+    return baseDuration + (distanceFactor * 1.5) + (zoomFactor * 0.8);
 }
 
   private async toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): Promise<void> {

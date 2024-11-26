@@ -25,6 +25,12 @@ html, body {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
   transition: transform 0.3s ease, filter 0.3s ease;
   z-index: 102;
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
 }
 
 .custom-location-icon i {
@@ -896,4 +902,11 @@ close-button:hover {
   color: white;
   margin-top: 10px;
   font-size: 14px;
+}
+
+.leaflet-marker-pane {
+  will-change: transform;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
