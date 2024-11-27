@@ -1,5 +1,6 @@
 import type { Location } from './types';
 import * as L from 'leaflet';
+import { getRelativeDirection } from './utils';
 
 interface SearchResult {
   location: Location & { type: string };
@@ -51,98 +52,160 @@ export function initializeSearch(locations: (Location & { type: string })[], map
 
   function updateResults(results: SearchResult[]) {
     if (results.length > 0) {
-      resultsContainer.innerHTML = results
-        .slice(0, 8)
-        .map((result, index) => `
-          <div class="search-result ${index === selectedIndex ? 'selected' : ''}" data-name="${result.location.name}">
-            <div class="search-result-icon">
-              ${result.location.icon?.startsWith('fa-') 
-                ? `<i class="${result.location.icon}" style="color: ${result.location.iconColor || '#FFFFFF'}; font-size: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;"></i>`
-                : `<img src="${result.location.icon}.svg" style="width: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px; height: ${result.location.iconSize ? 24 * result.location.iconSize : 24}px;" alt="">`
-              }
-            </div>
-            <div class="search-result-content">
-              <div class="result-name">${result.location.name}</div>
-              ${result.location.description 
-                ? `<div class="result-description">${result.location.description}</div>` 
-                : ''}
-            </div>
-            ${result.location.imgUrl 
-              ? `<img class="search-result-image" src="${result.location.imgUrl}" alt="${result.location.name}">` 
-              : ''}
-          </div>
-        `)
-        .join('');
+        resultsContainer.innerHTML = results
+            .slice(0, 8)
+            .map((result, index) => {
+                const location = result.location;
+                const isMultiLocation = Array.isArray(location.coordinates[0]);
+                const mainCoord = isMultiLocation ? 
+                    location.coordinates[0] as [number, number] : 
+                    location.coordinates as [number, number];
+
+                // Create highlight function based on search terms
+                function highlightText(text: string): string {
+                    const terms = searchInput.value.toLowerCase().split(' ').filter(t => t);
+                    let highlighted = text;
+                    terms.forEach(term => {
+                        const regex = new RegExp(`(${term})`, 'gi');
+                        highlighted = highlighted.replace(regex, '<mark>$1</mark>');
+                    });
+                    return highlighted;
+                }
+
+                // Generate main result entry
+                const mainEntry = `
+                    <div class="search-result ${index === selectedIndex ? 'selected' : ''}" 
+                         data-name="${location.name}">
+                        <div class="search-result-icon">
+                            ${location.icon?.startsWith('fa-') 
+                                ? `<i class="${location.icon}" style="color: ${location.iconColor || '#FFFFFF'}; 
+                                   font-size: ${location.iconSize ? 24 * location.iconSize : 24}px;"></i>`
+                                : `<img src="${location.icon}.svg" style="width: ${location.iconSize ? 24 * location.iconSize : 24}px; 
+                                   height: ${location.iconSize ? 24 * location.iconSize : 24}px;" alt="">`
+                            }
+                        </div>
+                        <div class="search-result-content">
+                            <div class="result-name">
+                                ${highlightText(location.name)}
+                            </div>
+                            ${location.description 
+                                ? `<div class="result-description">${highlightText(location.description)}</div>` 
+                                : ''}
+                        </div>
+                        ${location.imgUrl 
+                            ? `<img class="search-result-image" src="${location.imgUrl}" alt="${location.name}">` 
+                            : ''}
+                    </div>`;
+
+                // Generate child entries if multi-location
+                let childEntries = '';
+                if (isMultiLocation) {
+                    const coords = location.coordinates as [number, number][];
+                    childEntries = coords.map((coord, coordIndex) => {
+                        const nearestLocation = findNearestLocationMarker(coord, locations);
+                        const relativeLocation = nearestLocation ? 
+                            `${getRelativeDirection(nearestLocation.coordinates as [number, number], coord)} of ${nearestLocation.name}` : '';
+
+                        return `
+                            <div class="search-result child-result ${index === selectedIndex ? 'selected' : ''}" 
+                                 data-name="${location.name}"
+                                 data-coord-index="${coordIndex}">
+                                <div class="search-result-content">
+                                    <div class="result-location">
+                                        #${coordIndex + 1} - ${relativeLocation}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                return mainEntry + childEntries;
+            })
+            .join('');
     } else {
-      resultsContainer.innerHTML = '<div class="no-results">No locations found</div>';
+        resultsContainer.innerHTML = '<div class="no-results">No locations found</div>';
     }
     resultsContainer.style.display = 'block';
-  }
+}
 
-  function selectLocation(location: Location & { type: string }) {
+  function selectLocation(location: Location & { type: string }, coordIndex?: number) {
     const coords = Array.isArray(location.coordinates[0]) 
-      ? location.coordinates[0] as [number, number]
-      : location.coordinates as [number, number];
+        ? (coordIndex !== undefined 
+            ? location.coordinates[coordIndex] 
+            : location.coordinates[0]) as [number, number]
+        : location.coordinates as [number, number];
 
     map.setView([coords[1], coords[0]], map.getZoom());
 
-    // Update URL with location parameter
+    // Update URL with location parameter and index if applicable
     const encodedLocation = encodeURIComponent(location.name);
-    window.history.replaceState({}, '', `?location=${encodedLocation}`);
+    const urlParams = coordIndex !== undefined 
+        ? `?loc=${encodedLocation}&index=${coordIndex}` 
+        : `?loc=${encodedLocation}`;
+    window.history.replaceState({}, '', urlParams);
 
-    // Find and trigger marker
+    // Find and trigger correct marker
     const marker = markers.find(m => {
-      const pos = m.getLatLng();
-      return pos.lat === coords[1] && pos.lng === coords[0];
+        const pos = m.getLatLng();
+        const markerContent = m.getTooltip()?.getContent();
+        if (coordIndex !== undefined) {
+            // For multi-location items, match both position and index
+            return pos.lat === coords[1] && 
+                   pos.lng === coords[0] && 
+                   markerContent?.includes(`#${coordIndex + 1}`);
+        }
+        return pos.lat === coords[1] && pos.lng === coords[0];
     });
 
     if (marker) {
-      document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-        el.classList.remove('selected');
-      });
-      marker.getElement()?.classList.add('selected');
-      marker.fire('click');
+        document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
+            el.classList.remove('selected');
+        });
+        marker.getElement()?.classList.add('selected');
+        marker.fire('click');
     }
 
     // Close search after selection
     closeSearch();
-  }
+}
 
-  // Handle keyboard navigation
-  searchInput.addEventListener('keydown', (e) => {
+// Handle keyboard navigation
+searchInput.addEventListener('keydown', (e) => {
     const results = resultsContainer.querySelectorAll('.search-result');
     const maxIndex = results.length - 1;
 
     switch(e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, maxIndex);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        selectedIndex = Math.max(selectedIndex - 1, 0);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0) {
-          const selected = results[selectedIndex];
-          const locationName = selected.getAttribute('data-name');
-          const location = locations.find(l => l.name === locationName);
-          if (location) {
-            selectLocation(location);
-          }
-        }
-        break;
-      case 'Escape':
-        closeSearch();
-        break;
+        case 'Enter':
+            e.preventDefault();
+            if (selectedIndex >= 0) {
+                const selected = results[selectedIndex] as HTMLElement;
+                const locationName = selected.getAttribute('data-name');
+                const coordIndex = selected.getAttribute('data-coord-index');
+                const location = locations.find(l => l.name === locationName);
+                if (location) {
+                    selectLocation(location, coordIndex ? parseInt(coordIndex) : undefined);
+                }
+            }
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, maxIndex);
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+            break;
+        case 'Escape':
+            closeSearch();
+            break;
     }
 
     // Update selected state
     results.forEach((result, index) => {
-      result.classList.toggle('selected', index === selectedIndex);
+        result.classList.toggle('selected', index === selectedIndex);
     });
-  });
+});
 
   // Add input handler
   searchInput.addEventListener('input', () => {
@@ -181,11 +244,12 @@ export function initializeSearch(locations: (Location & { type: string })[], map
   resultsContainer.addEventListener('click', (e) => {
     const resultElement = (e.target as HTMLElement).closest('.search-result');
     if (resultElement) {
-      const locationName = resultElement.getAttribute('data-name');
-      const location = locations.find(l => l.name === locationName);
-      if (location) {
-        selectLocation(location);
-      }
+        const locationName = resultElement.getAttribute('data-name');
+        const coordIndex = resultElement.getAttribute('data-coord-index');
+        const location = locations.find(l => l.name === locationName);
+        if (location) {
+            selectLocation(location, coordIndex ? parseInt(coordIndex) : undefined);
+        }
     }
   });
 
@@ -212,4 +276,27 @@ export function initializeSearch(locations: (Location & { type: string })[], map
   });
 
   // Rest of the existing event listeners...
+}
+
+function findNearestLocationMarker(coords: [number, number], allLocations: (Location & { type: string })[]): Location & { type: string } | null {
+    // Filter for location type markers only
+    const locationMarkers = allLocations.filter(loc => loc.type === 'location');
+    
+    if (locationMarkers.length === 0) return null;
+
+    return locationMarkers.reduce((nearest, loc) => {
+        const locCoords = loc.coordinates as [number, number]; // Location markers are always single point
+        const currentDist = Math.hypot(
+            coords[0] - locCoords[0],
+            coords[1] - locCoords[1]
+        );
+        
+        const nearestCoords = nearest.coordinates as [number, number];
+        const nearestDist = Math.hypot(
+            coords[0] - nearestCoords[0],
+            coords[1] - nearestCoords[1]
+        );
+
+        return currentDist < nearestDist ? loc : nearest;
+    });
 }

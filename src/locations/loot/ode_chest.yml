@@ -1,5 +1,5 @@
 # src/locations/loot/ode_chest.yml
-name: "Ode's Chest"
+name: "Ode Chest"
 coordinates:
   - [2611, 3997]
   - [2107, 4721]
@@ -12,5 +12,5 @@ coordinates:
   - [3075, 3424]
 description: "These chests are not guaranteed spawns. Chance to drop blitzel fragments"
 icon: "fa-solid fa-toolbox"
-iconSize: 1
+iconSize: 0.75
 iconColor: "#79AAFF"

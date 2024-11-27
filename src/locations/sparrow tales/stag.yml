@@ -8,3 +8,4 @@ description: "Chance to spawn the Vadagar Stag"
 icon: "fa-solid fa-crown"
 iconSize: 1.25
 iconColor: "#f0d57f"
+radius: 75

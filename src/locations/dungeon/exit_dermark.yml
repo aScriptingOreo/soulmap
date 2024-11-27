@@ -1,0 +1,11 @@
+name: "Dermark Exit"
+coordinates:
+  - [2408, 3529]
+  - [2985, 3224]
+  - [3804, 3676]
+  - [3000, 4299]
+
+description: "These are possible exits for Dermark tileset dungeons. credits: Contestant"
+icon: "fa-solid fa-person-running"
+iconSize: 0.75
+iconColor: "#bfe234"

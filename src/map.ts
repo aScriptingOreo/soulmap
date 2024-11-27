@@ -140,6 +140,25 @@ async function handleUrlNavigation(
     }
 }
 
+function createUncertaintyCircle(coord: [number, number], radius: number, color: string): L.Circle {
+    const darkerColor = color.startsWith('#') 
+        ? color.replace(/[^#]/g, x => {
+            const val = parseInt(x, 16);
+            return Math.max(0, val - 2).toString(16);
+          })
+        : color;
+
+    return L.circle([coord[1], coord[0]], {
+        radius: radius,
+        color: darkerColor,
+        fillColor: color,
+        fillOpacity: 0.2,
+        opacity: 0.6,
+        weight: 2,
+        interactive: false
+    });
+}
+
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
@@ -274,19 +293,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         const customMarkers = customMarkerService.getAllMarkers();
         locations.push(...customMarkers.map(m => ({ ...m, type: 'custom' })));
 
-        // Remove these event listeners as they're no longer needed
-        // map.on('zoomstart', () => {
-        //     requestAnimationFrame(() => {
-        //         document.querySelector('.leaflet-marker-pane')?.classList.add('smooth-zoom');
-        //     });
-        // });
-
-        // map.on('zoomend', () => {
-        //     requestAnimationFrame(() => {
-        //         document.querySelector('.leaflet-marker-pane')?.classList.remove('smooth-zoom');
-        //     });
-        // });
-
         // Phase 2: Load grid (60-75%)
         updateProgress(60, 'Loading map tiles...');
         await initializeGrid(map);
@@ -376,17 +382,34 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                             updateMetaTags(location, coord);
                         });
         
+                        // Add uncertainty circle if radius is specified
+                        if (location.radius && location.iconColor) {
+                            const circle = createUncertaintyCircle(
+                                coord, 
+                                location.radius,
+                                location.iconColor
+                            );
+                            circle.addTo(map);
+                            
+                            // Store circle reference with marker for removal
+                            (marker as any).uncertaintyCircle = circle;
+                        }
+
                         marker.addTo(markerGroup);
                         markers.push(marker);
                         activeMarkers.add(markerId);
                     } else if (!isVisible && activeMarkers.has(markerId)) {
-                        // Remove out-of-bounds marker
+                        // Remove out-of-bounds marker and its circle
                         const markerIndex = markers.findIndex(m => {
                             const pos = m.getLatLng();
                             return pos.lat === coord[1] && pos.lng === coord[0];
                         });
                         if (markerIndex !== -1) {
-                            markerGroup.removeLayer(markers[markerIndex]);
+                            const marker = markers[markerIndex];
+                            if ((marker as any).uncertaintyCircle) {
+                                map.removeLayer((marker as any).uncertaintyCircle);
+                            }
+                            markerGroup.removeLayer(marker);
                             markers.splice(markerIndex, 1);
                             activeMarkers.delete(markerId);
                         }

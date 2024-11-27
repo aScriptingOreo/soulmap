@@ -1,6 +1,6 @@
 import * as L from 'leaflet';
 import type { Location } from './types';
-import { generateLocationHash } from './utils';
+import { generateLocationHash, getRelativeDirection } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
 
 export interface SidebarOptions {
@@ -222,17 +222,67 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
       const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
       window.history.replaceState({}, '', urlParams);
     } else {
-      // Regular location display
-      this.titleEl.textContent = location.name;
+      // Handle location display
+      let locationTitle = location.name;
+      
+      // Check if this is part of a multi-location marker
+      if (Array.isArray(location.coordinates[0])) {
+          const coords = location.coordinates as [number, number][];
+          const index = coords.findIndex(coord => coord[0] === x && coord[1] === y);
+          if (index !== -1) {
+              locationTitle = `${location.name} #${index + 1}`;
+          }
+      }
+      
+      this.titleEl.textContent = locationTitle;
+
+      // Add relative location info if not a location marker type
+      if (location.type !== 'location') {
+          const nearestLocation = this.locations
+              .filter(loc => loc.type === 'location')
+              .reduce((nearest, loc) => {
+                  const locCoords = loc.coordinates as [number, number]; // Location markers are single point
+                  const currentDist = Math.hypot(
+                      x - locCoords[0],
+                      y - locCoords[1]
+                  );
+                  
+                  const nearestCoords = nearest.coordinates as [number, number];
+                  const nearestDist = Math.hypot(
+                      x - nearestCoords[0],
+                      y - nearestCoords[1]
+                  );
+
+                  return currentDist < nearestDist ? loc : nearest;
+              });
+
+          // Create or update relative location element
+          let relativeLocationEl = this.element.querySelector('.relative-location');
+          if (!relativeLocationEl) {
+              relativeLocationEl = document.createElement('div');
+              relativeLocationEl.className = 'relative-location';
+              this.titleEl.after(relativeLocationEl);
+          }
+          const direction = getRelativeDirection(
+              nearestLocation.coordinates as [number, number],
+              [x, y]
+          );
+          relativeLocationEl.textContent = `${direction} of ${nearestLocation.name}`;
+      } else {
+          // Remove relative location element if it exists
+          this.element.querySelector('.relative-location')?.remove();
+      }
+
+      // Show main description and image for both parent and child items
       this.descEl.textContent = location.description || 'No description available';
       this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
 
       if (location.imgUrl) {
-        this.imgEl.src = location.imgUrl;
-        this.imgEl.style.display = 'block';
+          this.imgEl.src = location.imgUrl;
+          this.imgEl.style.display = 'block';
       } else {
-        this.imgEl.style.display = 'none';
-        this.imgEl.src = '';
+          this.imgEl.style.display = 'none';
+          this.imgEl.src = '';
       }
     }
 
@@ -599,28 +649,42 @@ private calculateAnimationDuration(distance: number): number {
     const isVisible = this.visibleMarkers.has(locationName);
     
     this.markers.forEach(marker => {
-      const markerElement = marker.getElement();
-      if (!markerElement) return;
-      
-      const markerLocation = markerElement.getAttribute('data-location');
-      if (markerLocation === locationName) {
-        if (isVisible) {
-          markerElement.style.display = 'none';
-          this.visibleMarkers.delete(locationName);
-          toggleElement.textContent = 'visibility_off';
-          toggleElement.classList.add('hidden');
-        } else {
-          markerElement.style.display = '';
-          this.visibleMarkers.add(locationName);
-          toggleElement.textContent = 'visibility';
-          toggleElement.classList.remove('hidden');
+        const markerElement = marker.getElement();
+        if (!markerElement) return;
+        
+        const markerLocation = markerElement.getAttribute('data-location');
+        if (markerLocation === locationName) {
+            if (isVisible) {
+                // Hide marker and its uncertainty circle
+                markerElement.style.display = 'none';
+                if ((marker as any).uncertaintyCircle) {
+                    (marker as any).uncertaintyCircle.setStyle({ 
+                        opacity: 0, 
+                        fillOpacity: 0 
+                    });
+                }
+                this.visibleMarkers.delete(locationName);
+                toggleElement.textContent = 'visibility_off';
+                toggleElement.classList.add('hidden');
+            } else {
+                // Show marker and its uncertainty circle
+                markerElement.style.display = '';
+                if ((marker as any).uncertaintyCircle) {
+                    (marker as any).uncertaintyCircle.setStyle({ 
+                        opacity: 0.6, 
+                        fillOpacity: 0.2 
+                    });
+                }
+                this.visibleMarkers.add(locationName);
+                toggleElement.textContent = 'visibility';
+                toggleElement.classList.remove('hidden');
+            }
         }
-      }
     });
 
     // Update category toggle state
     this.updateCategoryVisibility(toggleElement);
-  }
+}
 
 private async toggleCategoryVisibility(category: string, items: (Location & { type: string })[], toggle: HTMLElement): Promise<void> {
     const isVisible = this.visibleCategories.has(category);
@@ -727,6 +791,13 @@ private async toggleMultiMarkerVisibility(item: Location & { type: string }, tog
                 if (element) {
                     element.style.display = 'none';
                 }
+                // Hide uncertainty circle if it exists
+                if ((marker as any).uncertaintyCircle) {
+                    (marker as any).uncertaintyCircle.setStyle({ 
+                        opacity: 0, 
+                        fillOpacity: 0 
+                    });
+                }
             }
         });
     } else {
@@ -755,6 +826,13 @@ private async toggleMultiMarkerVisibility(item: Location & { type: string }, tog
                 const element = marker.getElement();
                 if (element) {
                     element.style.display = '';
+                }
+                // Show uncertainty circle if it exists
+                if ((marker as any).uncertaintyCircle) {
+                    (marker as any).uncertaintyCircle.setStyle({ 
+                        opacity: 0.6, 
+                        fillOpacity: 0.2 
+                    });
                 }
             }
         });

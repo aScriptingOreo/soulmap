@@ -1,0 +1,10 @@
+name: "Statue"
+coordinates:
+  - [2261, 4969]
+  - [1971, 3647]
+  - [2571, 3777]
+description: "These are statues that have bindings on them. credits: Contestant"
+icon: "fa-solid fa-music"
+iconSize: 0.75
+iconColor: "#bfe234"
+imgUrl: "https://i.imgur.com/FFKfAY8.jpeg"

@@ -6,7 +6,8 @@ export interface Location {
   icon?: string;
   iconSize?: number;
   imgUrl?: string;
-  iconColor?: string; // New optional hex color property
+  iconColor?: string;
+  radius?: number;
 }
 export interface VersionInfo {
   version: string;

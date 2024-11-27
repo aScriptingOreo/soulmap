@@ -8,6 +8,7 @@ html, body {
   font-family: 'Roboto', sans-serif;
 }
 
+/* Map base layer */
 #map {
   height: 100%;
   width: 100%;
@@ -15,17 +16,34 @@ html, body {
   top: 0;
   left: 0;
   z-index: 100;
-  background: #000; /* Add black background to prevent white edges */
+  background: #000; 
 }
 
+/* Map tile layer */
+.leaflet-tile-pane {
+  z-index: 100;
+}
+
+/* Semi-transparent overlay */
 #overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.0); /* 80% see-through dark overlay */
-  z-index: 2; /* Ensure it's above the map but below the icons */
+  background-color: rgba(0, 0, 0, 0.1); /* 20% opacity black */
+  z-index: 101; 
+  pointer-events: none;
+}
+
+/* Ensure markers appear above overlay */
+.leaflet-marker-pane {
+  z-index: 102;
+}
+
+.custom-location-icon {
+  z-index: 102;
+  filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.5));
 }
 
 /* Styles for cursor position display */
@@ -566,6 +584,13 @@ close-button:hover {
   color: #ffffff;
   font-weight: 500;
   margin-bottom: 4px;
+}
+
+.result-location {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 2px 0;
+  font-style: italic;
 }
 
 .result-description {
@@ -1152,8 +1177,79 @@ close-button:hover {
   gap: 12px;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   align-items: center;
+}
+
+/* Style for highlighted text */
+mark {
+    background-color: rgba(255, 255, 0, 0.3);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+/* Style for multiple location entries */
+.search-result[data-coord-index]:not([data-coord-index="0"]) {
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.search-result .result-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Main search result */
+.search-result {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: center;
+}
+
+/* Child result styling */
+.child-result {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: 8px 16px 8px 48px; /* Increased left padding for indentation */
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: none;
+    position: relative;
+}
+
+/* Add visual connector for child items */
+.child-result::before {
+    content: '--';
+    position: absolute;
+    left: 32px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Adjust spacing between parent and children */
+.search-result + .child-result {
+    margin-top: 2px;
+}
+
+/* Last child needs bottom border */
+.child-result:last-of-type {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hover states */
+.child-result:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+/* Highlighted text */
+mark {
+    background-color: rgba(255, 255, 0, 0.3);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
 }
 
 .marker-modal {
@@ -1256,4 +1352,58 @@ close-button:hover {
 
 .custom-category-empty span {
     font-size: 14px;
+}
+
+.child-result {
+  padding-left: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  grid-template-columns: 1fr;
+}
+
+.child-result .result-location {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+.child-result:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.relative-location {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-style: italic;
+  margin: 4px 0 8px;
+  padding-left: 2px;
+}
+
+#discord-button {
+  position: fixed;
+  bottom: 19px;
+  left: 190px; /* Position it to the right of the Ko-fi button */
+  z-index: 2001;
+}
+
+#discord-button a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #5865F2; /* Discord brand color */
+  color: white;
+  text-decoration: none;
+  border-radius: 24px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  transition: background-color 0.3s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+#discord-button a:hover {
+  background-color: #4752C4; /* Darker shade for hover */
+}
+
+#discord-button i {
+  font-size: 28px;
 }
