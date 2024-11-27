@@ -10,10 +10,8 @@ import { CustomMarkerService } from './services/customMarkers';
 import { MarkerModal } from './components/MarkerModal';
 
 function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
-    // Update title
+    // Update title and description meta
     document.title = `${location.name} - Soulmap`;
-
-    // Update meta description
     const description = location.description || 'No description available';
     document.querySelector('meta[name="description"]')?.setAttribute('content', 
         `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
@@ -23,27 +21,51 @@ function updateMetaTags(location: Location & { type: string }, coords: [number, 
         `${location.name} - Soulmap`);
     document.querySelector('meta[property="og:description"]')?.setAttribute('content', 
         `${location.name} - Located at [${coords[0]}, ${coords[1]}]. ${description}`);
-
-    // Set image based on location type
-    let imageUrl;
+    
+    // Set preview image based on priority:
+    // 1. Location's imgUrl if available
+    // 2. Generated icon image if Font Awesome
+    // 3. Local icon if available
+    let previewImage = '';
     if (location.imgUrl) {
-        imageUrl = location.imgUrl;
+        previewImage = location.imgUrl;
     } else if (location.icon?.startsWith('fa-')) {
-        // Generate Font Awesome icon image URL
-        const iconClass = location.icon.replace('fa-solid ', '');
-        imageUrl = `https://fa-icons.com/${iconClass}.svg`;
+        // Use Font Awesome icon with background
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 630;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            // Draw dark background
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw location name
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 48px Roboto';
+            ctx.textAlign = 'center';
+            ctx.fillText(location.name, canvas.width/2, canvas.height/2 - 100);
+            
+            // Draw coordinates
+            ctx.font = '32px Roboto';
+            ctx.fillText(`[${Math.round(coords[0])}, ${Math.round(coords[1])}]`, 
+                canvas.width/2, canvas.height/2);
+            
+            previewImage = canvas.toDataURL();
+        }
     } else if (location.icon) {
-        // Use self-hosted icon
-        const baseUrl = window.location.origin;
-        imageUrl = `${baseUrl}${location.icon}.svg`;
+        // Use local icon with background
+        previewImage = `${window.location.origin}${location.icon}.svg`;
     }
 
-    if (imageUrl) {
-        document.querySelector('meta[property="og:image"]')?.setAttribute('content', imageUrl);
-        document.querySelector('meta[property="twitter:image"]')?.setAttribute('content', imageUrl);
+    // Update image meta tags if we have an image
+    if (previewImage) {
+        document.querySelector('meta[property="og:image"]')?.setAttribute('content', previewImage);
+        document.querySelector('meta[property="twitter:image"]')?.setAttribute('content', previewImage);
     }
 
     // Update Twitter card meta tags
+    document.querySelector('meta[property="twitter:card"]')?.setAttribute('content', 'summary_large_image');
     document.querySelector('meta[property="twitter:title"]')?.setAttribute('content', 
         `${location.name} - Soulmap`);
     document.querySelector('meta[property="twitter:description"]')?.setAttribute('content', 
