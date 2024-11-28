@@ -1,0 +1,12 @@
+name: "Grey Gold"
+description: "Used in Weapons"
+type: "Joinery"
+rarity: "common"
+sources: 
+  - "Sparrow Tales"
+  - "Chests"
+
+# Optional
+iconUrl: "fa-solid fa-fire"
+iconColor: "#fb8c1e"
+imgUrl: 

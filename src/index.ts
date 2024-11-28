@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
 import { clearTileCache } from './gridLoader'; // Add this import
+import { clearDropsCache } from './drops/dropsLoader';
 import type { VersionInfo } from './types';
 
 async function loadGreeting() {
@@ -69,9 +70,12 @@ async function checkForUpdates() {
         const lastVersion = localStorage.getItem('soulmap_version');
 
         if (lastVersion !== currentVersion) {
-            // Clear both location and tile caches if version changed
-            clearLocationsCache();
-            clearTileCache();
+            // Clear all caches if version changed
+            await Promise.all([
+                clearLocationsCache(),
+                clearDropsCache(),
+                clearTileCache()
+            ]);
             localStorage.setItem('soulmap_version', currentVersion);
         }
     } catch (error) {

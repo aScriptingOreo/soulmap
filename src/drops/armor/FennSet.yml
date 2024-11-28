@@ -1,0 +1,12 @@
+name: "Fenn Set"
+description: "" 
+type: "Armor" 
+rarity: "rare"
+sources: 
+  - "Rare Dermak Chests"
+  - "Uncommon Dermak Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

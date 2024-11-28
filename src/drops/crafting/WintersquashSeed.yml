@@ -1,0 +1,11 @@
+name: "Wintersquash Seed"
+description: "Look for the Wintersquash, break them"
+type: "Crafting Material"
+rarity: "uncommon"
+sources: 
+  - "Squash"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

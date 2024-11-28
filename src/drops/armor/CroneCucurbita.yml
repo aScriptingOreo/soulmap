@@ -1,0 +1,11 @@
+name: "Crone Cucurbita"
+description: "Destroy Scarecrows" 
+type: "Armor" 
+rarity: "Event"
+sources: 
+  - "Scarecrows"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

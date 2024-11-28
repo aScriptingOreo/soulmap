@@ -5,8 +5,6 @@ if you have any suggestions of content please check out the preludes discord ser
 
 
 # Changelog 
-- Using localforage as caching handler for map tiles
-- Custom markers(very much a beta feature)
-- New beefed up search bar
-- Small updates to markers
-- New caching for the map(this should increase load performance by 700%)
+- So... Many... Things
+- Do try the new drops tab
+- Also try the search bar, it has the drops in there

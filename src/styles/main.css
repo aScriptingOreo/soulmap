@@ -1,11 +1,12 @@
 /* Reset default margins and ensure full viewport coverage */
-html, body {
+html,
+body {
   height: 100vh;
   width: 100vw;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
 }
 
 /* Map base layer */
@@ -16,7 +17,7 @@ html, body {
   top: 0;
   left: 0;
   z-index: 100;
-  background: #000; 
+  background: #000;
 }
 
 /* Map tile layer */
@@ -32,7 +33,7 @@ html, body {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.1); /* 20% opacity black */
-  z-index: 101; 
+  z-index: 101;
   pointer-events: none;
 }
 
@@ -54,10 +55,10 @@ html, body {
   background-color: rgba(0, 0, 0, 0.8);
   padding: 5px 10px;
   border-radius: 4px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   font-size: 14px;
   color: #ffffff;
-  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
   z-index: 1000;
 }
 
@@ -100,7 +101,7 @@ html, body {
   overflow-y: auto;
   max-height: calc(80vh - 80px); /* Leave space for button */
   color: white;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   padding-right: 10px;
   margin-bottom: 20px;
 }
@@ -114,33 +115,33 @@ html, body {
   color: #333; /* Gray text */
   border-radius: 5px;
   cursor: pointer;
-  font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+  font-family: "Roboto", sans-serif; /* Apply Roboto font */
 }
 #popup-content button:hover {
   background-color: #ccc; /* Light gray on hover */
 }
 
 .right-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   position: fixed;
   top: 0;
-  right: 0;  /* Changed from -300px */
+  right: 0; /* Changed from -300px */
   width: 300px;
-  height: 100%;
   background-color: rgba(51, 51, 51, 0.95);
   color: white;
   z-index: 1000;
   border-radius: 10px 0 0 10px;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
   padding: 20px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   transform: translateX(0);
-  transition: transform 0.3s ease;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transform: translateX(100%);
   transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
   will-change: transform, opacity; /* Optimize GPU rendering */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .right-sidebar.loaded {
@@ -163,7 +164,7 @@ html, body {
   border: none;
   border-radius: 50% 0 0 50%;
   background: #fff;
-  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   z-index: 1001;
   display: flex;
@@ -289,20 +290,56 @@ close-button:hover {
 }
 
 .version-box {
-    position: fixed;
-    top: 20px;
-    left: 65px;  /* Changed from 20px to 5px */
-    background: rgba(51, 51, 51, 0.95);
-    padding: 10px 15px;
-    border-radius: 8px;
-    color: white;
-    font-size: 14px;
-    z-index: 1000;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-    font-family: 'Roboto', sans-serif;
-  }
+  position: fixed;
+  top: 20px;
+  left: 65px; /* Changed from 20px to 5px */
+  background: rgba(51, 51, 51, 0.95);
+  padding: 10px 15px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-family: "Roboto", sans-serif;
+}
+
+/* Location drawer - always expanded */
+.location-drawer {
+  display: flex;
+  flex-direction: column;
+  height: 300px; /* Fixed height */
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Drawer header - simpler now without collapse functionality */
+.drawer-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  background: rgba(51, 51, 51, 0.95);
+}
+
+/* Drawer content - always visible */
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  display: block;
+}
+
+/* Remove all collapsed states and transitions */
+.drawer-collapsed .drawer-content,
+.location-drawer.drawer-collapsed {
+  display: flex;
+  flex-direction: column;
+  min-height: unset;
+}
 
 .location-drawer {
+  flex: 0 0 300px; /* Default height when expanded */
+  display: flex;
+  flex-direction: column;
+  transition: flex 0.3s ease;
   position: absolute;
   bottom: 60px; /* Add bottom padding to avoid toolbar */
   left: 0;
@@ -311,6 +348,12 @@ close-button:hover {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   max-height: 40vh; /* Limit height to 40% of viewport */
   transition: transform 0.3s ease;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.location-drawer.drawer-collapsed {
+  flex: 0 0 48px; /* Height of just the header */
 }
 
 .drawer-header {
@@ -327,59 +370,11 @@ close-button:hover {
 }
 
 .drawer-content {
+  flex: 1;
   overflow-y: auto;
   max-height: calc(40vh - 50px);
   padding: 10px 0;
   padding-bottom: 60px; /* Add padding for the toolbar */
-}
-
-.category {
-  margin-bottom: 10px;
-}
-
-.category-header {
-  padding: 10px 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.category-header span:first-child {
-  order: 2;
-  flex: 1;
-}
-
-.category-header .visibility-toggle {
-  order: 1;
-}
-
-.category-header i {
-  order: 3;
-}
-
-.category-content {
-  display: none;
-  padding-left: 20px;
-}
-
-.category-content.open {
-  display: block;
-}
-
-.location-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 20px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.location-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.location-item .visibility-toggle {
-  order: 1;
 }
 
 .drawer-collapsed .drawer-content {
@@ -453,7 +448,7 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: 100%;
-  left: -20px;  /* Adjust this value to move results more to the left */
+  left: -20px; /* Adjust this value to move results more to the left */
   right: -200px; /* Keep this matching left for symmetry */
   margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
@@ -470,12 +465,66 @@ close-button:hover {
 /* Search result sizing */
 .search-result {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: 32px 1fr;
   gap: 12px;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s;
+}
+
+.search-result:hover,
+.search-result.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-result-icon {
+  display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.search-result-icon i {
+  font-size: 20px;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.search-result-content {
+  overflow: hidden;
+}
+
+.result-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-description {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.location-type {
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+mark {
+  background: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Update expanded container to maintain proper width */
@@ -485,7 +534,9 @@ close-button:hover {
 }
 
 /* Maintain center alignment when sidebar is open */
-.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+.right-sidebar:not(.collapsed)
+  ~ .search-container:not(.expanded)
+  .search-results {
   width: calc(100% + 40px);
   transform: translateX(-50%); /* Keep results centered under search */
 }
@@ -496,7 +547,9 @@ close-button:hover {
   left: calc(50% - 150px); /* Adjust for sidebar being open */
 }
 
-.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+.right-sidebar:not(.collapsed)
+  ~ .search-container:not(.expanded)
+  .search-results {
   width: calc(100% + 40px);
   transform: translateX(-50%); /* Keep results centered under search */
 }
@@ -526,8 +579,8 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: 100%;
-  left: 0;  /* Reset left position */
-  right: 0;  /* Reset right position */
+  left: 0; /* Reset left position */
+  right: 0; /* Reset right position */
   margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
   border-radius: 12px;
@@ -536,22 +589,75 @@ close-button:hover {
   max-height: 400px;
   overflow-y: auto;
   z-index: 1600;
-  width: 100%;  /* Make it full width of container */
-  padding: 0;   /* Reset padding */
+  width: 100%; /* Make it full width of container */
+  padding: 0; /* Reset padding */
 }
 
 .search-result {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: 32px 1fr;
   gap: 12px;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s;
+}
+
+.search-result:hover,
+.search-result.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-result-icon {
+  display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.search-result-icon i {
+  font-size: 20px;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.search-result-content {
+  overflow: hidden;
+}
+
+.result-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-description {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.location-type {
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+mark {
+  background: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .search-result.selected {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .search-result-icon {
@@ -616,7 +722,7 @@ close-button:hover {
   color: white !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   padding: 5px 10px !important;
-  font-family: 'Roboto', sans-serif !important;
+  font-family: "Roboto", sans-serif !important;
   font-size: 14px !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }
@@ -878,39 +984,39 @@ close-button:hover {
 }
 
 .debug-tile {
-    cursor: help;
-    pointer-events: all !important;
+  cursor: help;
+  pointer-events: all !important;
 }
 
 .debug-tooltip {
-    background-color: rgba(0, 0, 0, 0.8) !important;
-    border: 1px solid #ff7800 !important;
-    color: white !important;
-    padding: 5px 10px !important;
-    font-family: monospace !important;
-    font-size: 12px !important;
-    pointer-events: none;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid #ff7800 !important;
+  color: white !important;
+  padding: 5px 10px !important;
+  font-family: monospace !important;
+  font-size: 12px !important;
+  pointer-events: none;
 }
 
 .debug-outline {
-    cursor: help;
-    transition: opacity 0.2s ease;
+  cursor: help;
+  transition: opacity 0.2s ease;
 }
 
 .debug-outline:hover {
-    opacity: 1 !important;
+  opacity: 1 !important;
 }
 
 .debug-tooltip {
-    background: rgba(0, 0, 0, 0.8);
-    border: 1px solid #ff0000;
-    border-radius: 4px;
-    color: white;
-    padding: 5px 8px;
-    font-family: monospace;
-    font-size: 12px;
-    white-space: nowrap;
-    pointer-events: none;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #ff0000;
+  border-radius: 4px;
+  color: white;
+  padding: 5px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .development-overlay {
@@ -984,7 +1090,7 @@ close-button:hover {
   border: none;
   border-radius: 50% 0 0 50%;
   background: #fff;
-  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   z-index: 1001;
   display: flex;
@@ -1052,7 +1158,7 @@ close-button:hover {
 .loading-progress {
   width: 0%;
   height: 100%;
-  background: #4CAF50;
+  background: #4caf50;
   transition: width 0.3s ease;
 }
 
@@ -1062,18 +1168,17 @@ close-button:hover {
   font-size: 14px;
 }
 
-
 .smooth-zoom {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
 }
 
 .leaflet-zoom-animated {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
   will-change: transform;
 }
 
 .leaflet-zoom-anim .leaflet-zoom-animated {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
   will-change: transform;
 }
 
@@ -1138,7 +1243,7 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: calc(100% + 8px);
-  left: 21px;  /* Default left offset for normal state */
+  left: 21px; /* Default left offset for normal state */
   right: 0; /* Default right offset for normal state */
   margin-top: 1px;
   background: rgba(51, 51, 51, 0.95);
@@ -1173,83 +1278,215 @@ close-button:hover {
 /* Search result styling */
 .search-result {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: 32px 1fr;
   gap: 12px;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s;
+}
+
+.search-result:hover,
+.search-result.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-result-icon {
+  display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.search-result-icon i {
+  font-size: 20px;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.search-result-content {
+  overflow: hidden;
+}
+
+.result-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-description {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.location-type {
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+mark {
+  background: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Style for highlighted text */
 mark {
-    background-color: rgba(255, 255, 0, 0.3);
-    color: inherit;
-    padding: 0 2px;
-    border-radius: 2px;
+  background-color: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Style for multiple location entries */
 .search-result[data-coord-index]:not([data-coord-index="0"]) {
-    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 .search-result .result-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Main search result */
 .search-result {
-    display: grid;
-    grid-template-columns: 32px 1fr auto;
-    gap: 12px;
-    padding: 12px 16px;
-    cursor: pointer;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    align-items: center;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-/* Child result styling */
+.search-result:hover,
+.search-result.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-result-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-result-icon i {
+  font-size: 20px;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.search-result-content {
+  overflow: hidden;
+}
+
+.result-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-description {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.location-type {
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+mark {
+  background: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Child result styling - more compact */
 .child-result {
-    display: grid;
-    grid-template-columns: 1fr;
-    padding: 8px 16px 8px 48px; /* Increased left padding for indentation */
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: none;
-    position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px 16px 4px 32px;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 28px;
+  position: relative;
 }
 
 /* Add visual connector for child items */
 .child-result::before {
-    content: '--';
-    position: absolute;
-    left: 32px;
-    color: rgba(255, 255, 255, 0.3);
+  content: none; /* Remove the bullet point */
+}
+
+.child-result:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Adjust spacing between parent and children */
 .search-result + .child-result {
-    margin-top: 2px;
+  margin-top: 2px;
 }
 
 /* Last child needs bottom border */
 .child-result:last-of-type {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Hover states */
 .child-result:hover {
-    background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 /* Highlighted text */
 mark {
-    background-color: rgba(255, 255, 0, 0.3);
-    color: inherit;
-    padding: 0 2px;
-    border-radius: 2px;
+  background-color: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Location reference container */
+.location-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Index number */
+.location-index {
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 24px;
+  font-size: 0.85em;
+  position: relative; /* Add this */
+  z-index: 2; /* Add this */
+}
+
+/* Direction text */
+.direction-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85em;
+  margin-left: auto;
 }
 
 .marker-modal {
@@ -1337,27 +1574,30 @@ mark {
 }
 
 .custom-category-empty {
-    display: flex;
-    align-items: center;
-    padding: 12px 20px;
-    color: rgba(255, 255, 255, 0.7);
-    font-style: italic;
-    gap: 10px;
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  gap: 10px;
 }
 
 .custom-category-empty i {
-    font-size: 16px;
-    opacity: 0.7;
+  font-size: 16px;
+  opacity: 0.7;
 }
 
 .custom-category-empty span {
-    font-size: 14px;
+  font-size: 14px;
 }
 
 .child-result {
-  padding-left: 32px;
-  background: rgba(255, 255, 255, 0.05);
-  grid-template-columns: 1fr;
+  padding: 8px 16px 8px 32px;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 28px;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .child-result .result-location {
@@ -1390,20 +1630,741 @@ mark {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background-color: #5865F2; /* Discord brand color */
+  background-color: #5865f2; /* Discord brand color */
   color: white;
   text-decoration: none;
   border-radius: 24px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   font-size: 14px;
   transition: background-color 0.3s ease;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 #discord-button a:hover {
-  background-color: #4752C4; /* Darker shade for hover */
+  background-color: #4752c4; /* Darker shade for hover */
 }
 
 #discord-button i {
   font-size: 28px;
+}
+
+.sidebar-tabs {
+  display: flex;
+  padding: 10px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sidebar-tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-tab.active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sidebar-tab .material-icons {
+  font-size: 20px;
+}
+
+.sidebar-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Drops interface styling */
+.drops-content {
+  display: none;
+  padding: 16px;
+}
+
+.drops-content.active {
+  display: block;
+}
+
+.drops-category {
+  margin-bottom: 24px;
+}
+
+.drops-category-header {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.drop-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.drop-header {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.drop-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.drop-icon img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.drop-icon i {
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.drop-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.drop-details {
+  display: none;
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drop-item.active .drop-details {
+  display: block;
+}
+
+.drop-item.active .fa-chevron-down {
+  transform: rotate(180deg);
+}
+
+.drop-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.drop-sources {
+  margin-top: 12px;
+}
+
+.sources-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-link {
+  color: #4caf50;
+  text-decoration: none;
+  padding: 4px 8px;
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.source-link:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+/* Updated sidebar structure */
+.right-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sidebar-info {
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-tabs {
+  display: flex;
+  padding: 10px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sidebar-tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-tab.active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sidebar-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  max-height: 400px;
+}
+
+.sidebar-content.active {
+  display: block;
+}
+
+.tab-system {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Important for flex child scrolling */
+  transition: flex-grow 0.3s ease;
+}
+
+/* When location drawer is collapsed, give more space to tab content */
+.location-drawer.collapsed + .tab-system {
+  flex: 2;
+}
+
+/* Tab content container */
+.sidebar-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Location drawer */
+.location-drawer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px; /* Minimum height when expanded */
+  transition: min-height 0.3s ease, flex 0.3s ease;
+}
+
+.location-drawer.drawer-collapsed {
+  flex: 0 0 auto;
+  min-height: 50px; /* Height of just the header when collapsed */
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  display: block;
+  transition: max-height 0.3s ease;
+}
+
+.drawer-collapsed .drawer-content {
+  display: none;
+}
+
+.drawer-header i {
+  transition: transform 0.3s ease;
+}
+
+.drawer-collapsed .fa-chevron-up {
+  transform: rotate(180deg);
+}
+
+/* Tab content area */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: none;
+  padding: 16px;
+  transition: max-height 0.3s ease;
+}
+
+.sidebar-content.active {
+  display: block;
+}
+
+/* When drawer is collapsed, give more space to content */
+.location-drawer.drawer-collapsed + .tab-system .sidebar-content {
+  max-height: calc(100vh - 150px);
+}
+
+/* Base sidebar structure */
+.right-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  background-color: rgba(51, 51, 51, 0.95);
+  color: white;
+  z-index: 1000;
+  border-radius: 10px 0 0 10px;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+  font-family: "Roboto", sans-serif;
+  transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
+  will-change: transform, opacity;
+}
+
+/* Location drawer structure */
+.location-drawer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  transition: min-height 0.3s ease;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drawer-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.drawer-content {
+  display: block;
+  overflow-y: auto;
+}
+
+.drawer-collapsed .drawer-content {
+  display: none;
+}
+
+/* Category styling */
+.category {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.category-content {
+  display: none;
+  padding-left: 16px;
+}
+
+.category-content.open {
+  display: block;
+}
+
+/* Location items styling */
+.location-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.location-name {
+  flex: 1;
+}
+
+.visibility-toggle {
+  margin-right: 8px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+
+.visibility-toggle:hover {
+  opacity: 1;
+}
+
+.visibility-toggle.hidden {
+  opacity: 0.4;
+}
+
+/* Chevron animation */
+.fa-chevron-up {
+  transition: transform 0.3s ease;
+}
+
+.drawer-collapsed .fa-chevron-up {
+  transform: rotate(180deg);
+}
+
+/* Tab content area */
+.sidebar-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Location drawer styling */
+.location-drawer {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px; /* Default expanded height */
+  transition: min-height 0.3s ease;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Collapsed state */
+.location-drawer.drawer-collapsed {
+  min-height: 48px; /* Just show the header */
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  transition: max-height 0.3s ease;
+}
+
+.drawer-collapsed .drawer-content {
+  display: none;
+}
+
+/* Drawer header styling */
+.drawer-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(51, 51, 51, 0.95);
+}
+
+/* Chevron animation */
+.drawer-header i {
+  transition: transform 0.3s ease;
+}
+
+.drawer-collapsed .fa-chevron-up {
+  transform: rotate(180deg);
+}
+
+/* Base sidebar structure */
+.right-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Tab system container - will expand when locations list is collapsed */
+.tab-system {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: flex 0.3s ease;
+}
+
+/* Tab content area */
+.sidebar-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Location drawer styling */
+.location-drawer {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px; /* Default expanded height */
+  transition: min-height 0.3s ease;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Collapsed state */
+.location-drawer.drawer-collapsed {
+  min-height: 48px; /* Just show the header */
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  transition: max-height 0.3s ease;
+}
+
+.drawer-collapsed .drawer-content {
+  display: none;
+}
+
+/* Drawer header styling */
+.drawer-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(51, 51, 51, 0.95);
+}
+
+/* Chevron animation */
+.drawer-header i {
+  transition: transform 0.3s ease;
+}
+
+.drawer-collapsed .fa-chevron-up {
+  transform: rotate(180deg);
+}
+
+/* Drops styling */
+.drops-category {
+  margin-bottom: 16px;
+}
+
+.drops-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.category-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-count {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9em;
+}
+
+.drops-items {
+  margin-top: 8px;
+  transition: max-height 0.3s ease;
+}
+
+.drops-items.collapsed {
+  display: none;
+}
+
+.drop-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.fa-chevron-down {
+  transition: transform 0.3s ease;
+}
+
+.fa-chevron-down.rotated {
+  transform: rotate(180deg);
+}
+
+.drop-details {
+  display: none;
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drop-item.active .drop-details {
+  display: block;
+}
+
+/* Rarity badge styling */
+.rarity-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  color: white;
+}
+
+/* Source link styling */
+.source-link {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  text-decoration: none;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background-color 0.2s, transform 0.2s;
+  margin: 4px;
+}
+
+.source-link.clickable {
+  cursor: pointer;
+}
+
+.source-link.clickable:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.source-link:not(.clickable) {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Drop info grid */
+.drop-info-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 12px;
+  margin: 12px 0;
+  align-items: center;
+}
+
+.drop-result {
+  border-left: 3px solid #4CAF50;
+}
+
+.result-type {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.rarity-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  color: white;
+}
+
+.type-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9em;
+}
+
+.result-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.source-tag {
+  font-size: 0.8em;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.search-result:hover .source-tag {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Adjust spacing for drop results */
+.drop-result .search-result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drop-result .result-description {
+  margin-top: 0;
+}
+
+.child-result {
+  padding: 8px 16px 8px 32px;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 28px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.location-index {
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 24px;
+}
+
+.direction-tag {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  margin-left: auto; /* Push to the right */
+}
+
+.parent-result {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.parent-result .location-type {
+  color: #4CAF50;
+}
+
+.search-result.parent-result {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.location-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.direction-text {
+  color: rgba(255, 255, 255, 0.7);
 }

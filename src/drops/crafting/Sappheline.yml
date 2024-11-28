@@ -1,0 +1,11 @@
+name: "Sappheline"
+description: ""
+type: "Crafting Material"
+rarity: "rare"
+sources: 
+  - "Rare Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

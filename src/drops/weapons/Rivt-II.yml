@@ -1,0 +1,11 @@
+name: "Rivt-II"
+description: "Short Blades" 
+type: "weapon" 
+rarity: "common"
+sources: 
+  - "Rare Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

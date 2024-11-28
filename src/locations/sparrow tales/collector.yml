@@ -5,6 +5,7 @@ coordinates:
   - [2753, 3097]
   - [3762, 3672]
   - [2139, 4527]
+  - [2718, 3910]
 description: "Chance to spawn the Collector Sparrow Tale. Credits: ewanm89"
 icon: "fa-solid fa-scale-unbalanced"
 iconSize: 1.25

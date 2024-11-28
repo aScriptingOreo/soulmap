@@ -1,0 +1,11 @@
+name: "Sollos-I"
+description: "Long Blade" 
+type: "weapon" 
+rarity: "common"
+sources: 
+  - "Enemy Drop"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

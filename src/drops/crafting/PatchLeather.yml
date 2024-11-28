@@ -1,0 +1,12 @@
+name: "Patch Leather"
+description: ""
+type: "Crafting Material"
+rarity: "common"
+sources: 
+  - "ode chest"
+  - "ode balloon"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

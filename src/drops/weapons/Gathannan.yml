@@ -1,0 +1,11 @@
+name: "Gathannan"
+description: "Polearm, currently a myth among the community, drops may be bugged" 
+type: "weapon" 
+rarity: "extra* Rare"
+sources: 
+  - "Glade Sparrow Tales"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 
