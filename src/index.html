@@ -1,6 +1,7 @@
 <!-- src/index.html -->
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Soulmap</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -9,7 +10,8 @@
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="stylesheet" href="./styles/main.css" />
   <meta name="description" content="First interactive Soulframe map, built by the community for the community.">
-  <meta name="keywords" content="Soulframe, interactive map, game locations, Soulframe map, Soulframe locations, Soulframe dungeons, Soulframe loot, Soulframe community">
+  <meta name="keywords"
+    content="Soulframe, interactive map, game locations, Soulframe map, Soulframe locations, Soulframe dungeons, Soulframe loot, Soulframe community">
   <meta name="author" content="The Avakot Community">
 
   <!-- Open Graph / Facebook -->
@@ -23,7 +25,8 @@
   <meta property="twitter:card" content="summary_large_image">
   <meta property="twitter:url" content="">
   <meta property="twitter:title" content="Soulmap">
-  <meta property="twitter:description" content="First interactive Soulframe map, built by the community for the community.">
+  <meta property="twitter:description"
+    content="First interactive Soulframe map, built by the community for the community.">
   <meta property="twitter:image" content="">
 
   <!-- Schema.org structured data -->
@@ -48,6 +51,7 @@
   <!-- Add the favicon link -->
   <link rel="icon" href="/favicon.png" type="image/png">
 </head>
+
 <body>
   <div id="map">
     <div id="overlay"></div>
@@ -67,16 +71,23 @@
           <div class="location-description"></div>
           <div class="coordinates-display"></div>
           <div class="location-image">
-            <img id="sidebar-image" src="" alt="" style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
+            <img id="sidebar-image" src="" alt=""
+              style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
           </div>
         </div>
       </div>
       <div class="sidebar-content drops-content"></div>
     </div>
-    <div class="location-drawer drawer-collapsed">
-      <div class="drawer-content">
-        <div class="categories"></div>
-      </div>
+  </div>
+
+  <!-- Move location drawer outside the right-sidebar -->
+  <div class="location-drawer drawer-collapsed">
+    <div class="drawer-header" id="drawer-toggle">
+      <span>Locations List</span>
+      <i class="fa-solid fa-chevron-up"></i>
+    </div>
+    <div class="drawer-content">
+      <div class="categories"></div>
     </div>
   </div>
 
@@ -114,29 +125,30 @@
   </div>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script type="module" src="./index.ts"></script> <!-- Entry point -->
-    <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-      <script>
-        kofiWidgetOverlay.draw('ascriptingoreo', {
-          'type': 'floating-chat',
-          'floating-chat.donateButton.text': 'Send Love',
-          'floating-chat.donateButton.background-color': '#d9534f',
-          'floating-chat.donateButton.text-color': '#fff',
-          'floating-chat.donateButton.position.right': '20px',
-          'floating-chat.donateButton.position.bottom': '20px',
-          'floating-chat.donateButton.position': 'fixed',
-          'floating-chat.donateButton.zIndex': '1000'
-        });
-      </script>
-      <div id="discord-button">
-        <a href="https://discord.avakot.org" target="_blank" rel="noopener noreferrer">
-          <i class="fab fa-discord"></i>
-          Discord
-        </a>
-      </div>
-    <script>
+  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+  <script>
+    kofiWidgetOverlay.draw('ascriptingoreo', {
+      'type': 'floating-chat',
+      'floating-chat.donateButton.text': 'Send Love',
+      'floating-chat.donateButton.background-color': '#d9534f',
+      'floating-chat.donateButton.text-color': '#fff',
+      'floating-chat.donateButton.position.right': '20px',
+      'floating-chat.donateButton.position.bottom': '20px',
+      'floating-chat.donateButton.position': 'fixed',
+      'floating-chat.donateButton.zIndex': '1000'
+    });
+  </script>
+  <div id="discord-button">
+    <a href="https://discord.avakot.org" target="_blank" rel="noopener noreferrer">
+      <i class="fab fa-discord"></i>
+      Discord
+    </a>
+  </div>
+  <script>
     function dismissPopup() {
       document.getElementById('popup-overlay').style.display = 'none';
     }
   </script>
 </body>
+
 </html>

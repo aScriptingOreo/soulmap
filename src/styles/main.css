@@ -1,11 +1,12 @@
 /* Reset default margins and ensure full viewport coverage */
-html, body {
+html,
+body {
   height: 100vh;
   width: 100vw;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
 }
 
 /* Map base layer */
@@ -16,7 +17,7 @@ html, body {
   top: 0;
   left: 0;
   z-index: 100;
-  background: #000; 
+  background: #000;
 }
 
 /* Map tile layer */
@@ -32,7 +33,7 @@ html, body {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.1); /* 20% opacity black */
-  z-index: 101; 
+  z-index: 101;
   pointer-events: none;
 }
 
@@ -54,10 +55,10 @@ html, body {
   background-color: rgba(0, 0, 0, 0.8);
   padding: 5px 10px;
   border-radius: 4px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   font-size: 14px;
   color: #ffffff;
-  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
   z-index: 1000;
 }
 
@@ -100,7 +101,7 @@ html, body {
   overflow-y: auto;
   max-height: calc(80vh - 80px); /* Leave space for button */
   color: white;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   padding-right: 10px;
   margin-bottom: 20px;
 }
@@ -114,7 +115,7 @@ html, body {
   color: #333; /* Gray text */
   border-radius: 5px;
   cursor: pointer;
-  font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+  font-family: "Roboto", sans-serif; /* Apply Roboto font */
 }
 #popup-content button:hover {
   background-color: #ccc; /* Light gray on hover */
@@ -126,7 +127,7 @@ html, body {
   height: 100%;
   position: fixed;
   top: 0;
-  right: 0;  /* Changed from -300px */
+  right: 0; /* Changed from -300px */
   width: 300px;
   background-color: rgba(51, 51, 51, 0.95);
   color: white;
@@ -134,7 +135,7 @@ html, body {
   border-radius: 10px 0 0 10px;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
   padding: 20px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   transform: translateX(0);
   transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
   will-change: transform, opacity; /* Optimize GPU rendering */
@@ -163,7 +164,7 @@ html, body {
   border: none;
   border-radius: 50% 0 0 50%;
   background: #fff;
-  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   z-index: 1001;
   display: flex;
@@ -289,18 +290,18 @@ close-button:hover {
 }
 
 .version-box {
-    position: fixed;
-    top: 20px;
-    left: 65px;  /* Changed from 20px to 5px */
-    background: rgba(51, 51, 51, 0.95);
-    padding: 10px 15px;
-    border-radius: 8px;
-    color: white;
-    font-size: 14px;
-    z-index: 1000;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-    font-family: 'Roboto', sans-serif;
-  }
+  position: fixed;
+  top: 20px;
+  left: 65px; /* Changed from 20px to 5px */
+  background: rgba(51, 51, 51, 0.95);
+  padding: 10px 15px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-family: "Roboto", sans-serif;
+}
 
 .location-drawer {
   flex: 0 0 300px; /* Default height when expanded */
@@ -415,7 +416,7 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: 100%;
-  left: -20px;  /* Adjust this value to move results more to the left */
+  left: -20px; /* Adjust this value to move results more to the left */
   right: -200px; /* Keep this matching left for symmetry */
   margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
@@ -447,7 +448,9 @@ close-button:hover {
 }
 
 /* Maintain center alignment when sidebar is open */
-.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+.right-sidebar:not(.collapsed)
+  ~ .search-container:not(.expanded)
+  .search-results {
   width: calc(100% + 40px);
   transform: translateX(-50%); /* Keep results centered under search */
 }
@@ -458,7 +461,9 @@ close-button:hover {
   left: calc(50% - 150px); /* Adjust for sidebar being open */
 }
 
-.right-sidebar:not(.collapsed) ~ .search-container:not(.expanded) .search-results {
+.right-sidebar:not(.collapsed)
+  ~ .search-container:not(.expanded)
+  .search-results {
   width: calc(100% + 40px);
   transform: translateX(-50%); /* Keep results centered under search */
 }
@@ -488,8 +493,8 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: 100%;
-  left: 0;  /* Reset left position */
-  right: 0;  /* Reset right position */
+  left: 0; /* Reset left position */
+  right: 0; /* Reset right position */
   margin-top: 8px;
   background: rgba(51, 51, 51, 0.95);
   border-radius: 12px;
@@ -498,8 +503,8 @@ close-button:hover {
   max-height: 400px;
   overflow-y: auto;
   z-index: 1600;
-  width: 100%;  /* Make it full width of container */
-  padding: 0;   /* Reset padding */
+  width: 100%; /* Make it full width of container */
+  padding: 0; /* Reset padding */
 }
 
 .search-result {
@@ -578,7 +583,7 @@ close-button:hover {
   color: white !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   padding: 5px 10px !important;
-  font-family: 'Roboto', sans-serif !important;
+  font-family: "Roboto", sans-serif !important;
   font-size: 14px !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }
@@ -840,39 +845,39 @@ close-button:hover {
 }
 
 .debug-tile {
-    cursor: help;
-    pointer-events: all !important;
+  cursor: help;
+  pointer-events: all !important;
 }
 
 .debug-tooltip {
-    background-color: rgba(0, 0, 0, 0.8) !important;
-    border: 1px solid #ff7800 !important;
-    color: white !important;
-    padding: 5px 10px !important;
-    font-family: monospace !important;
-    font-size: 12px !important;
-    pointer-events: none;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid #ff7800 !important;
+  color: white !important;
+  padding: 5px 10px !important;
+  font-family: monospace !important;
+  font-size: 12px !important;
+  pointer-events: none;
 }
 
 .debug-outline {
-    cursor: help;
-    transition: opacity 0.2s ease;
+  cursor: help;
+  transition: opacity 0.2s ease;
 }
 
 .debug-outline:hover {
-    opacity: 1 !important;
+  opacity: 1 !important;
 }
 
 .debug-tooltip {
-    background: rgba(0, 0, 0, 0.8);
-    border: 1px solid #ff0000;
-    border-radius: 4px;
-    color: white;
-    padding: 5px 8px;
-    font-family: monospace;
-    font-size: 12px;
-    white-space: nowrap;
-    pointer-events: none;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #ff0000;
+  border-radius: 4px;
+  color: white;
+  padding: 5px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .development-overlay {
@@ -946,7 +951,7 @@ close-button:hover {
   border: none;
   border-radius: 50% 0 0 50%;
   background: #fff;
-  box-shadow: -2px 0 4px rgba(0,0,0,0.2);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   z-index: 1001;
   display: flex;
@@ -1014,7 +1019,7 @@ close-button:hover {
 .loading-progress {
   width: 0%;
   height: 100%;
-  background: #4CAF50;
+  background: #4caf50;
   transition: width 0.3s ease;
 }
 
@@ -1024,18 +1029,17 @@ close-button:hover {
   font-size: 14px;
 }
 
-
 .smooth-zoom {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
 }
 
 .leaflet-zoom-animated {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
   will-change: transform;
 }
 
 .leaflet-zoom-anim .leaflet-zoom-animated {
-  transition: transform 0.25s cubic-bezier(0,0,0.25,1);
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
   will-change: transform;
 }
 
@@ -1100,7 +1104,7 @@ close-button:hover {
 .search-results {
   position: absolute;
   top: calc(100% + 8px);
-  left: 21px;  /* Default left offset for normal state */
+  left: 21px; /* Default left offset for normal state */
   right: 0; /* Default right offset for normal state */
   margin-top: 1px;
   background: rgba(51, 51, 51, 0.95);
@@ -1145,73 +1149,73 @@ close-button:hover {
 
 /* Style for highlighted text */
 mark {
-    background-color: rgba(255, 255, 0, 0.3);
-    color: inherit;
-    padding: 0 2px;
-    border-radius: 2px;
+  background-color: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Style for multiple location entries */
 .search-result[data-coord-index]:not([data-coord-index="0"]) {
-    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 .search-result .result-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Main search result */
 .search-result {
-    display: grid;
-    grid-template-columns: 32px 1fr auto;
-    gap: 12px;
-    padding: 12px 16px;
-    cursor: pointer;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    align-items: center;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
 }
 
 /* Child result styling */
 .child-result {
-    display: grid;
-    grid-template-columns: 1fr;
-    padding: 8px 16px 8px 48px; /* Increased left padding for indentation */
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: none;
-    position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  padding: 8px 16px 8px 48px; /* Increased left padding for indentation */
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: none;
+  position: relative;
 }
 
 /* Add visual connector for child items */
 .child-result::before {
-    content: '--';
-    position: absolute;
-    left: 32px;
-    color: rgba(255, 255, 255, 0.3);
+  content: "--";
+  position: absolute;
+  left: 32px;
+  color: rgba(255, 255, 255, 0.3);
 }
 
 /* Adjust spacing between parent and children */
 .search-result + .child-result {
-    margin-top: 2px;
+  margin-top: 2px;
 }
 
 /* Last child needs bottom border */
 .child-result:last-of-type {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Hover states */
 .child-result:hover {
-    background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 /* Highlighted text */
 mark {
-    background-color: rgba(255, 255, 0, 0.3);
-    color: inherit;
-    padding: 0 2px;
-    border-radius: 2px;
+  background-color: rgba(255, 255, 0, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .marker-modal {
@@ -1299,21 +1303,21 @@ mark {
 }
 
 .custom-category-empty {
-    display: flex;
-    align-items: center;
-    padding: 12px 20px;
-    color: rgba(255, 255, 255, 0.7);
-    font-style: italic;
-    gap: 10px;
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  gap: 10px;
 }
 
 .custom-category-empty i {
-    font-size: 16px;
-    opacity: 0.7;
+  font-size: 16px;
+  opacity: 0.7;
 }
 
 .custom-category-empty span {
-    font-size: 14px;
+  font-size: 14px;
 }
 
 .child-result {
@@ -1352,18 +1356,18 @@ mark {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background-color: #5865F2; /* Discord brand color */
+  background-color: #5865f2; /* Discord brand color */
   color: white;
   text-decoration: none;
   border-radius: 24px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   font-size: 14px;
   transition: background-color 0.3s ease;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 #discord-button a:hover {
-  background-color: #4752C4; /* Darker shade for hover */
+  background-color: #4752c4; /* Darker shade for hover */
 }
 
 #discord-button i {
@@ -1505,7 +1509,7 @@ mark {
 }
 
 .source-link {
-  color: #4CAF50;
+  color: #4caf50;
   text-decoration: none;
   padding: 4px 8px;
   background: rgba(76, 175, 80, 0.1);
@@ -1661,7 +1665,7 @@ mark {
   border-radius: 10px 0 0 10px;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
   padding: 20px;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s linear 0.3s;
   will-change: transform, opacity;
 }
@@ -1947,4 +1951,49 @@ mark {
 
 .drop-item.active .drop-details {
   display: block;
+}
+
+/* Rarity badge styling */
+.rarity-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  color: white;
+}
+
+/* Source link styling */
+.source-link {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  text-decoration: none;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background-color 0.2s, transform 0.2s;
+  margin: 4px;
+}
+
+.source-link.clickable {
+  cursor: pointer;
+}
+
+.source-link.clickable:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.source-link:not(.clickable) {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Drop info grid */
+.drop-info-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 12px;
+  margin: 12px 0;
+  align-items: center;
 }
