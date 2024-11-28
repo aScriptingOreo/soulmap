@@ -1,0 +1,12 @@
+name: "Eldore"
+description: "Used in Weapons(+3)"
+type: "Joinery"
+rarity: "rare"
+sources: 
+  - "Banneret Guarded Chests"
+  - "Rare Chests"
+
+# Optional
+iconUrl: "fa-solid fa-fire"
+iconColor: "#fb8c1e"
+imgUrl: 

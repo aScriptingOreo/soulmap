@@ -1,0 +1,12 @@
+name: "Ode Graphite"
+description: ""
+type: "Crafting Material"
+rarity: "uncommon"
+sources: 
+  - "Overworld"
+  - "Glades chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 
