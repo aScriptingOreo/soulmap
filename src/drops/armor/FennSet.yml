@@ -3,7 +3,8 @@ description: ""
 type: "Armor" 
 rarity: "rare"
 sources: 
-  - "Rare/Uncommon Dermak Chests"
+  - "Rare Dermak Chests"
+  - "Uncommon Dermak Chests"
 
 # Optional
 iconUrl: 

@@ -9,7 +9,7 @@ function isValidDrop(drop: any): drop is ItemDrop {
     typeof drop.type === 'string' &&
     typeof drop.rarity === 'string' &&
     Array.isArray(drop.sources) &&
-    drop.sources.every(source => typeof source === 'string')
+    drop.sources.every((source: any) => typeof source === 'string')
   );
 }
 
@@ -20,7 +20,7 @@ export async function loadDrops(): Promise<DropsIndex> {
   await Promise.all(
     Object.entries(importDrops).map(async ([path, importFn]) => {
       try {
-        const module = await importFn();
+        const module = await importFn() as { default: any };
         const category = path.split('/')[1]; // general, weapons, etc.
         
         // Validate the drop data before adding

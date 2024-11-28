@@ -221,27 +221,15 @@ export class Sidebar {
     const drawerHeader = document.createElement("div");
     drawerHeader.className = "drawer-header";
     drawerHeader.id = "drawer-toggle";
-    drawerHeader.innerHTML = `
-    <span>Locations List</span>
-    <i class="fa-solid fa-chevron-up"></i>
-  `;
+    drawerHeader.innerHTML = `<span>Locations List</span>`;
 
     const drawerContainer = document.createElement("div");
-    drawerContainer.className = "location-drawer drawer-collapsed"; // Add drawer-collapsed class
+    drawerContainer.className = "location-drawer";
     drawerContainer.appendChild(drawerHeader);
     drawerContainer.appendChild(locationsList);
 
     // Add drawer to sidebar
     this.element.appendChild(drawerContainer);
-
-    // Initialize drawer toggle with collapsed state
-    drawerHeader.addEventListener("click", () => {
-      drawerContainer.classList.toggle("drawer-collapsed");
-      drawerHeader.querySelector("i")?.classList.toggle("fa-chevron-up");
-      drawerHeader.querySelector("i")?.classList.toggle("fa-chevron-down");
-      // Trigger resize event to update tab content size
-      window.dispatchEvent(new Event("resize"));
-    });
 
     // Store reference to location drawer
     this.locationDrawer = drawerContainer;
@@ -1172,103 +1160,105 @@ export class Sidebar {
 
   private async createDropsInterface(): Promise<void> {
     const drops = await loadDrops();
-
+    
     Object.entries(drops).forEach(([category, items]) => {
-      const categoryContainer = document.createElement("div");
-      categoryContainer.className = "drops-category";
-
-      const categoryHeader = document.createElement("div");
-      categoryHeader.className = "drops-category-header";
-
-      // Add chevron, category name and item count
+      const categoryContainer = document.createElement('div');
+      categoryContainer.className = 'drops-category';
+      
+      const categoryHeader = document.createElement('div');
+      categoryHeader.className = 'drops-category-header';
+      
       categoryHeader.innerHTML = `
-      <div class="category-title">
-        <span>${category}</span>
-        <span class="item-count">(${items.length})</span>
-      </div>
-      <i class="fa-solid fa-chevron-down"></i>
-    `;
-
-      const itemsList = document.createElement("div");
-      itemsList.className = "drops-items collapsed"; // Start collapsed
-
-      items.forEach((item) => {
-        const itemElement = document.createElement("div");
-        itemElement.className = "drop-item";
-
-        const headerElement = document.createElement("div");
-        headerElement.className = "drop-header";
-        headerElement.innerHTML = `
-        <div class="drop-icon">
-          ${
-            item.iconUrl
-              ? `<img src="${item.iconUrl}" alt="">`
-              : `<i class="fa-solid fa-box" style="color: ${
-                  item.iconColor || "#FFFFFF"
-                }"></i>`
-          }
+        <div class="category-title">
+          <span>${category}</span>
+          <span class="item-count">(${items.length})</span>
         </div>
-        <div class="drop-title">${item.name}</div>
         <i class="fa-solid fa-chevron-down"></i>
       `;
-
-        const detailsElement = document.createElement("div");
-        detailsElement.className = "drop-details";
-        detailsElement.innerHTML = `
-        <div class="drop-description">${item.description}</div>
-        <div class="drop-info-grid">
-          <div class="drop-type">Type: ${item.type}</div>
-          <div class="drop-rarity">
-            <span class="rarity-badge" style="background-color: ${this.getRarityColor(
-              item.rarity
-            )}">
-              ${item.rarity}
-            </span>
+      
+      const itemsList = document.createElement('div');
+      itemsList.className = 'drops-items collapsed';
+      
+      items.forEach(item => {
+        const itemElement = document.createElement('div');
+        itemElement.className = 'drop-item';
+        
+        const headerElement = document.createElement('div');
+        headerElement.className = 'drop-header';
+  
+        // Create icon element based on icon type
+        let iconHtml = '';
+        if (item.icon) {
+          if (item.icon.startsWith('fa-')) {
+            const size = item.iconSize || 1;
+            iconHtml = `<i class="${item.icon}" style="font-size: ${24 * size}px; color: ${item.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
+          } else {
+            const size = item.iconSize || 1;
+            iconHtml = `<img src="${item.icon}.svg" style="width: ${24 * size}px; height: ${24 * size}px;" alt="">`;
+          }
+        } else {
+          // Default icon if none specified
+          iconHtml = `<i class="fa-solid fa-box" style="color: ${item.iconColor || '#FFFFFF'}"></i>`;
+        }
+  
+        headerElement.innerHTML = `
+          <div class="drop-icon">
+            ${iconHtml}
           </div>
-        </div>
-        <div class="drop-sources">
-          <div class="sources-title">Sources:</div>
-          <div class="sources-list">
-            ${item.sources
-              .map((source) => {
+          <div class="drop-title">${item.name}</div>
+          <i class="fa-solid fa-chevron-down"></i>
+        `;
+  
+        const detailsElement = document.createElement('div');
+        detailsElement.className = 'drop-details';
+        detailsElement.innerHTML = `
+          <div class="drop-description">${item.description}</div>
+          <div class="drop-info-grid">
+            <div class="drop-type">Type: ${item.type}</div>
+            <div class="drop-rarity">
+              <span class="rarity-badge" style="background-color: ${this.getRarityColor(item.rarity)}">
+                ${item.rarity}
+              </span>
+            </div>
+          </div>
+          <div class="drop-sources">
+            <div class="sources-title">Sources:</div>
+            <div class="sources-list">
+              ${item.sources.map(source => {
                 const linkColor = this.getLinkColor(source);
-                const isClickable = this.locations.some(
-                  (loc) => loc.name.toLowerCase() === source.toLowerCase()
+                const isClickable = this.locations.some(loc => 
+                  loc.name.toLowerCase() === source.toLowerCase()
                 );
                 return `
-                <a href="#" 
-                   class="source-link ${isClickable ? "clickable" : ""}" 
-                   data-source="${source}"
-                   style="color: ${linkColor}; border-color: ${linkColor}">
-                  ${source}
-                </a>`;
-              })
-              .join("")}
+                  <a href="#" 
+                     class="source-link ${isClickable ? 'clickable' : ''}" 
+                     data-source="${source}"
+                     style="color: ${linkColor}; border-color: ${linkColor}">
+                    ${source}
+                  </a>`;
+              }).join('')}
+            </div>
           </div>
-        </div>
-      `;
-
+        `;
+  
+        // Rest of the existing code...
         itemElement.appendChild(headerElement);
         itemElement.appendChild(detailsElement);
-
-        // Handle item click to expand/collapse
-        headerElement.addEventListener("click", (e) => {
+        
+        // Existing event listeners...
+        headerElement.addEventListener('click', (e) => {
           e.stopPropagation();
-          itemElement.classList.toggle("active");
-          const chevron = headerElement.querySelector(".fa-chevron-down");
+          itemElement.classList.toggle('active');
+          const chevron = headerElement.querySelector('.fa-chevron-down');
           if (chevron) {
-            chevron.classList.toggle("rotated");
+            chevron.classList.toggle('rotated');
           }
-
-          // Handle marker visibility
-          if (itemElement.classList.contains("active")) {
-            // Close other items first
-            itemsList.querySelectorAll(".drop-item").forEach((el) => {
+          
+          if (itemElement.classList.contains('active')) {
+            itemsList.querySelectorAll('.drop-item').forEach(el => {
               if (el !== itemElement) {
-                el.classList.remove("active");
-                el.querySelector(".fa-chevron-down")?.classList.remove(
-                  "rotated"
-                );
+                el.classList.remove('active');
+                el.querySelector('.fa-chevron-down')?.classList.remove('rotated');
               }
             });
             this.toggleDropLocations(item);
@@ -1276,38 +1266,19 @@ export class Sidebar {
             this.resetMarkersVisibility();
           }
         });
-
-        // Handle source links
-        detailsElement.querySelectorAll(".source-link").forEach((link) => {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const sourceName = link.getAttribute("data-source");
-            const location = this.locations.find(
-              (loc) => loc.name.toLowerCase() === sourceName?.toLowerCase()
-            );
-
-            if (location) {
-              const coords = Array.isArray(location.coordinates[0])
-                ? location.coordinates[0]
-                : (location.coordinates as [number, number]);
-
-              this.handleLocationClick(coords, location);
-            }
-          });
-        });
-
+  
         itemsList.appendChild(itemElement);
       });
-
+  
       // Category collapse/expand functionality
-      categoryHeader.addEventListener("click", () => {
-        itemsList.classList.toggle("collapsed");
-        const chevron = categoryHeader.querySelector(".fa-chevron-down");
+      categoryHeader.addEventListener('click', () => {
+        itemsList.classList.toggle('collapsed');
+        const chevron = categoryHeader.querySelector('.fa-chevron-down');
         if (chevron) {
-          chevron.classList.toggle("rotated");
+          chevron.classList.toggle('rotated');
         }
       });
-
+      
       categoryContainer.appendChild(categoryHeader);
       categoryContainer.appendChild(itemsList);
       this.dropsContent.appendChild(categoryContainer);
