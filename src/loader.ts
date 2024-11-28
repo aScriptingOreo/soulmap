@@ -1,15 +1,39 @@
 // src/loader.ts
 import type { Location, VersionInfo } from './types';
+import localforage from 'localforage';
 
-const CACHE_KEY = 'soulmap_locations_cache';
-// Remove the hardcoded version and import from mapversion.yml
-let CACHE_VERSION: string;
+const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
+
+// Initialize localforage instance for locations
+const locationStore = localforage.createInstance({
+  name: 'soulmap-locations',
+  description: 'Cache for location data',
+  driver: [
+    localforage.INDEXEDDB,
+    localforage.WEBSQL,
+    localforage.LOCALSTORAGE
+  ],
+  storeName: 'locations' // Add explicit store name
+});
 
 export async function loadLocations(): Promise<(Location & { type: string })[]> {
   try {
-    // Load version first
+    await locationStore.ready(); // Ensure store is ready
+
+    // Try to load cached data first
+    const cachedData = await locationStore.getItem<{
+      version: string, 
+      data: (Location & { type: string })[]
+    }>(LOCATIONS_CACHE_KEY);
+    
     const versionModule = await import('./mapversion.yml');
-    CACHE_VERSION = versionModule.default.game_version;
+    const currentVersion = versionModule.default.game_version;
+
+    // Use cached data if versions match
+    if (cachedData && cachedData.version === currentVersion) {
+      console.log('Using cached locations data');
+      return cachedData.data;
+    }
 
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
@@ -32,7 +56,7 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
 
     updateProgress(0, 'Loading location data...');
 
-    // Load and process locations
+    // If no cache or version mismatch, load from files
     const importLocations = import.meta.glob('./locations/*/*.y?(a)ml');
     const totalFiles = Object.keys(importLocations).length;
     let loaded = 0;
@@ -57,16 +81,25 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
     );
 
     updateProgress(50, 'Initializing map...');
-    return locations.filter((loc): loc is Location & { type: string } => loc !== null);
+    const validLocations = locations.filter((loc): loc is Location & { type: string } => loc !== null);
 
+    // Cache the new data
+    await locationStore.setItem(LOCATIONS_CACHE_KEY, {
+      version: currentVersion,
+      data: validLocations
+    });
+
+    return validLocations;
   } catch (error) {
     console.error("Error loading location files:", error);
     throw error; // Let the error propagate to show in the UI
   }
 }
 
-// Add a function to clear the cache if needed
-export function clearLocationsCache(): void {
-  localStorage.removeItem(CACHE_KEY);
-  localStorage.removeItem(`${CACHE_KEY}_version`);
+export async function clearLocationsCache(): Promise<void> {
+  try {
+    await locationStore.removeItem(LOCATIONS_CACHE_KEY);
+  } catch (error) {
+    console.error('Error clearing locations cache:', error);
+  }
 }

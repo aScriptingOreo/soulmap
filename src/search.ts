@@ -1,4 +1,4 @@
-import type { Location } from './types';
+import type { ItemDrop, Location } from './types';
 import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
 import { loadDrops } from './drops/dropsLoader';
@@ -79,7 +79,7 @@ export async function initializeSearch(locations: (Location & { type: string })[
         .slice(0, 8)
         .map((result, index) => {
           if (result.type === 'location') {
-            return renderLocationResult(result.location!, index, selectedIndex);
+            return renderLocationResult(result.location!, index, selectedIndex, locations);
           } else {
             return renderDropResult(result.drop!, index, selectedIndex);
           }
@@ -164,64 +164,48 @@ export async function initializeSearch(locations: (Location & { type: string })[
     return results.sort((a, b) => b.score - a.score);
   }
 
-  function updateResults(results: SearchResult[]) {
-    if (results.length > 0) {
-        resultsContainer.innerHTML = results
-            .slice(0, 8)
-            .map((result, index) => {
-                if (result.type === 'location') {
-                    return renderLocationResult(result.location!, index, selectedIndex);
-                } else {
-                    return renderDropResult(result.drop!, index, selectedIndex);
-                }
-            })
-            .join('');
-    } else {
-        resultsContainer.innerHTML = '<div class="no-results">No locations found</div>';
-    }
-    resultsContainer.style.display = 'block';
-}
+// Removed duplicate updateResults function
 
   function selectLocation(location: Location & { type: string }, coordIndex?: number) {
     const coords = Array.isArray(location.coordinates[0]) 
-        ? (coordIndex !== undefined 
-            ? location.coordinates[coordIndex] 
-            : location.coordinates[0]) as [number, number]
-        : location.coordinates as [number, number];
+      ? (coordIndex !== undefined 
+          ? location.coordinates[coordIndex] 
+          : location.coordinates[0]) as [number, number]
+      : location.coordinates as [number, number];
 
     map.setView([coords[1], coords[0]], map.getZoom());
 
     // Update URL with location parameter and index if applicable
     const encodedLocation = encodeURIComponent(location.name);
     const urlParams = coordIndex !== undefined 
-        ? `?loc=${encodedLocation}&index=${coordIndex}` 
-        : `?loc=${encodedLocation}`;
+      ? `?loc=${encodedLocation}&index=${coordIndex}` 
+      : `?loc=${encodedLocation}`;
     window.history.replaceState({}, '', urlParams);
 
     // Find and trigger correct marker
     const marker = markers.find(m => {
-        const pos = m.getLatLng();
-        const markerContent = m.getTooltip()?.getContent();
-        if (coordIndex !== undefined) {
-            // For multi-location items, match both position and index
-            return pos.lat === coords[1] && 
-                   pos.lng === coords[0] && 
-                   markerContent?.includes(`#${coordIndex + 1}`);
-        }
-        return pos.lat === coords[1] && pos.lng === coords[0];
+      const pos = m.getLatLng();
+      const markerContent = m.getTooltip()?.getContent();
+      if (coordIndex !== undefined) {
+        // For multi-location items, match both position and index
+        return pos.lat === coords[1] && 
+               pos.lng === coords[0] && 
+               typeof markerContent === 'string' && markerContent.includes(`#${coordIndex + 1}`);
+      }
+      return pos.lat === coords[1] && pos.lng === coords[0];
     });
 
     if (marker) {
-        document.querySelectorAll('.custom-location-icon.selected').forEach((el) => {
-            el.classList.remove('selected');
-        });
-        marker.getElement()?.classList.add('selected');
-        marker.fire('click');
+      document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
+        el.classList.remove('selected');
+      });
+      marker.getElement()?.classList.add('selected');
+      marker.fire('click');
     }
 
     // Close search after selection
     closeSearch();
-}
+  }
 
 function selectResult(result: SearchResult) {
     if (result.type === 'location' && result.location) {
@@ -238,7 +222,7 @@ function selectResult(result: SearchResult) {
           const dropItem = Array.from(document.querySelectorAll('.drop-item'))
             .find(el => el.querySelector('.drop-title')?.textContent === result.drop?.name);
           if (dropItem) {
-            dropItem.querySelector('.drop-header')?.click();
+            (dropItem.querySelector('.drop-header') as HTMLElement)?.click();
             dropItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }, 100);
@@ -392,37 +376,59 @@ function highlightText(text: string, query?: string): string {
 }
 
 // Add this function before updateResults
-function renderLocationResult(location: Location & { type: string }, index: number, selectedIndex: number): string {
+function renderLocationResult(location: Location & { type: string }, index: number, selectedIndex: number, allLocations: (Location & { type: string })[]): string {
   const isMultiLocation = Array.isArray(location.coordinates[0]);
   let result = '';
 
   if (isMultiLocation) {
-    // Render each coordinate as a separate result
-    (location.coordinates as [number, number][]).forEach((coord, coordIndex) => {
+    // Create parent result without index
+    result = `
+      <div class="search-result parent-result ${index === selectedIndex ? 'selected' : ''}" 
+           data-type="location"
+           data-name="${location.name}">
+        <div class="search-result-icon">
+          ${location.icon?.startsWith('fa-') 
+            ? `<i class="${location.icon}" style="color: ${location.iconColor || '#FFFFFF'}"></i>`
+            : `<img src="${location.icon}.svg" alt="">`}
+        </div>
+        <div class="search-result-content">
+          <div class="result-name">${highlightText(location.name)}</div>
+          ${location.description 
+            ? `<div class="result-description">${highlightText(location.description)}</div>` 
+            : ''}
+        </div>
+      </div>`;
+
+    // Add all locations including the first one as child items
+    (location.coordinates as [number, number][]).forEach((coord, idx) => {
+      const namedLocations = allLocations.filter(loc => loc.type === 'location');
+      const nearestLocation = namedLocations.reduce((nearest, loc) => {
+        const locCoords = loc.coordinates as [number, number];
+        const currentDist = Math.hypot(coord[0] - locCoords[0], coord[1] - locCoords[1]);
+        const nearestDist = Math.hypot(
+          coord[0] - (nearest.coordinates as [number, number])[0],
+          coord[1] - (nearest.coordinates as [number, number])[1]
+        );
+        return currentDist < nearestDist ? loc : nearest;
+      }, namedLocations[0]);
+
+      const direction = nearestLocation 
+        ? `${getRelativeDirection(coord, nearestLocation.coordinates as [number, number])} of ${nearestLocation.name}`
+        : '';
+      
       result += `
-        <div class="search-result ${index === selectedIndex ? 'selected' : ''}" 
+        <div class="search-result child-result ${index === selectedIndex ? 'selected' : ''}" 
              data-type="location"
              data-name="${location.name}"
-             data-coord-index="${coordIndex}">
-          <div class="search-result-icon">
-            ${location.icon?.startsWith('fa-') 
-              ? `<i class="${location.icon}" style="color: ${location.iconColor || '#FFFFFF'}"></i>`
-              : `<img src="${location.icon}.svg" alt="">`}
-          </div>
-          <div class="search-result-content">
-            <div class="result-name">
-              ${highlightText(location.name)} #${coordIndex + 1}
-              ${location.type !== 'location' 
-                ? `<span class="location-type">${location.type}</span>` 
-                : ''}
-            </div>
-            ${location.description 
-              ? `<div class="result-description">${highlightText(location.description)}</div>` 
-              : ''}
+             data-coord-index="${idx}">
+          <div class="location-ref">
+            <span class="location-index">#${idx + 1}</span>
+            ${direction ? `<span class="direction-text">${direction}</span>` : ''}
           </div>
         </div>`;
     });
   } else {
+    // Single location rendering
     result = `
       <div class="search-result ${index === selectedIndex ? 'selected' : ''}" 
            data-type="location"
@@ -470,4 +476,21 @@ function findNearestLocationMarker(coords: [number, number], allLocations: (Loca
 
         return currentDist < nearestDist ? loc : nearest;
     });
+}
+
+function findNearestNamedLocation(coords: [number, number], locations: (Location & { type: string })[]): Location & { type: string } | null {
+  // Filter for location type markers only (those in locations/location/*.yml)
+  const locationMarkers = locations.filter(loc => loc.type === 'location');
+  
+  if (locationMarkers.length === 0) return null;
+
+  return locationMarkers.reduce((nearest, loc) => {
+    const locCoords = loc.coordinates as [number, number]; // Location markers are always single point
+    const currentDist = Math.hypot(coords[0] - locCoords[0], coords[1] - locCoords[1]);
+    
+    const nearestCoords = nearest.coordinates as [number, number];
+    const nearestDist = Math.hypot(coords[0] - nearestCoords[0], coords[1] - nearestCoords[1]);
+
+    return currentDist < nearestDist ? loc : nearest;
+  });
 }
