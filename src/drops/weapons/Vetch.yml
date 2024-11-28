@@ -1,0 +1,12 @@
+name: "Vetch"
+description: "Long Blade" 
+type: "weapon" 
+rarity: "uncommon"
+sources: 
+  - "Overworld Sparrow's Tales"
+  - "Dermak Sparrow's Tales"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

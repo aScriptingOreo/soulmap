@@ -1,0 +1,12 @@
+name: "Rook"
+description: "Polearm" 
+type: "weapon" 
+rarity: "common"
+sources: 
+  - "Vadagar Stag"
+  - "Glade Sparrow Tales"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

@@ -1,0 +1,12 @@
+name: "Knotwood" #this is the name of the item
+description: "Crafting Item" #this is the description of the item, it will be displayed under the item's name
+type: "general" #this can be anything, you will group items by this type
+rarity: "common" #this is an indicator of how rare an item is, it's just a string without a set defined possibilities
+sources: #These will be references to the names of the locations declared in ./src/locations/**/*.yml
+  - "ode chest"
+  - "ode balloon"
+
+# Optional
+iconUrl: #similar handling to the ./src/locations/**/*.yml, this is the url of the image that will be displayed for the item
+iconColor: #similar handling to the ./src/locations/**/*.yml, this is the color of the image that will be displayed for the item
+imgUrl: #similar handling to the ./src/locations/**/*.yml, this is the url of the image that will be displayed for the item

@@ -59,17 +59,21 @@
     <img id="dropdown-image" src="" alt="Imagem da Localização" style="max-width: 200px; max-height: 200px;">
   </div>
   <div class="right-sidebar">
-    <div class="location-title"></div>
-    <div class="location-description"></div>
-    <div class="coordinates-display"></div>
-    <div class="location-image">
-      <img id="sidebar-image" src="" alt="" style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
-    </div>
-    <div class="location-drawer">
-      <div class="drawer-header" id="drawer-toggle">
-        <span>Locations List</span>
-        <i class="fa-solid fa-chevron-up"></i>
+    <div class="tab-system">
+      <div class="sidebar-tabs"></div>
+      <div class="sidebar-content location-info active">
+        <div class="location-info-container">
+          <div class="location-title"></div>
+          <div class="location-description"></div>
+          <div class="coordinates-display"></div>
+          <div class="location-image">
+            <img id="sidebar-image" src="" alt="" style="max-width: 100%; height: auto; display: none; margin-top: 10px; border-radius: 5px;">
+          </div>
+        </div>
       </div>
+      <div class="sidebar-content drops-content"></div>
+    </div>
+    <div class="location-drawer drawer-collapsed">
       <div class="drawer-content">
         <div class="categories"></div>
       </div>

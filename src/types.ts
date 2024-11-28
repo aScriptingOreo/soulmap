@@ -23,3 +23,18 @@ export interface CustomMarkerStorage {
   version: string;
   markers: CustomMarker[];
 }
+
+export interface ItemDrop {
+  name: string;
+  description: string;
+  type: string;
+  rarity: string;
+  sources: string[];
+  iconUrl?: string;
+  iconColor?: string;
+  imgUrl?: string;
+}
+
+export interface DropsIndex {
+  [key: string]: ItemDrop[];
+}

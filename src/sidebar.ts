@@ -1,7 +1,8 @@
 import * as L from 'leaflet';
-import type { Location } from './types';
+import type { Location, ItemDrop } from './types';
 import { generateLocationHash, getRelativeDirection } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
+import { loadDrops, findDropLocations } from './drops/dropsLoader'; // Add this import
 
 export interface SidebarOptions {
   element: HTMLElement;
@@ -32,6 +33,8 @@ export class Sidebar {
   private initializationPromise: Promise<void> | null = null;
   private customMarkerService: CustomMarkerService;
   private hasCustomCategory: boolean = false; // Add this flag
+  private dropsContent!: HTMLElement; // Add this property
+  private locationContent!: HTMLElement; // Add this property
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -127,16 +130,11 @@ export class Sidebar {
   }
 
   private async initialize(): Promise<void> {
-    // Initialize elements synchronously
     this.initializeElements();
-    
-    // Load cached visibility state if available
+    this.createTabInterface(); // Add this
     await this.loadVisibilityState();
-    
-    // Initialize components asynchronously
     await this.initializeComponentsAsync();
-    
-    // Mark as initialized
+    await this.createDropsInterface(); // Add this
     this.initialized = true;
 
     // Always show loaded state
@@ -173,38 +171,68 @@ private findClosestLocation(coords: [number, number]): (Location & { type: strin
   }
 
   private async initializeComponentsAsync(): Promise<void> {
-    // Group locations by type first
-    const groupedLocations = this.locations.reduce((acc, location) => {
-      if (!acc[location.type]) acc[location.type] = [];
-      acc[location.type].push(location);
-      return acc;
-    }, {} as Record<string, (Location & { type: string })[]>);
+  // Create the locations list container
+  const locationsList = document.createElement('div');
+  locationsList.className = 'locations-list drawer-content';
 
-    // Initialize handlers that don't depend on DOM creation
-    this.initializeImageHandlers();
+  // Create the categories container
+  const categoriesContainer = document.createElement('div');
+  categoriesContainer.className = 'categories';
+  locationsList.appendChild(categoriesContainer);
 
-    // Create location drawer elements asynchronously in chunks
-    const categoriesContainer = this.element.querySelector('.categories') as HTMLElement;
-    const chunkSize = 10; // Process 10 categories at a time
+  // Group locations by type
+  const groupedLocations = this.locations.reduce((acc, location) => {
+    if (!acc[location.type]) acc[location.type] = [];
+    acc[location.type].push(location);
+    return acc;
+  }, {} as Record<string, (Location & { type: string })[]>);
 
-    for (let i = 0; i < Object.entries(groupedLocations).length; i += chunkSize) {
-      const chunk = Object.entries(groupedLocations).slice(i, i + chunkSize);
-      await new Promise<void>(resolve => {
-        requestAnimationFrame(() => {
-          chunk.forEach(([category, items]) => {
-            this.createCategorySection(category, items, categoriesContainer);
-          });
-          resolve();
+  // Initialize handlers that don't depend on DOM creation
+  this.initializeImageHandlers();
+
+  // Create location drawer elements asynchronously in chunks
+  const chunkSize = 10;
+  for (let i = 0; i < Object.entries(groupedLocations).length; i += chunkSize) {
+    const chunk = Object.entries(groupedLocations).slice(i, i + chunkSize);
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => {
+        chunk.forEach(([category, items]) => {
+          this.createCategorySection(category, items, categoriesContainer);
         });
+        resolve();
       });
-    }
-
-    // Initialize drawer toggle after all elements are created
-    const drawerToggle = this.element.querySelector('#drawer-toggle') as HTMLElement;
-    drawerToggle?.addEventListener('click', () => {
-      this.locationDrawer.classList.toggle('drawer-collapsed');
     });
   }
+
+  // Create drawer container with header
+  const drawerHeader = document.createElement('div');
+  drawerHeader.className = 'drawer-header';
+  drawerHeader.id = 'drawer-toggle';
+  drawerHeader.innerHTML = `
+    <span>Locations List</span>
+    <i class="fa-solid fa-chevron-up"></i>
+  `;
+
+  const drawerContainer = document.createElement('div');
+  drawerContainer.className = 'location-drawer drawer-collapsed'; // Add drawer-collapsed class
+  drawerContainer.appendChild(drawerHeader);
+  drawerContainer.appendChild(locationsList);
+
+  // Add drawer to sidebar
+  this.element.appendChild(drawerContainer);
+
+  // Initialize drawer toggle with collapsed state
+  drawerHeader.addEventListener('click', () => {
+    drawerContainer.classList.toggle('drawer-collapsed');
+    drawerHeader.querySelector('i')?.classList.toggle('fa-chevron-up');
+    drawerHeader.querySelector('i')?.classList.toggle('fa-chevron-down');
+    // Trigger resize event to update tab content size
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  // Store reference to location drawer
+  this.locationDrawer = drawerContainer;
+}
 
   // Update this method to ensure initialization before updating content
   async updateContent(location: Location & { type: string } | null, x: number, y: number) {
@@ -646,16 +674,29 @@ private calculateAnimationDuration(distance: number): number {
 }
 
   private async toggleMarkerVisibility(locationName: string, toggleElement: HTMLElement): Promise<void> {
-    const isVisible = this.visibleMarkers.has(locationName);
-    
-    this.markers.forEach(marker => {
+    const markerElement = toggleElement.closest('.location-item');
+    const index = markerElement?.querySelector('.location-name')?.textContent?.includes('#') 
+        ? parseInt(markerElement.querySelector('.location-name')?.textContent?.split('#')[1] || '1') - 1
+        : undefined;
+    const markerKey = index !== undefined ? `${locationName}-${index}` : locationName;
+    const isVisible = this.visibleMarkers.has(markerKey);
+
+    // Find the specific marker
+    const marker = this.markers.find(m => {
+        const pos = m.getLatLng();
+        const markerContent = m.getTooltip()?.getContent();
+        if (index !== undefined) {
+            // For multi-location items, match both position and index
+            return markerContent?.includes(`${locationName} #${index + 1}`);
+        }
+        return markerContent === locationName;
+    });
+
+    if (marker) {
         const markerElement = marker.getElement();
-        if (!markerElement) return;
-        
-        const markerLocation = markerElement.getAttribute('data-location');
-        if (markerLocation === locationName) {
+        if (markerElement) {
             if (isVisible) {
-                // Hide marker and its uncertainty circle
+                // Hide marker
                 markerElement.style.display = 'none';
                 if ((marker as any).uncertaintyCircle) {
                     (marker as any).uncertaintyCircle.setStyle({ 
@@ -663,11 +704,11 @@ private calculateAnimationDuration(distance: number): number {
                         fillOpacity: 0 
                     });
                 }
-                this.visibleMarkers.delete(locationName);
+                this.visibleMarkers.delete(markerKey);
                 toggleElement.textContent = 'visibility_off';
                 toggleElement.classList.add('hidden');
             } else {
-                // Show marker and its uncertainty circle
+                // Show marker
                 markerElement.style.display = '';
                 if ((marker as any).uncertaintyCircle) {
                     (marker as any).uncertaintyCircle.setStyle({ 
@@ -675,14 +716,14 @@ private calculateAnimationDuration(distance: number): number {
                         fillOpacity: 0.2 
                     });
                 }
-                this.visibleMarkers.add(locationName);
+                this.visibleMarkers.add(markerKey);
                 toggleElement.textContent = 'visibility';
                 toggleElement.classList.remove('hidden');
             }
         }
-    });
+    }
 
-    // Update category toggle state
+    // Update category visibility state
     this.updateCategoryVisibility(toggleElement);
 }
 
@@ -900,5 +941,219 @@ private updateCategoryVisibility(toggleElement: HTMLElement): void {
             this.visibleCategories.add(category);
         }
     }
+}
+
+private createTabInterface(): void {
+  // Create tabs container
+  const tabsContainer = document.createElement('div');
+  tabsContainer.className = 'sidebar-tabs';
+  
+  // Create location tab
+  const locationTab = document.createElement('button');
+  locationTab.className = 'sidebar-tab active';
+  locationTab.innerHTML = '<span class="material-icons">place</span>Location Info';
+  
+  // Create drops tab
+  const dropsTab = document.createElement('button');
+  dropsTab.className = 'sidebar-tab';
+  dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Drops';
+  
+  // Get existing content containers
+  const locationContent = this.element.querySelector('.sidebar-content.location-info') as HTMLElement;
+  const dropsContent = document.createElement('div');
+  dropsContent.className = 'sidebar-content drops-content';
+  
+  // Add event listeners for tabs
+  tabsContainer.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const tab = target.closest('.sidebar-tab');
+    if (!tab) return;
+    
+    // Update tab states
+    tabsContainer.querySelectorAll('.sidebar-tab').forEach(t => 
+      t.classList.remove('active'));
+    tab.classList.add('active');
+    
+    // Update content visibility
+    const isDrops = tab === dropsTab;
+    locationContent.classList.toggle('active', !isDrops);
+    dropsContent.classList.toggle('active', isDrops);
+  });
+  
+  // Assemble tabs section
+  tabsContainer.appendChild(locationTab);
+  tabsContainer.appendChild(dropsTab);
+  
+  // Find the tab system container
+  const tabSystem = this.element.querySelector('.tab-system') as HTMLElement;
+  
+  // Insert tabs and drops content
+  tabSystem.insertBefore(tabsContainer, tabSystem.firstChild);
+  tabSystem.appendChild(dropsContent);
+  
+  // Store references
+  this.dropsContent = dropsContent;
+  this.locationContent = locationContent;
+}
+
+private async toggleDropLocations(item: ItemDrop): Promise<void> {
+  // Reset all markers to visible first
+  this.resetMarkersVisibility();
+  
+  // Get locations that can drop this item
+  const dropLocations = findDropLocations(item, this.locations);
+  const dropLocationNames = new Set(dropLocations.map(l => l.name));
+  
+  // Hide markers that don't drop this item
+  this.markers.forEach(marker => {
+    const markerElement = marker.getElement();
+    if (!markerElement) return;
+    
+    const markerLocation = markerElement.getAttribute('data-location');
+    if (markerLocation && !dropLocationNames.has(markerLocation)) {
+      markerElement.style.display = 'none';
+      if ((marker as any).uncertaintyCircle) {
+        (marker as any).uncertaintyCircle.setStyle({ 
+          opacity: 0, 
+          fillOpacity: 0 
+        });
+      }
+    }
+  });
+}
+
+private resetMarkersVisibility(): void {
+  this.markers.forEach(marker => {
+    const markerElement = marker.getElement();
+    if (!markerElement) return;
+    
+    markerElement.style.display = '';
+    if ((marker as any).uncertaintyCircle) {
+      (marker as any).uncertaintyCircle.setStyle({ 
+        opacity: 0.6, 
+        fillOpacity: 0.2 
+      });
+    }
+  });
+}
+
+private async createDropsInterface(): Promise<void> {
+  const drops = await loadDrops();
+  
+  Object.entries(drops).forEach(([category, items]) => {
+    const categoryContainer = document.createElement('div');
+    categoryContainer.className = 'drops-category';
+    
+    const categoryHeader = document.createElement('div');
+    categoryHeader.className = 'drops-category-header';
+    
+    // Add chevron, category name and item count
+    categoryHeader.innerHTML = `
+      <div class="category-title">
+        <span>${category}</span>
+        <span class="item-count">(${items.length})</span>
+      </div>
+      <i class="fa-solid fa-chevron-down"></i>
+    `;
+    
+    const itemsList = document.createElement('div');
+    itemsList.className = 'drops-items collapsed'; // Start collapsed
+    
+    items.forEach(item => {
+      const itemElement = document.createElement('div');
+      itemElement.className = 'drop-item';
+      
+      const headerElement = document.createElement('div');
+      headerElement.className = 'drop-header';
+      headerElement.innerHTML = `
+        <div class="drop-icon">
+          ${item.iconUrl ? 
+            `<img src="${item.iconUrl}" alt="">` : 
+            `<i class="fa-solid fa-box" style="color: ${item.iconColor || '#FFFFFF'}"></i>`}
+        </div>
+        <div class="drop-title">${item.name}</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      `;
+
+      const detailsElement = document.createElement('div');
+      detailsElement.className = 'drop-details';
+      detailsElement.innerHTML = `
+        <div class="drop-description">${item.description}</div>
+        <div class="drop-info-grid">
+          <div class="drop-type">Type: ${item.type}</div>
+          <div class="drop-rarity">Rarity: ${item.rarity}</div>
+        </div>
+        <div class="drop-sources">
+          <div class="sources-title">Sources:</div>
+          <div class="sources-list">
+            ${item.sources.map(source => `
+              <a href="#" class="source-link" data-source="${source}">${source}</a>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      itemElement.appendChild(headerElement);
+      itemElement.appendChild(detailsElement);
+      
+      // Handle item click to expand/collapse
+      headerElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        itemElement.classList.toggle('active');
+        const chevron = headerElement.querySelector('.fa-chevron-down');
+        if (chevron) {
+          chevron.classList.toggle('rotated');
+        }
+        
+        // Handle marker visibility
+        if (itemElement.classList.contains('active')) {
+          // Close other items first
+          itemsList.querySelectorAll('.drop-item').forEach(el => {
+            if (el !== itemElement) {
+              el.classList.remove('active');
+              el.querySelector('.fa-chevron-down')?.classList.remove('rotated');
+            }
+          });
+          this.toggleDropLocations(item);
+        } else {
+          this.resetMarkersVisibility();
+        }
+      });
+
+      // Handle source links
+      detailsElement.querySelectorAll('.source-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const sourceName = link.getAttribute('data-source');
+          const location = this.locations.find(loc => 
+            loc.name.toLowerCase() === sourceName?.toLowerCase()
+          );
+          
+          if (location) {
+            const coords = Array.isArray(location.coordinates[0]) ? 
+              location.coordinates[0] : 
+              location.coordinates as [number, number];
+              
+            this.handleLocationClick(coords, location);
+          }
+        });
+      });
+      
+      itemsList.appendChild(itemElement);
+    });
+    
+    // Category collapse/expand functionality
+    categoryHeader.addEventListener('click', () => {
+      itemsList.classList.toggle('collapsed');
+      const chevron = categoryHeader.querySelector('.fa-chevron-down');
+      if (chevron) {
+        chevron.classList.toggle('rotated');
+      }
+    });
+    
+    categoryContainer.appendChild(categoryHeader);
+    categoryContainer.appendChild(itemsList);
+    this.dropsContent.appendChild(categoryContainer);
+  });
 }
 }

@@ -1,0 +1,11 @@
+name: "Juniper"
+description: "Bow" 
+type: "weapon" 
+rarity: "common"
+sources: 
+  - "Juniper Fragment"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 
