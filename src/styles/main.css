@@ -2263,3 +2263,33 @@ mark {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.9em;
 }
+
+.result-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.source-tag {
+  font-size: 0.8em;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.search-result:hover .source-tag {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Adjust spacing for drop results */
+.drop-result .search-result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drop-result .result-description {
+  margin-top: 0;
+}

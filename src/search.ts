@@ -112,6 +112,11 @@ export async function initializeSearch(locations: (Location & { type: string })[
           ${drop.description ? 
             `<div class="result-description">${highlightText(drop.description)}</div>` : 
             ''}
+          <div class="result-sources">
+            ${drop.sources.map(source => `
+              <span class="source-tag">${source}</span>
+            `).join('')}
+          </div>
         </div>
       </div>
     `;
