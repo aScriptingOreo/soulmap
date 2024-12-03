@@ -1,6 +1,7 @@
 // src/loader.ts
 import type { Location, VersionInfo } from './types';
 import localforage from 'localforage';
+import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 
 const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
 
@@ -20,17 +21,16 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
   try {
     await locationStore.ready(); // Ensure store is ready
 
-    // Try to load cached data first
+    const contentHash = await generateContentHash();
+    const storedHash = getStoredHash();
+
+    // Use cached data if hashes match
     const cachedData = await locationStore.getItem<{
-      version: string, 
+      hash: string, 
       data: (Location & { type: string })[]
     }>(LOCATIONS_CACHE_KEY);
     
-    const versionModule = await import('./mapversion.yml');
-    const currentVersion = versionModule.default.game_version;
-
-    // Use cached data if versions match
-    if (cachedData && cachedData.version === currentVersion) {
+    if (cachedData && cachedData.hash === contentHash) {
       console.log('Using cached locations data');
       return cachedData.data;
     }
@@ -83,11 +83,14 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
     updateProgress(50, 'Initializing map...');
     const validLocations = locations.filter((loc): loc is Location & { type: string } => loc !== null);
 
-    // Cache the new data
+    // Cache the new data with hash
     await locationStore.setItem(LOCATIONS_CACHE_KEY, {
-      version: currentVersion,
+      hash: contentHash,
       data: validLocations
     });
+
+    // Store the new hash
+    setStoredHash(contentHash);
 
     return validLocations;
   } catch (error) {

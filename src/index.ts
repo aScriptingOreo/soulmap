@@ -4,6 +4,7 @@ import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
 import { clearTileCache } from './gridLoader'; // Add this import
 import { clearDropsCache } from './drops/dropsLoader';
+import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 import type { VersionInfo } from './types';
 
 async function loadGreeting() {
@@ -65,18 +66,17 @@ function dismissPopup() {
 
 async function checkForUpdates() {
     try {
-        const versionModule = await import('./mapversion.yml');
-        const currentVersion = versionModule.default.version;
-        const lastVersion = localStorage.getItem('soulmap_version');
+        const contentHash = await generateContentHash();
+        const storedHash = getStoredHash();
 
-        if (lastVersion !== currentVersion) {
-            // Clear all caches if version changed
+        if (storedHash !== contentHash) {
+            // Clear all caches if hash changed
             await Promise.all([
                 clearLocationsCache(),
                 clearDropsCache(),
                 clearTileCache()
             ]);
-            localStorage.setItem('soulmap_version', currentVersion);
+            setStoredHash(contentHash);
         }
     } catch (error) {
         console.error('Error checking for updates:', error);
