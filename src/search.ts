@@ -177,101 +177,118 @@ export async function initializeSearch(locations: (Location & { type: string })[
 // Removed duplicate updateResults function
 
   function selectLocation(location: Location & { type: string }, coordIndex?: number) {
-    const coords = Array.isArray(location.coordinates[0]) 
-      ? (coordIndex !== undefined 
-          ? location.coordinates[coordIndex] 
-          : location.coordinates[0]) as [number, number]
-      : location.coordinates as [number, number];
+    const coords = Array.isArray(location.coordinates[0])
+        ? (location.coordinates as [number, number][])[coordIndex ?? 0]
+        : location.coordinates as [number, number];
 
-    map.setView([coords[1], coords[0]], map.getZoom());
+    // Get current center to calculate distance
+    const currentCenter = map.getCenter();
+    const distance = map.distance(
+        [currentCenter.lat, currentCenter.lng],
+        [coords[1], coords[0]]
+    );
 
-    // Update URL with location parameter and index if applicable
-    const encodedLocation = encodeURIComponent(location.name);
-    const urlParams = coordIndex !== undefined 
-      ? `?loc=${encodedLocation}&index=${coordIndex}` 
-      : `?loc=${encodedLocation}`;
-    window.history.replaceState({}, '', urlParams);
+    const targetZoom = calculateOptimalZoom(distance);
+    const duration = calculateAnimationDuration(distance);
 
-    // Find and trigger correct marker
+    // Disable marker animations during flyTo
+    map.once("movestart", () => {
+        document
+            .querySelector(".leaflet-marker-pane")
+            ?.classList.add("leaflet-zoom-hide");
+    });
+
+    map.once("moveend", () => {
+        document
+            .querySelector(".leaflet-marker-pane")
+            ?.classList.remove("leaflet-zoom-hide");
+    });
+
+    // Use the smooth flyTo animation
+    map.flyTo([coords[1], coords[0]], targetZoom, {
+        duration: duration,
+        easeLinearity: 0.25,
+        noMoveStart: true,
+        animate: true,
+        keepPixelPosition: true,
+        updateDragInertia: false,
+        inertiaDeceleration: 3000,
+        inertiaMaxSpeed: 3000,
+        animateZoom: true,
+    });
+
+    // Find and trigger marker with delay for animation
     const marker = markers.find(m => {
-      const pos = m.getLatLng();
-      const markerContent = m.getTooltip()?.getContent();
-      if (coordIndex !== undefined) {
-        // For multi-location items, match both position and index
-        return pos.lat === coords[1] && 
-               pos.lng === coords[0] && 
-               typeof markerContent === 'string' && markerContent.includes(`#${coordIndex + 1}`);
-      }
-      return pos.lat === coords[1] && pos.lng === coords[0];
+        const pos = m.getLatLng();
+        const tooltipContent = m.getTooltip()?.getContent() as string;
+        
+        return coordIndex !== undefined
+            ? pos.lat === coords[1] && pos.lng === coords[0] && tooltipContent === `${location.name} #${coordIndex + 1}`
+            : pos.lat === coords[1] && pos.lng === coords[0];
     });
 
     if (marker) {
-      document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
-        el.classList.remove('selected');
-      });
-      marker.getElement()?.classList.add('selected');
-      marker.fire('click');
+        document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        marker.getElement()?.classList.add('selected');
+
+        // Delay marker click until animation completes
+        setTimeout(() => {
+            marker.fire('click');
+        }, duration * 1000);
+
+        // Update URL
+        const locationHash = generateLocationHash(location.name);
+        const urlParams = coordIndex !== undefined
+            ? `?loc=${locationHash}&index=${coordIndex}`
+            : `?loc=${locationHash}`;
+        window.history.replaceState({}, '', urlParams);
     }
 
     // Close search after selection
     closeSearch();
-  }
+}
+
+// Add these helper functions if they don't exist
+function calculateOptimalZoom(distance: number): number {
+    if (distance > 10000) return -2;
+    if (distance > 5000) return -1;
+    if (distance > 2000) return 0;
+    if (distance > 1000) return 1;
+    return 2;
+}
+
+function calculateAnimationDuration(distance: number): number {
+    const baseDuration = 1.2;
+    const distanceFactor = Math.min(distance / 5000, 1);
+    const currentZoom = map.getZoom();
+    const targetZoom = calculateOptimalZoom(distance);
+    const zoomDiff = Math.abs(currentZoom - targetZoom);
+    const zoomFactor = Math.min(zoomDiff / 3, 1);
+
+    return baseDuration + distanceFactor * 1.5 + zoomFactor * 0.8;
+}
 
 function selectResult(result: SearchResult) {
-  if (result.type === 'location' && result.location) {
-    // Switch to locations tab first
-    const tabSystem = document.querySelector('.tab-system');
-    const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
-    if (locationsTab) {
-      locationsTab.click();
-    }
-    selectLocation(result.location);
-  } else if (result.type === 'drop' && result.drop) {
-    // Switch to drops tab and find item
-    const tabSystem = document.querySelector('.tab-system');
-    const dropsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(2)') as HTMLElement;
-    if (dropsTab) {
-      dropsTab.click();
-      // Find and expand the category first
-      setTimeout(() => {
-        const dropCategories = document.querySelectorAll('.drops-category');
-        const categoryHeader = Array.from(dropCategories)
-          .find(cat => {
-            const items = cat.querySelector('.drops-items');
-            return items?.querySelector(`.drop-title[title="${result.drop?.name}"]`) ||
-                   items?.querySelector(`.drop-title:contains('${result.drop?.name}')`);
-          })?.querySelector('.drops-category-header') as HTMLElement;
-
-        if (categoryHeader) {
-          // Expand category if collapsed
-          const itemsList = categoryHeader.parentElement?.querySelector('.drops-items');
-          if (itemsList?.classList.contains('collapsed')) {
-            categoryHeader.click();
-          }
-
-          // Find and expand the item
-          setTimeout(() => {
-            const dropItem = Array.from(document.querySelectorAll('.drop-item'))
-              .find(el => el.querySelector('.drop-title')?.textContent === result.drop?.name);
-            
-            if (dropItem) {
-              // Expand the item if it's not already expanded
-              if (!dropItem.classList.contains('active')) {
-                const header = dropItem.querySelector('.drop-header') as HTMLElement;
-                header?.click();
-              }
-              
-              // Scroll the item into view
-              dropItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              dropItem.classList.add('highlight');
-              setTimeout(() => dropItem.classList.remove('highlight'), 2000);
-            }
-          }, 100);
+    if (result.type === 'location' && result.location) {
+        // Switch to locations tab first
+        const tabSystem = document.querySelector('.tab-system');
+        const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
+        if (locationsTab) {
+            locationsTab.click();
         }
-      }, 100);
+
+        // Check if this is a child item selection
+        const resultElement = document.querySelector('.search-result.selected') as HTMLElement;
+        const coordIndex = resultElement?.getAttribute('data-coord-index');
+        
+        // Pass the coordinate index if it exists
+        selectLocation(result.location, coordIndex ? parseInt(coordIndex) : undefined);
+    } else if (result.type === 'drop' && result.drop) {
+        // ...existing drop handling code...
     }
-  }
-  closeSearch();
+    closeSearch();
 }
 
 // Handle keyboard navigation
