@@ -2368,3 +2368,12 @@ mark {
 .direction-text {
   color: rgba(255, 255, 255, 0.7);
 }
+
+.drop-item.highlight {
+  animation: highlight 2s ease-out;
+}
+
+@keyframes highlight {
+  0% { background: rgba(255, 255, 255, 0.2); }
+  100% { background: rgba(255, 255, 255, 0.05); }
+}

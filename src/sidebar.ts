@@ -1266,6 +1266,42 @@ export class Sidebar {
             this.resetMarkersVisibility();
           }
         });
+
+        // Update source link click handling
+        const sourcesList = detailsElement.querySelector('.sources-list');
+        if (sourcesList) {
+          sourcesList.addEventListener('click', (e) => {
+            const link = (e.target as HTMLElement).closest('.source-link');
+            if (!link || !link.classList.contains('clickable')) return;
+
+            e.preventDefault();
+            const sourceName = link.getAttribute('data-source');
+            const location = this.locations.find(loc => 
+              loc.name.toLowerCase() === sourceName?.toLowerCase()
+            );
+
+            if (location) {
+              let coords: [number, number];
+              if (Array.isArray(location.coordinates[0])) {
+                // For multiple coordinates, pick a random one
+                const coordsList = location.coordinates as [number, number][];
+                coords = coordsList[Math.floor(Math.random() * coordsList.length)];
+              } else {
+                coords = location.coordinates as [number, number];
+              }
+
+              const marker = this.markers.find(m => {
+                const pos = m.getLatLng();
+                return pos.lat === coords[1] && pos.lng === coords[0];
+              });
+
+              if (marker) {
+                this.map.setView([coords[1], coords[0]], this.map.getZoom());
+                marker.fire('click');
+              }
+            }
+          });
+        }
   
         itemsList.appendChild(itemElement);
       });

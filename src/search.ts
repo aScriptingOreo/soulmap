@@ -92,14 +92,24 @@ export async function initializeSearch(locations: (Location & { type: string })[
   }
 
   function renderDropResult(drop: ItemDrop, index: number, selectedIndex: number): string {
+    let iconHtml = '';
+    if (drop.icon) {
+      const size = drop.iconSize || 1;
+      if (drop.icon.startsWith('fa-')) {
+        iconHtml = `<i class="${drop.icon}" style="font-size: ${20 * size}px; color: ${drop.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
+      } else {
+        iconHtml = `<img src="${drop.icon}.svg" style="width: ${20 * size}px; height: ${20 * size}px;" alt="">`;
+      }
+    } else {
+      iconHtml = `<i class="fa-solid fa-box" style="color: ${drop.iconColor || '#FFFFFF'}"></i>`;
+    }
+
     return `
       <div class="search-result drop-result ${index === selectedIndex ? 'selected' : ''}" 
            data-type="drop"
            data-name="${drop.name}">
         <div class="search-result-icon">
-          ${drop.iconUrl ? 
-            `<img src="${drop.iconUrl}" alt="">` : 
-            `<i class="fa-solid fa-box" style="color: ${drop.iconColor || '#FFFFFF'}"></i>`}
+          ${iconHtml}
         </div>
         <div class="search-result-content">
           <div class="result-name">${highlightText(drop.name)}</div>
@@ -208,64 +218,107 @@ export async function initializeSearch(locations: (Location & { type: string })[
   }
 
 function selectResult(result: SearchResult) {
-    if (result.type === 'location' && result.location) {
-      // Existing location selection logic
-      selectLocation(result.location);
-    } else if (result.type === 'drop' && result.drop) {
-      // Switch to drops tab and highlight item
-      const tabSystem = document.querySelector('.tab-system');
-      const dropsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(2)') as HTMLElement;
-      if (dropsTab) {
-        dropsTab.click();
-        // Find and click the matching drop item
-        setTimeout(() => {
-          const dropItem = Array.from(document.querySelectorAll('.drop-item'))
-            .find(el => el.querySelector('.drop-title')?.textContent === result.drop?.name);
-          if (dropItem) {
-            (dropItem.querySelector('.drop-header') as HTMLElement)?.click();
-            dropItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 100);
-      }
+  if (result.type === 'location' && result.location) {
+    // Switch to locations tab first
+    const tabSystem = document.querySelector('.tab-system');
+    const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
+    if (locationsTab) {
+      locationsTab.click();
     }
-    closeSearch();
+    selectLocation(result.location);
+  } else if (result.type === 'drop' && result.drop) {
+    // Switch to drops tab and find item
+    const tabSystem = document.querySelector('.tab-system');
+    const dropsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(2)') as HTMLElement;
+    if (dropsTab) {
+      dropsTab.click();
+      // Find and expand the category first
+      setTimeout(() => {
+        const dropCategories = document.querySelectorAll('.drops-category');
+        const categoryHeader = Array.from(dropCategories)
+          .find(cat => {
+            const items = cat.querySelector('.drops-items');
+            return items?.querySelector(`.drop-title[title="${result.drop?.name}"]`) ||
+                   items?.querySelector(`.drop-title:contains('${result.drop?.name}')`);
+          })?.querySelector('.drops-category-header') as HTMLElement;
+
+        if (categoryHeader) {
+          // Expand category if collapsed
+          const itemsList = categoryHeader.parentElement?.querySelector('.drops-items');
+          if (itemsList?.classList.contains('collapsed')) {
+            categoryHeader.click();
+          }
+
+          // Find and expand the item
+          setTimeout(() => {
+            const dropItem = Array.from(document.querySelectorAll('.drop-item'))
+              .find(el => el.querySelector('.drop-title')?.textContent === result.drop?.name);
+            
+            if (dropItem) {
+              // Expand the item if it's not already expanded
+              if (!dropItem.classList.contains('active')) {
+                const header = dropItem.querySelector('.drop-header') as HTMLElement;
+                header?.click();
+              }
+              
+              // Scroll the item into view
+              dropItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              dropItem.classList.add('highlight');
+              setTimeout(() => dropItem.classList.remove('highlight'), 2000);
+            }
+          }, 100);
+        }
+      }, 100);
+    }
   }
+  closeSearch();
+}
 
 // Handle keyboard navigation
 searchInput.addEventListener('keydown', (e) => {
-    const results = resultsContainer.querySelectorAll('.search-result');
-    const maxIndex = results.length - 1;
+  const results = resultsContainer.querySelectorAll('.search-result');
+  const maxIndex = results.length - 1;
 
-    switch(e.key) {
-        case 'Enter':
-            e.preventDefault();
-            if (selectedIndex >= 0) {
-                const selected = results[selectedIndex] as HTMLElement;
-                const locationName = selected.getAttribute('data-name');
-                const coordIndex = selected.getAttribute('data-coord-index');
-                const location = locations.find(l => l.name === locationName);
-                if (location) {
-                    selectLocation(location, coordIndex ? parseInt(coordIndex) : undefined);
-                }
+  switch(e.key) {
+    case 'Enter':
+      e.preventDefault();
+      if (selectedIndex >= 0) {
+        const selected = results[selectedIndex] as HTMLElement;
+        const type = selected.getAttribute('data-type');
+        const name = selected.getAttribute('data-name');
+        
+        if (type === 'location') {
+          const location = locations.find(l => l.name === name);
+          if (location) {
+            selectResult({ type: 'location', location, score: 0 });
+          }
+        } else if (type === 'drop') {
+          loadDrops().then(drops => {
+            const drop = Object.values(drops).flat().find(d => d.name === name);
+            if (drop) {
+              selectResult({ type: 'drop', drop, score: 0 });
             }
-            break;
-        case 'ArrowDown':
-            e.preventDefault();
-            selectedIndex = Math.min(selectedIndex + 1, maxIndex);
-            break;
-        case 'ArrowUp':
-            e.preventDefault();
-            selectedIndex = Math.max(selectedIndex - 1, 0);
-            break;
-        case 'Escape':
-            closeSearch();
-            break;
-    }
+          });
+        }
+      }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      selectedIndex = Math.min(selectedIndex + 1, maxIndex);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      selectedIndex = Math.max(selectedIndex - 1, 0);
+      break;
+    case 'Escape':
+      closeSearch();
+      break;
+  }
 
-    // Update selected state
-    results.forEach((result, index) => {
-        result.classList.toggle('selected', index === selectedIndex);
-    });
+  // Update selected state
+  results.forEach((result, index) => {
+    result.classList.toggle('selected', index === selectedIndex);
+  });
 });
 
   // Add input handler
@@ -312,7 +365,7 @@ searchInput.addEventListener('keydown', (e) => {
     if (type === 'location') {
       const location = locations.find(l => l.name === name);
       if (location) {
-        selectLocation(location);
+        selectResult({ type: 'location', location, score: 0 });
       }
     } else if (type === 'drop') {
       const drops = Object.values(await loadDrops()).flat();
