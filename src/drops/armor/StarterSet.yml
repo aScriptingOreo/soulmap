@@ -1,0 +1,11 @@
+name: "Starter Set"
+description: "" 
+type: "Armor" 
+rarity: "common"
+sources: 
+  - "Surface Sparrow Tales"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

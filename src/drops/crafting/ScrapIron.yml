@@ -1,0 +1,12 @@
+name: "Scrap Iron"
+description: "Mainly found in dungeons"
+type: "Crafting Material"
+rarity: "common"
+sources: 
+  - "Weapon Racks"
+  - "Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

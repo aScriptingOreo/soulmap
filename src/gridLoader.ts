@@ -1,6 +1,7 @@
 // src/gridLoader.ts
 import * as L from 'leaflet';
 import localforage from 'localforage';
+import { generateMapTilesHash } from './services/hashService';
 
 export class GridLoader {
     private readonly TILE_SIZE = 512;
@@ -20,18 +21,16 @@ export class GridLoader {
     }
 
     public async initialize(): Promise<void> {
-        // Load version and ensure store is ready
-        const versionModule = await import('./mapversion.yml');
         await this.tileStore.ready();
         return;
     }
 
-    private async getTileKey(imgPath: string, gameVersion: string): string {
-        return `${gameVersion}:${imgPath}`;
+    private async getTileKey(imgPath: string, contentHash: string): string {
+        return `${contentHash}:${imgPath}`;
     }
 
-    private async loadTileWithRetry(imgPath: string, gameVersion: string, retryCount = 0): Promise<string> {
-        const tileKey = await this.getTileKey(imgPath, gameVersion);
+    private async loadTileWithRetry(imgPath: string, contentHash: string, retryCount = 0): Promise<string> {
+        const tileKey = await this.getTileKey(imgPath, contentHash);
 
         try {
             // Try stored version first
@@ -56,7 +55,7 @@ export class GridLoader {
         } catch (error) {
             if (retryCount < this.MAX_RETRIES) {
                 await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
-                return this.loadTileWithRetry(imgPath, gameVersion, retryCount + 1);
+                return this.loadTileWithRetry(imgPath, contentHash, retryCount + 1);
             }
             throw error;
         }
@@ -76,8 +75,7 @@ export class GridLoader {
         };
 
         try {
-            const versionModule = await import('./mapversion.yml');
-            const gameVersion = versionModule.default.game_version;
+            const contentHash = await generateMapTilesHash();
             const rows = Math.ceil(this.TOTAL_TILES / this.GRID_WIDTH);
 
             // Load tiles in smaller chunks for better progress feedback
@@ -97,7 +95,7 @@ export class GridLoader {
                     const imgPath = `map/${tileIndex}.png`;
                     
                     try {
-                        const blobUrl = await this.loadTileWithRetry(imgPath, gameVersion);
+                        const blobUrl = await this.loadTileWithRetry(imgPath, contentHash);
                         L.imageOverlay(blobUrl, bounds, { 
                             interactive: false,
                             className: 'map-tile'

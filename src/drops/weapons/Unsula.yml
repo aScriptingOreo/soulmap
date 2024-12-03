@@ -1,0 +1,11 @@
+name: "Unsula"
+description: "Short Blades" 
+type: "weapon" 
+rarity: "ucommon"
+sources: 
+  - "Overworld Rare chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

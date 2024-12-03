@@ -1,0 +1,13 @@
+name: "Scrap Brass"
+description: ""
+type: "Crafting Material"
+rarity: "common"
+sources: 
+  - "Weapon Racks"
+  - "Fort Curlail"
+  - "Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

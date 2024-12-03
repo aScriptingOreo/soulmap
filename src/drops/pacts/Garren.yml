@@ -1,0 +1,11 @@
+name: "Garren"
+description: "" 
+type: "Pact" 
+rarity: "quest"
+sources: 
+  - "Torment Stag"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

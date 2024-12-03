@@ -1,0 +1,12 @@
+name: "Petrified Ichor"
+description: ""
+type: "Crafting Material"
+rarity: "rare"
+sources: 
+  - "Shrimp Spawn"
+  - "Rare Overworld Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

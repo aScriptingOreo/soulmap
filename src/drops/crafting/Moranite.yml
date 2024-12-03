@@ -1,0 +1,12 @@
+name: "Moranite"
+description: "Mainly found in dungeons"
+type: "Crafting Material"
+rarity: "uncommon"
+sources: 
+  - "Rare Overworld Chests"
+  - "Glades"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 

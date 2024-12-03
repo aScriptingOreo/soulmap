@@ -1,0 +1,12 @@
+name: "River Pearls"
+description: ""
+type: "Crafting Material"
+rarity: "rare"
+sources: 
+  - "Rivers"
+  - "Chests"
+
+# Optional
+iconUrl: 
+iconColor: 
+imgUrl: 
