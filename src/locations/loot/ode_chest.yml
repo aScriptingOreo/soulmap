@@ -10,7 +10,7 @@ coordinates:
   - [3132, 4296]
   - [2948, 4072]
   - [3075, 3424]
-description: "These chests are not guaranteed spawns. Chance to drop blitzel fragments"
+description: "These chests are not guaranteed spawns. Chance to drop Thistle fragments"
 icon: "fa-solid fa-toolbox"
 iconSize: 0.75
 iconColor: "#79AAFF"

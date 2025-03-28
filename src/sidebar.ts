@@ -741,6 +741,7 @@ export class Sidebar {
         if (isVisible) {
           // Hide marker
           markerElement.style.display = "none";
+          // Directly check if radius exists and is greater than 0
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0,
@@ -753,6 +754,7 @@ export class Sidebar {
         } else {
           // Show marker
           markerElement.style.display = "";
+          // Directly check if radius exists and is greater than 0
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0.6,
@@ -898,7 +900,7 @@ export class Sidebar {
           if (element) {
             element.style.display = "none";
           }
-          // Hide uncertainty circle if it exists
+          // Directly check for uncertainty circle
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0,
@@ -940,7 +942,7 @@ export class Sidebar {
           if (element) {
             element.style.display = "";
           }
-          // Show uncertainty circle if it exists
+          // Directly check for uncertainty circle
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0.6,
@@ -1160,14 +1162,14 @@ export class Sidebar {
 
   private async createDropsInterface(): Promise<void> {
     const drops = await loadDrops();
-    
+
     Object.entries(drops).forEach(([category, items]) => {
-      const categoryContainer = document.createElement('div');
-      categoryContainer.className = 'drops-category';
-      
-      const categoryHeader = document.createElement('div');
-      categoryHeader.className = 'drops-category-header';
-      
+      const categoryContainer = document.createElement("div");
+      categoryContainer.className = "drops-category";
+
+      const categoryHeader = document.createElement("div");
+      categoryHeader.className = "drops-category-header";
+
       categoryHeader.innerHTML = `
         <div class="category-title">
           <span>${category}</span>
@@ -1175,32 +1177,40 @@ export class Sidebar {
         </div>
         <i class="fa-solid fa-chevron-down"></i>
       `;
-      
-      const itemsList = document.createElement('div');
-      itemsList.className = 'drops-items collapsed';
-      
-      items.forEach(item => {
-        const itemElement = document.createElement('div');
-        itemElement.className = 'drop-item';
-        
-        const headerElement = document.createElement('div');
-        headerElement.className = 'drop-header';
-  
+
+      const itemsList = document.createElement("div");
+      itemsList.className = "drops-items collapsed";
+
+      items.forEach((item) => {
+        const itemElement = document.createElement("div");
+        itemElement.className = "drop-item";
+
+        const headerElement = document.createElement("div");
+        headerElement.className = "drop-header";
+
         // Create icon element based on icon type
-        let iconHtml = '';
+        let iconHtml = "";
         if (item.icon) {
-          if (item.icon.startsWith('fa-')) {
+          if (item.icon.startsWith("fa-")) {
             const size = item.iconSize || 1;
-            iconHtml = `<i class="${item.icon}" style="font-size: ${24 * size}px; color: ${item.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
+            iconHtml = `<i class="${item.icon}" style="font-size: ${
+              24 * size
+            }px; color: ${
+              item.iconColor || "#FFFFFF"
+            }; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
           } else {
             const size = item.iconSize || 1;
-            iconHtml = `<img src="${item.icon}.svg" style="width: ${24 * size}px; height: ${24 * size}px;" alt="">`;
+            iconHtml = `<img src="${item.icon}.svg" style="width: ${
+              24 * size
+            }px; height: ${24 * size}px;" alt="">`;
           }
         } else {
           // Default icon if none specified
-          iconHtml = `<i class="fa-solid fa-box" style="color: ${item.iconColor || '#FFFFFF'}"></i>`;
+          iconHtml = `<i class="fa-solid fa-box" style="color: ${
+            item.iconColor || "#FFFFFF"
+          }"></i>`;
         }
-  
+
         headerElement.innerHTML = `
           <div class="drop-icon">
             ${iconHtml}
@@ -1208,15 +1218,17 @@ export class Sidebar {
           <div class="drop-title">${item.name}</div>
           <i class="fa-solid fa-chevron-down"></i>
         `;
-  
-        const detailsElement = document.createElement('div');
-        detailsElement.className = 'drop-details';
+
+        const detailsElement = document.createElement("div");
+        detailsElement.className = "drop-details";
         detailsElement.innerHTML = `
           <div class="drop-description">${item.description}</div>
           <div class="drop-info-grid">
             <div class="drop-type">Type: ${item.type}</div>
             <div class="drop-rarity">
-              <span class="rarity-badge" style="background-color: ${this.getRarityColor(item.rarity)}">
+              <span class="rarity-badge" style="background-color: ${this.getRarityColor(
+                item.rarity
+              )}">
                 ${item.rarity}
               </span>
             </div>
@@ -1224,41 +1236,46 @@ export class Sidebar {
           <div class="drop-sources">
             <div class="sources-title">Sources:</div>
             <div class="sources-list">
-              ${item.sources.map(source => {
-                const linkColor = this.getLinkColor(source);
-                const isClickable = this.locations.some(loc => 
-                  loc.name.toLowerCase() === source.toLowerCase()
-                );
-                return `
+              ${item.sources
+                .map((source) => {
+                  const linkColor = this.getLinkColor(source);
+                  const isClickable = this.locations.some(
+                    (loc) =>
+                      loc.name.toLowerCase() === source.toLowerCase()
+                  );
+                  return `
                   <a href="#" 
-                     class="source-link ${isClickable ? 'clickable' : ''}" 
+                     class="source-link ${isClickable ? "clickable" : ""}" 
                      data-source="${source}"
                      style="color: ${linkColor}; border-color: ${linkColor}">
                     ${source}
                   </a>`;
-              }).join('')}
+                })
+                .join("")}
             </div>
           </div>
         `;
-  
+
         // Rest of the existing code...
         itemElement.appendChild(headerElement);
         itemElement.appendChild(detailsElement);
-        
+
         // Existing event listeners...
-        headerElement.addEventListener('click', (e) => {
+        headerElement.addEventListener("click", (e) => {
           e.stopPropagation();
-          itemElement.classList.toggle('active');
-          const chevron = headerElement.querySelector('.fa-chevron-down');
+          itemElement.classList.toggle("active");
+          const chevron = headerElement.querySelector(".fa-chevron-down");
           if (chevron) {
-            chevron.classList.toggle('rotated');
+            chevron.classList.toggle("rotated");
           }
-          
-          if (itemElement.classList.contains('active')) {
-            itemsList.querySelectorAll('.drop-item').forEach(el => {
+
+          if (itemElement.classList.contains("active")) {
+            itemsList.querySelectorAll(".drop-item").forEach((el) => {
               if (el !== itemElement) {
-                el.classList.remove('active');
-                el.querySelector('.fa-chevron-down')?.classList.remove('rotated');
+                el.classList.remove("active");
+                el
+                  .querySelector(".fa-chevron-down")
+                  ?.classList.remove("rotated");
               }
             });
             this.toggleDropLocations(item);
@@ -1268,53 +1285,63 @@ export class Sidebar {
         });
 
         // Update source link click handling
-        const sourcesList = detailsElement.querySelector('.sources-list');
+        const sourcesList = detailsElement.querySelector(".sources-list");
         if (sourcesList) {
-          sourcesList.addEventListener('click', (e) => {
-            const link = (e.target as HTMLElement).closest('.source-link');
-            if (!link || !link.classList.contains('clickable')) return;
+          sourcesList.addEventListener("click", (e) => {
+            const link = (e.target as HTMLElement).closest(".source-link");
+            if (!link || !link.classList.contains("clickable")) return;
 
             e.preventDefault();
-            const sourceName = link.getAttribute('data-source');
-            const location = this.locations.find(loc => 
-              loc.name.toLowerCase() === sourceName?.toLowerCase()
+            const sourceName = link.getAttribute("data-source");
+            const location = this.locations.find(
+              (loc) =>
+                loc.name.toLowerCase() === sourceName?.toLowerCase()
             );
 
             if (location) {
               let coords: [number, number];
               if (Array.isArray(location.coordinates[0])) {
                 // For multiple coordinates, pick a random one
-                const coordsList = location.coordinates as [number, number][];
-                coords = coordsList[Math.floor(Math.random() * coordsList.length)];
+                const coordsList = location.coordinates as [
+                  number,
+                  number
+                ][];
+                coords =
+                  coordsList[
+                    Math.floor(Math.random() * coordsList.length)
+                  ];
               } else {
                 coords = location.coordinates as [number, number];
               }
 
-              const marker = this.markers.find(m => {
+              const marker = this.markers.find((m) => {
                 const pos = m.getLatLng();
                 return pos.lat === coords[1] && pos.lng === coords[0];
               });
 
               if (marker) {
-                this.map.setView([coords[1], coords[0]], this.map.getZoom());
-                marker.fire('click');
+                this.map.setView(
+                  [coords[1], coords[0]],
+                  this.map.getZoom()
+                );
+                marker.fire("click");
               }
             }
           });
         }
-  
+
         itemsList.appendChild(itemElement);
       });
-  
+
       // Category collapse/expand functionality
-      categoryHeader.addEventListener('click', () => {
-        itemsList.classList.toggle('collapsed');
-        const chevron = categoryHeader.querySelector('.fa-chevron-down');
+      categoryHeader.addEventListener("click", () => {
+        itemsList.classList.toggle("collapsed");
+        const chevron = categoryHeader.querySelector(".fa-chevron-down");
         if (chevron) {
-          chevron.classList.toggle('rotated');
+          chevron.classList.toggle("rotated");
         }
       });
-      
+
       categoryContainer.appendChild(categoryHeader);
       categoryContainer.appendChild(itemsList);
       this.dropsContent.appendChild(categoryContainer);

@@ -9,6 +9,7 @@ export interface Location {
   iconColor?: string;
   radius?: number;
 }
+
 export interface VersionInfo {
   version: string;
   game_version: string;
