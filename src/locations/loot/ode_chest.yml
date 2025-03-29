@@ -11,6 +11,6 @@ coordinates:
   - [2948, 4072]
   - [3075, 3424]
 description: "These chests are not guaranteed spawns. Chance to drop Thistle fragments"
-icon: "fa-solid fa-toolbox"
-iconSize: 0.75
+icon: "/SF_ode"
+iconSize: 1.25
 iconColor: "#79AAFF"

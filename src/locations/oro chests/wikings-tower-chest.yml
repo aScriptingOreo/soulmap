@@ -3,6 +3,6 @@ name: "[oro] Wiking's tower chest"
 coordinates: [2905, 3514]
 description: "credits: Wiking"
 icon: "fa-solid fa-chess-rook"
-iconSize: 0.5
+iconSize: 0.75
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/W0otGTT.png"

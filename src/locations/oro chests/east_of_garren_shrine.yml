@@ -3,6 +3,6 @@ name: "[oro] East of Garren's Shrine"
 coordinates: [2657, 3658]
 description: "credits: Icon"
 icon: "fa-solid fa-chess-rook"
-iconSize: 0.5
+iconSize: 0.75
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/0rkORWb.png"

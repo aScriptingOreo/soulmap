@@ -3,6 +3,6 @@ name: "[oro] Facing Mines of Borro"
 coordinates: [2883, 3960]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"
-iconSize: 0.5
+iconSize: 0.75
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/muaDPLC.jpeg"

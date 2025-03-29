@@ -7,5 +7,5 @@ coordinates:
 
 description: "These are possible exits for Dermark tileset dungeons. credits: Contestant"
 icon: "fa-solid fa-person-running"
-iconSize: 0.75
+iconSize: 1.25
 iconColor: "#bfe234"

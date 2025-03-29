@@ -16,7 +16,9 @@ coordinates:
   - [5569, 3445]
   - [5733, 6019]
   - [3749, 4842]
+  - [2431, 6229]
 description: "This unlocks the map region"
-icon: "fa-solid fa-tree"
+icon: "/SF_world_tree"
 iconColor: "#00FF00"
-iconSize: 0.75
+imgUrl: "https://i.imgur.com/1GgafcZ.png"
+iconSize: 2

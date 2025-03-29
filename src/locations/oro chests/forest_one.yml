@@ -3,6 +3,6 @@ name: "[oro] Cozy Forest Chest"
 coordinates: [2611, 3855]
 description: "credits: Dystopia"
 icon: "fa-solid fa-chess-rook"
-iconSize: 0.5
+iconSize: 0.75
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/uxOC9YI.jpeg"
