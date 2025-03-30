@@ -2,4 +2,5 @@ name: "Stroaic"
 coordinates: [1703, 1659]
 description: ""
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"

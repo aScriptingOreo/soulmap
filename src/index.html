@@ -1,43 +1,49 @@
 <!-- src/index.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en"> <!-- Add language attribute for better SEO -->
 
 <head>
-  <title>Soulmap</title>
+  <title>Soulmap - Interactive Map for Soulframe</title> <!-- Improved title with keywords -->
+  <meta charset="UTF-8"> <!-- Add charset declaration -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Add viewport for mobile -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="stylesheet" href="./styles/main.css" />
-  <meta name="description" content="First interactive Soulframe map, built by the community for the community.">
-  <meta name="keywords"
-    content="Soulframe, interactive map, game locations, Soulframe map, Soulframe locations, Soulframe dungeons, Soulframe loot, Soulframe community">
+  
+  <!-- Enhanced SEO meta tags -->
+  <meta name="description" content="Soulframe interactive map with locations, dungeons, loot, and more. The most comprehensive Soulframe map built by the community for the community.">
+  <meta name="keywords" content="Soulframe, interactive map, Soulframe map, game locations, Soulframe locations, Soulframe dungeons, Soulframe loot, Soulframe community, Soulframe wiki, Soulframe guide">
   <meta name="author" content="The Avakot Community">
+  <meta name="robots" content="index, follow">
+  <meta name="google-site-verification" content=""> <!-- Add your Google verification code when available -->
 
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph / Facebook with enhanced descriptions -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="">
-  <meta property="og:title" content="Soulmap">
-  <meta property="og:description" content="First interactive Soulframe map, built by the community for the community.">
-  <meta property="og:image" content="">
-
-  <!-- Twitter -->
+  <meta property="og:url" content="https://soulmap.info/"> <!-- Replace with your actual domain when ready -->
+  <meta property="og:title" content="Soulmap - Interactive Map for Soulframe">
+  <meta property="og:description" content="Discover all locations, dungeons, loot, and points of interest in Soulframe with this interactive community-built map.">
+  <meta property="og:image" content="https://soulmap.info/thumbnail.jpg"> <!-- Replace with actual URL -->
+  <meta property="og:site_name" content="Soulmap">
+  
+  <!-- Twitter with enhanced descriptions -->
   <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="">
-  <meta property="twitter:title" content="Soulmap">
-  <meta property="twitter:description"
-    content="First interactive Soulframe map, built by the community for the community.">
-  <meta property="twitter:image" content="">
+  <meta property="twitter:url" content="https://soulmap.info/"> <!-- Replace with your actual domain -->
+  <meta property="twitter:title" content="Soulmap - Interactive Map for Soulframe">
+  <meta property="twitter:description" content="Explore Soulframe's world with this detailed interactive map featuring all locations, resources, and points of interest.">
+  <meta property="twitter:image" content="https://soulmap.info/thumbnail.jpg"> <!-- Replace with actual URL -->
 
-  <!-- Schema.org structured data -->
+  <!-- Enhanced Schema.org structured data for better Google visibility -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "Soulframe Interactive Map",
-    "description": "First interactive map for Soulframe, created by The Avakot Community and populated by the Soulframe Preludes Discord community.",
+    "name": "Soulmap - Interactive Map for Soulframe",
+    "description": "Comprehensive interactive map for Soulframe with all locations, resources, dungeons, and points of interest marked and searchable.",
     "applicationCategory": "Game Map",
     "operatingSystem": "Web Browser",
+    "url": "https://soulmap.avakot.org/",
     "author": {
       "@type": "Organization",
       "name": "The Avakot Community"
@@ -45,11 +51,23 @@
     "contributor": {
       "@type": "Organization",
       "name": "Soulframe Preludes Discord Community"
+    },
+    "keywords": "Soulframe map, Soulframe locations, Soulframe interactive map, Soulframe resource map",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
     }
   }
   </script>
+
+  <!-- Add canonical URL to prevent duplicate content issues -->
+  <link rel="canonical" href="https://soulmap.info/">
+  
   <!-- Add the favicon link -->
   <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
   <!-- Add preload for common icons -->
   <link rel="preload" href="/SF_world_tree.svg" as="image" type="image/svg+xml">

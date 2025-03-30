@@ -2,4 +2,5 @@ name: "Horas Hyne"
 coordinates: [5252, 3233]
 description: ""
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"
