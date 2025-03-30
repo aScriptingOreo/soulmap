@@ -21,10 +21,12 @@ import {
 
 let tempMarker: L.Marker | null = null;
 
-// Add this helper function at the top of the file, outside of any existing functions
+// Modify the getIconUrl function to handle offline mode more gracefully
 function getIconUrl(iconPath: string): string {
   // Check if it's a full URL (starts with http or https)
   if (/^(https?:\/\/)/.test(iconPath)) {
+    // For remote URLs that might not be available offline,
+    // we could provide a fallback, but for now just return the URL
     return iconPath;
   }
 

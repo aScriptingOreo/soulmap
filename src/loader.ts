@@ -45,24 +45,42 @@ async function loadFileMetadata(): Promise<Record<string, { lastModified: number
   }
 }
 
-export async function loadLocations(): Promise<(Location & { type: string })[]> {
+export async function loadLocations(isOfflineMode = false): Promise<(Location & { type: string })[]> {
   try {
     await locationStore.ready(); // Ensure store is ready
 
-    const contentHash = await generateContentHash();
-    const storedHash = getStoredHash();
-
-    // Fetch file metadata (will be used later)
-    const fileMetadata = await loadFileMetadata();
-
-    // Use cached data if hashes match
+    // Get cached data first - we'll need this regardless of online/offline status
     const cachedData = await locationStore.getItem<{
       hash: string, 
       data: (Location & { type: string })[]
     }>(LOCATIONS_CACHE_KEY);
     
+    // If we're in offline mode and have cached data, use it right away
+    if (isOfflineMode && cachedData) {
+      console.log('Using cached locations data in offline mode');
+      return cachedData.data;
+    } 
+    // If offline with no cached data, return empty array (can't proceed)
+    else if (isOfflineMode && !cachedData) {
+      console.error('No cached data available for offline mode');
+      return [];
+    }
+    
+    // If we're online, proceed with normal flow
+    const contentHash = await generateContentHash();
+    const storedHash = getStoredHash();
+
+    // Fetch file metadata (will be used later)
+    let fileMetadata = {};
+    try {
+      fileMetadata = await loadFileMetadata();
+    } catch (error) {
+      console.warn('Failed to load file metadata, continuing with cache if available');
+    }
+
+    // Use cached data if hashes match and we're online
     if (cachedData && cachedData.hash === contentHash) {
-      console.log('Using cached locations data');
+      console.log('Using cached locations data (hashes match)');
       
       // Even if using cached data, update the lastModified timestamps
       // from the latest metadata (in case files were modified)
@@ -79,6 +97,7 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
       return updatedData;
     }
 
+    // If we get here, we need to load fresh data from the server
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;

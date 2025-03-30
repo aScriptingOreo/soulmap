@@ -2239,3 +2239,30 @@ mark {
   text-align: center;
   font-style: italic;
 }
+
+/* Offline mode indicator */
+.offline-indicator {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background-color: #ff4a4a;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  display: none; /* Hidden by default */
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  z-index: 2500; /* Above most elements */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease;
+}
+
+.offline-indicator .material-icons {
+  font-size: 18px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

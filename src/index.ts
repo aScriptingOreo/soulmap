@@ -7,12 +7,51 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 import type { VersionInfo } from './types';
 import mapVersion from './mapversion.yml';
 
+// Add offline mode tracking
+let isOfflineMode = !navigator.onLine;
+const offlineIndicator = document.createElement('div');
+
+// Initialize offline indicator
+function setupOfflineIndicator() {
+  offlineIndicator.className = 'offline-indicator';
+  offlineIndicator.innerHTML = '<span class="material-icons">cloud_off</span> Offline Mode';
+  document.body.appendChild(offlineIndicator);
+  
+  // Initial state
+  updateOfflineIndicator();
+  
+  // Listen for online/offline events
+  window.addEventListener('online', handleOnlineStatusChange);
+  window.addEventListener('offline', handleOnlineStatusChange);
+}
+
+function handleOnlineStatusChange() {
+  isOfflineMode = !navigator.onLine;
+  updateOfflineIndicator();
+}
+
+function updateOfflineIndicator() {
+  offlineIndicator.style.display = isOfflineMode ? 'flex' : 'none';
+}
+
 // Extract the greeting loading into a separate function that can be reused
 async function showGreetingPopup() {
     try {
         const versionData = mapVersion as VersionInfo;
-        const response = await fetch('./greetings.md');
-        let markdown = await response.text();
+        
+        // In offline mode, use cached greeting if possible
+        let markdown;
+        try {
+            const response = await fetch('./greetings.md');
+            markdown = await response.text();
+        } catch (error) {
+            if (isOfflineMode) {
+                console.log('Unable to fetch greeting in offline mode');
+                return; // Skip greeting in offline mode if fetch fails
+            } else {
+                throw error; // Re-throw if we're online
+            }
+        }
         
         // Replace version placeholders
         markdown = markdown.replace('{version}', versionData.version)
@@ -38,8 +77,8 @@ async function loadGreeting() {
         // Start loading the map immediately
         const mapInitialization = initMain();
         
-        // Show popup if version is different
-        if (lastSeenVersion !== versionData.version) {
+        // Show popup if version is different and not in offline mode
+        if (lastSeenVersion !== versionData.version && !isOfflineMode) {
             await showGreetingPopup();
             
             // Store the new version
@@ -80,6 +119,12 @@ function dismissPopup() {
 }
 
 async function checkForUpdates() {
+    // Skip update check if offline
+    if (isOfflineMode) {
+        console.log('Skipping update check in offline mode');
+        return;
+    }
+    
     try {
         const contentHash = await generateContentHash();
         const storedHash = getStoredHash();
@@ -104,14 +149,14 @@ async function initMain() {
             loadingOverlay.style.display = 'flex';
         }
 
-        // Check for updates first
+        // Check for updates first (will skip if offline)
         await checkForUpdates();
         
         const urlParams = new URLSearchParams(window.location.search);
         const debug = urlParams.get('debug') === 'true';
         
-        // Load locations with progress display
-        const locations = await loadLocations().catch(error => {
+        // Load locations with progress display - passing offline flag
+        const locations = await loadLocations(isOfflineMode).catch(error => {
             console.error("Failed to load locations:", error);
             return [];
         });
@@ -135,6 +180,9 @@ async function initMain() {
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', async () => {
+  // Setup offline indicator
+  setupOfflineIndicator();
+  
   // Show greeting first
   await loadGreeting();
   await updateVersionDisplay();
