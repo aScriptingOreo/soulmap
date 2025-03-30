@@ -251,6 +251,12 @@ export class Sidebar {
       this.imgEl.style.display = "none";
       this.imgEl.src = "";
 
+      // Remove icon if it exists
+      const existingIcon = this.element.querySelector('.location-icon-container');
+      if (existingIcon) {
+        existingIcon.remove();
+      }
+
       // Update URL with raw coordinates
       const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
       window.history.replaceState({}, "", urlParams);
@@ -269,7 +275,66 @@ export class Sidebar {
         }
       }
 
+      // Update title text
       this.titleEl.textContent = locationTitle;
+
+      // Get the location info container
+      const locationInfoContainer = this.element.querySelector('.location-info-container');
+      
+      // Remove existing icon if any
+      const existingIcon = locationInfoContainer?.querySelector('.location-icon-container');
+      if (existingIcon) {
+        existingIcon.remove();
+      }
+      
+      // Create icon container
+      if (location.icon || location.iconColor) {
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'location-icon-container';
+        
+        if (location.icon) {
+          // Determine if this is a Font Awesome icon or SVG
+          const isFontAwesome = location.icon.startsWith("fa-") || location.icon.includes("fa-");
+          const size = location.iconSize || 1;
+          
+          if (isFontAwesome) {
+            // Handle Font Awesome icon
+            const faIcon = document.createElement("i");
+            faIcon.className = location.icon; // Font Awesome class
+            faIcon.style.fontSize = `${32 * size}px`;
+            if (location.iconColor) {
+              faIcon.style.color = location.iconColor;
+            }
+            faIcon.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.7)";
+            iconContainer.appendChild(faIcon);
+          } else {
+            // Handle SVG icon
+            const standardSize = 32 * size;
+            const iconImg = document.createElement("img");
+            iconImg.src = `${location.icon}.svg`;
+            iconImg.alt = "";
+            iconImg.className = "location-icon-image";
+            iconImg.style.width = `${standardSize}px`;
+            iconImg.style.height = `${standardSize}px`;
+            if (location.iconColor) {
+              iconImg.style.filter = `drop-shadow(0 0 2px ${location.iconColor})`;
+            }
+            iconContainer.appendChild(iconImg);
+          }
+        } else if (location.iconColor) {
+          // Default icon with color if no icon but color is specified
+          const defaultIcon = document.createElement("span");
+          defaultIcon.className = "material-icons default-location-icon";
+          defaultIcon.textContent = "location_on";
+          defaultIcon.style.color = location.iconColor;
+          iconContainer.appendChild(defaultIcon);
+        }
+        
+        // Insert at the beginning of the location info container
+        if (locationInfoContainer) {
+          locationInfoContainer.insertBefore(iconContainer, locationInfoContainer.firstChild);
+        }
+      }
 
       // Add relative location info if not a location marker type
       if (location.type !== "location") {
@@ -514,6 +579,49 @@ export class Sidebar {
     const headerDiv = document.createElement("div");
     headerDiv.className = "category-header";
 
+    // Add icon if available
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "location-icon";
+    
+    if (item.icon) {
+      // Check if this is a Font Awesome icon
+      const isFontAwesome = item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const size = item.iconSize || 1;
+      
+      if (isFontAwesome) {
+        // For Font Awesome icons
+        const faIcon = document.createElement("i");
+        faIcon.className = item.icon;
+        faIcon.style.fontSize = `${20 * size}px`;
+        if (item.iconColor) {
+          faIcon.style.color = item.iconColor;
+        }
+        faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
+        iconContainer.appendChild(faIcon);
+      } else {
+        // For SVG icons
+        const standardSize = 20 * size;
+        const iconImg = document.createElement("img");
+        iconImg.src = `${item.icon}.svg`;
+        iconImg.alt = "";
+        iconImg.style.width = `${standardSize}px`;
+        iconImg.style.height = `${standardSize}px`;
+        if (item.iconColor) {
+          iconImg.style.filter = `drop-shadow(0 0 1px ${item.iconColor})`;
+        }
+        iconContainer.appendChild(iconImg);
+      }
+    } else {
+      // Default icon if none is provided
+      const defaultIcon = document.createElement("span");
+      defaultIcon.className = "material-icons default-location-icon";
+      defaultIcon.textContent = "location_on";
+      if (item.iconColor) {
+        defaultIcon.style.color = item.iconColor;
+      }
+      iconContainer.appendChild(defaultIcon);
+    }
+
     const nameSpan = document.createElement("span");
     nameSpan.textContent = item.name;
 
@@ -524,7 +632,8 @@ export class Sidebar {
     const chevronIcon = document.createElement("i");
     chevronIcon.className = "fa-solid fa-chevron-down";
 
-    headerDiv.appendChild(nameSpan); // Fix: was using titleSpan instead of nameSpan
+    headerDiv.appendChild(iconContainer);
+    headerDiv.appendChild(nameSpan);
     headerDiv.appendChild(visibilityToggle);
     headerDiv.appendChild(chevronIcon);
 
@@ -582,6 +691,49 @@ export class Sidebar {
     const itemDiv = document.createElement("div");
     itemDiv.className = "location-item";
 
+    // Add icon if available
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "location-icon";
+    
+    if (item.icon) {
+      // Check if this is a Font Awesome icon
+      const isFontAwesome = item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const size = item.iconSize || 1;
+      
+      if (isFontAwesome) {
+        // For Font Awesome icons
+        const faIcon = document.createElement("i");
+        faIcon.className = item.icon;
+        faIcon.style.fontSize = `${20 * size}px`;
+        if (item.iconColor) {
+          faIcon.style.color = item.iconColor;
+        }
+        faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
+        iconContainer.appendChild(faIcon);
+      } else {
+        // For SVG icons
+        const standardSize = 20 * size;
+        const iconImg = document.createElement("img");
+        iconImg.src = `${item.icon}.svg`;
+        iconImg.alt = "";
+        iconImg.style.width = `${standardSize}px`;
+        iconImg.style.height = `${standardSize}px`;
+        if (item.iconColor) {
+          iconImg.style.filter = `drop-shadow(0 0 1px ${item.iconColor})`;
+        }
+        iconContainer.appendChild(iconImg);
+      }
+    } else {
+      // Default icon if none is provided
+      const defaultIcon = document.createElement("span");
+      defaultIcon.className = "material-icons default-location-icon";
+      defaultIcon.textContent = "location_on";
+      if (item.iconColor) {
+        defaultIcon.style.color = item.iconColor;
+      }
+      iconContainer.appendChild(defaultIcon);
+    }
+
     const nameSpan = document.createElement("span");
     nameSpan.className = "location-name";
     nameSpan.textContent = item.name;
@@ -590,6 +742,7 @@ export class Sidebar {
     visibilityToggle.className = "material-icons visibility-toggle";
     visibilityToggle.textContent = "visibility";
 
+    itemDiv.appendChild(iconContainer);
     itemDiv.appendChild(nameSpan);
     itemDiv.appendChild(visibilityToggle);
 

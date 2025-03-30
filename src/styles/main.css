@@ -198,11 +198,18 @@ body {
 }
 
 .coordinates-display {
-  margin-top: 10px;
-  padding: 5px 10px;
+  margin: 8px 0;
+  padding: 6px 10px;
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   font-size: 14px;
+  display: inline-block;
+  font-family: monospace;
+  letter-spacing: 1px;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  width: fit-content;
+  align-self: center;
 }
 
 .location-title {
@@ -2376,4 +2383,119 @@ mark {
 @keyframes highlight {
   0% { background: rgba(255, 255, 255, 0.2); }
   100% { background: rgba(255, 255, 255, 0.05); }
+}
+
+/* Styling for location icons in sidebar */
+.location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.location-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.default-location-icon {
+  font-size: 20px;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+}
+/* Styling for location icon in the main location info display - UPDATED */
+.location-info-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.location-icon-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+  width: 48px;
+  height: 48px;
+}
+
+.location-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 5px 0;
+  width: 100%;
+  text-align: center;
+  word-wrap: break-word;
+}
+
+.location-icon-image {
+  max-width: 100%;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+.default-location-icon,
+.fa-icon-container {
+  font-size: 28px;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Keep the existing sidebar list item styling */
+.location-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.location-item .location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+/* Styling for location icon in the main location info display */
+.location-info-container {
+  display: flex;
+  align-items: center;
+}
+
+.location-info-container .location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.location-info-container .default-location-icon {
+  font-size: 28px;
+}
+
+/* Styling for temporary marker */
+.temp-marker-icon {
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.4));
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+  animation: marker-bounce 0.5s ease-out;
+  transform-origin: bottom center;
+}
+
+@keyframes marker-bounce {
+  0% { transform: translateY(-15px) scale(0.8); opacity: 0; }
+  70% { transform: translateY(5px) scale(1.05); }
+  100% { transform: translateY(0) scale(1); opacity: 0.9; }
 }

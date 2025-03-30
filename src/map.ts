@@ -9,6 +9,8 @@ import { generateLocationHash, decodeLocationHash } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
 import { MarkerModal } from './components/MarkerModal';
 
+let tempMarker: L.Marker | null = null;
+
 function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
     // Update title and description meta
     document.title = `${location.name} - Soulmap`;
@@ -121,6 +123,11 @@ async function handleUrlNavigation(
         const [x, y] = coordParam.split(',').map(Number);
         if (!isNaN(x) && !isNaN(y)) {
             targetCoords = [x, y];
+            
+            // Create temporary marker at the coordinates
+            const latLng = L.latLng(y, x);
+            createTemporaryMarker(latLng, map);
+            
             // Find closest location to these coordinates
             targetLocation = locations.reduce((closest, loc) => {
                 const locCoords = Array.isArray(loc.coordinates[0]) 
@@ -159,6 +166,12 @@ async function handleUrlNavigation(
             newUrl.searchParams.set('coord', `${targetCoords[0]},${targetCoords[1]}`);
         }
         window.history.replaceState({}, '', newUrl.toString());
+    } else if (targetCoords && !targetLocation) {
+        // Just center the map if we have coordinates but no specific location
+        map.setView([targetCoords[1], targetCoords[0]], 0);
+        
+        // Update sidebar with coordinate information only
+        sidebar.updateContent(null, targetCoords[0], targetCoords[1]);
     }
 }
 
@@ -181,12 +194,35 @@ function createUncertaintyCircle(coord: [number, number], radius: number, color:
     });
 }
 
+function createTemporaryMarker(latlng: L.LatLng, map: L.Map): L.Marker {
+    // Remove any existing temporary marker
+    if (tempMarker) {
+        map.removeLayer(tempMarker);
+    }
+    
+    // Use SVG file from assets directory with a larger size (2.25x)
+    const pointerIcon = L.icon({
+        iconUrl: './assets/SF_pointer.svg',
+        iconSize: [72, 108],      // Increased from [32, 48] by 2.25x
+        iconAnchor: [36, 108],    // Adjusted anchor point to match new size
+        className: 'temp-marker-icon'
+    });
+    
+    // Create and add the marker to the map
+    tempMarker = L.marker(latlng, {
+        icon: pointerIcon,
+        zIndexOffset: 1000,  // Ensure it appears above other markers
+        interactive: false   // Don't make it clickable
+    }).addTo(map);
+    
+    return tempMarker;
+}
+
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
     const loadingText = document.querySelector('.loading-text') as HTMLElement;
     const loadingOverlay = document.getElementById('loading-overlay');
-
     const updateProgress = (progress: number, text: string) => {
         if (progressBar && percentageText && loadingText) {
             progressBar.style.width = `${progress}%`;
@@ -194,18 +230,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             loadingText.textContent = text;
         }
     };
-
     const customMarkerService = new CustomMarkerService();
     const markerModal = new MarkerModal();
-
     try {
         // Phase 1: Initialize map (50-60%)
         updateProgress(50, 'Initializing map...');
-        
         const deviceType = getDeviceType();
         const defaultZoom = deviceType === 'mobile' ? -1 : 0;
         const iconSize = deviceType === 'mobile' ? [20, 20] : [30, 30];
-
         const map = L.map('map', {
             crs: L.CRS.Simple,
             minZoom: -3,
@@ -230,22 +262,18 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             updateWhenZooming: false,
             updateWhenIdle: true
         });
-
         // Add map click handler
         map.on('click', (e: L.LeafletMouseEvent) => {
             const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
-            
             // Find closest location for sidebar display
             const closest = locations.reduce((closest, loc) => {
                 const locCoords = Array.isArray(loc.coordinates[0]) 
                     ? loc.coordinates[0] 
                     : loc.coordinates as [number, number];
-                
                 const currentDist = Math.hypot(
                     coords[0] - locCoords[0],
                     coords[1] - locCoords[1]
                 );
-                
                 const closestDist = closest ? Math.hypot(
                     coords[0] - (Array.isArray(closest.coordinates[0]) 
                         ? closest.coordinates[0][0] 
@@ -254,10 +282,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                         ? closest.coordinates[0][1]
                         : closest.coordinates[1])
                 ) : Infinity;
-
                 return currentDist < closestDist ? loc : closest;
             });
-
             // If clicked very close to a marker, show that location
             const minDistance = 50;
             const closestDistance = Math.hypot(
@@ -268,13 +294,19 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                     ? closest.coordinates[0][1]
                     : closest.coordinates[1])
             );
-
             if (closestDistance < minDistance) {
                 // Update meta tags and sidebar with location
                 updateMetaTags(closest, coords);
                 sidebar.updateContent(closest, coords[0], coords[1]);
                 // Don't update URL here as sidebar.updateContent will handle it
+                // Remove any temporary marker when clicking on a real marker
+                if (tempMarker) {
+                    map.removeLayer(tempMarker);
+                    tempMarker = null;
+                }
             } else {
+                // No marker at this position - create a temporary marker
+                createTemporaryMarker(e.latlng, map);
                 // Only update URL for coordinate clicks when not near a marker
                 const urlParams = new URLSearchParams();
                 urlParams.set('coord', `${Math.round(coords[0])},${Math.round(coords[1])}`);
@@ -283,61 +315,53 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 sidebar.updateContent(null, coords[0], coords[1]);
             }
         });
-
         // Add right-click handler
         map.on('contextmenu', (e: L.LeafletMouseEvent) => {
             const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
             markerModal.show(coords);
+            // Remove temporary marker
+            if (tempMarker) {
+                map.removeLayer(tempMarker);
+                tempMarker = null;
+            }
         });
-
         // Handle new marker creation
         markerModal.onSubmit = (data) => {
             const newMarker = customMarkerService.addMarker({
                 ...data,
                 coordinates: data.coordinates as [number, number]
             });
-            
             // Add marker to map and update UI
             const customLocation = { ...newMarker, type: 'custom' };
             locations.push(customLocation);
-            
             // Force update visible markers
             updateVisibleMarkers();
-            
             // Update existing sidebar instead of creating a new one
             sidebar.addCustomMarker(customLocation); // Add this method to Sidebar class
-
             // Focus on new marker
             map.setView([data.coordinates[1], data.coordinates[0]], map.getZoom());
         };
-
         // Load existing custom markers
         const customMarkers = customMarkerService.getAllMarkers();
         locations.push(...customMarkers.map(m => ({ ...m, type: 'custom' })));
-
         // Phase 2: Load grid (60-75%)
         updateProgress(60, 'Loading map tiles...');
         await initializeGrid(map);
-        
         // Phase 3: Initialize markers (75-90%)
         updateProgress(75, 'Creating markers...');
         const markerGroup = L.layerGroup().addTo(map);
         const markers: L.Marker[] = [];
         const activeMarkers = new Set<string>();
-
         // Now that the map is initialized, set up the update function
         function updateVisibleMarkers() {
             const bounds = map.getBounds();
-            
             locations.forEach(location => {
                 const coords = Array.isArray(location.coordinates[0]) 
                     ? location.coordinates as [number, number][]
                     : [location.coordinates] as [number, number][];
-        
                 coords.forEach((coord, index) => {
                     const markerId = `${location.name}-${index}`;
                     const isVisible = isInBounds(coord, bounds);
-        
                     if (isVisible && !activeMarkers.has(markerId)) {
                         // Create marker icon
                         let icon: L.Icon | L.DivIcon;
@@ -358,7 +382,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                                 className: 'custom-location-icon'
                             });
                         }
-        
                         // Create and add marker
                         const marker = L.marker([coord[1], coord[0]], { 
                             icon,
@@ -381,21 +404,18 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                         if (coords.length > 1) {
                             marker.getElement()?.setAttribute('data-index', index.toString());
                         }
-        
                         marker.bindTooltip(coords.length > 1 ? `${location.name} #${index + 1}` : location.name, {
                             permanent: false,
                             direction: 'top',
                             offset: [0, -30],
                             className: 'leaflet-tooltip'
                         });
-        
                         marker.on('click', () => {
                             sidebar.updateContent(location, coord[0], coord[1]);
                             document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
                                 el.classList.remove('selected');
                             });
                             marker.getElement()?.classList.add('selected');
-        
                             const locationHash = generateLocationHash(location.name);
                             const urlParams = coords.length > 1 ? 
                                 `?loc=${locationHash}&index=${index}` : 
@@ -403,20 +423,17 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                             window.history.replaceState({}, '', urlParams);
                             updateMetaTags(location, coord);
                         });
-        
                         // Add uncertainty circle if radius is specified
                         if (location.radius && location.iconColor) {
                             const circle = createUncertaintyCircle(
-                                coord, 
+                                coord,
                                 location.radius,
                                 location.iconColor
                             );
                             circle.addTo(map);
-                            
                             // Store circle reference with marker for removal
                             (marker as any).uncertaintyCircle = circle;
                         }
-
                         marker.addTo(markerGroup);
                         markers.push(marker);
                         activeMarkers.add(markerId);
@@ -439,16 +456,13 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                 });
             });
         }
-
         // Add event listeners for map movement
         map.on('move', updateVisibleMarkers); // Add this line
         map.on('moveend', updateVisibleMarkers);
         map.on('zoom', updateVisibleMarkers);  // Add this line
         map.on('zoomend', updateVisibleMarkers);
-
         // Phase 4: Initialize interface (90-100%)
         updateProgress(90, 'Initializing interface...');
-        
         // Initialize sidebar first
         const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
         const sidebar = new Sidebar({
@@ -457,25 +471,19 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             map,
             markers
         });
-
         // Handle URL navigation parameters
         await handleUrlNavigation(map, sidebar, locations, new URLSearchParams(window.location.search));
-
         // Initialize search after handling URL params
         initializeSearch(locations, map, markers);
-
         // Initial marker update after everything is ready
         updateVisibleMarkers();
-
         updateProgress(100, 'Ready!');
-        
         // Hide loading overlay after a short delay
         setTimeout(() => {
             if (loadingOverlay) {
                 loadingOverlay.style.display = 'none';
             }
         }, 500);
-
     } catch (error) {
         console.error('Error initializing map:', error);
         if (loadingOverlay) {
