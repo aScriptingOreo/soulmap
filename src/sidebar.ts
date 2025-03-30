@@ -3,6 +3,26 @@ import type { Location } from "./types";
 import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
 
+function getIconUrl(iconPath: string): string {
+  // Check if it's a full URL (starts with http or https)
+  if (/^(https?:\/\/)/.test(iconPath)) {
+    return iconPath;
+  }
+
+  // Ensure we have a consistent base URL for all icons
+  // Make sure the path starts with a slash
+  const normalizedPath = iconPath.startsWith('/') ? iconPath : `/${iconPath}`;
+
+  // Remove any .svg extension if it's there - we'll add it consistently below
+  const pathWithoutExtension = normalizedPath.replace(/\.svg$/, '');
+
+  // Add cache busting parameter
+  const cacheBuster = new Date().getMonth(); // Simple cache buster that changes monthly
+
+  // Return the full path with extension and optional cache buster
+  return `${pathWithoutExtension}.svg?v=${cacheBuster}`;
+}
+
 export interface SidebarOptions {
   element: HTMLElement;
   locations: (Location & { type: string })[];
@@ -355,7 +375,7 @@ export class Sidebar {
           } else {
             const standardSize = 32 * size;
             const iconImg = document.createElement("img");
-            iconImg.src = `${location.icon}.svg`;
+            iconImg.src = getIconUrl(location.icon);
             iconImg.alt = "";
             iconImg.className = "location-icon-image";
             iconImg.style.width = `${standardSize}px`;
@@ -657,7 +677,7 @@ export class Sidebar {
       } else {
         const standardSize = 20 * size;
         const iconImg = document.createElement("img");
-        iconImg.src = `${item.icon}.svg`;
+        iconImg.src = getIconUrl(item.icon);
         iconImg.alt = "";
         iconImg.style.width = `${standardSize}px`;
         iconImg.style.height = `${standardSize}px`;
@@ -777,7 +797,7 @@ export class Sidebar {
       } else {
         const standardSize = 20 * size;
         const iconImg = document.createElement("img");
-        iconImg.src = `${item.icon}.svg`;
+        iconImg.src = getIconUrl(item.icon);
         iconImg.alt = "";
         iconImg.style.width = `${standardSize}px`;
         iconImg.style.height = `${standardSize}px`;

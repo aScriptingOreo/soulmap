@@ -16,6 +16,20 @@ export default defineConfig({
       include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
     }),
     {
+      // Add this plugin to handle icon caching
+      name: 'svg-cache-control',
+      configureServer(server) {
+        // Add cache headers for SVG files
+        server.middlewares.use((req, res, next) => {
+          if (req.url?.endsWith('.svg')) {
+            // Set cache headers for SVG files - 1 week cache
+            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+          }
+          next();
+        });
+      }
+    },
+    {
       // Development server middleware to provide file metadata through API
       name: 'file-metadata-middleware',
       configureServer(server) {
@@ -121,7 +135,17 @@ export default defineConfig({
   server: {
     fs: {
       allow: ['..']  // Allow access to parent directory
+    },
+    // Add headers for static assets
+    headers: {
+      // Set cache-control headers for all static assets
+      '*.svg': {
+        'Cache-Control': 'public, max-age=604800, immutable' // 1 week
+      },
+      '*.png': {
+        'Cache-Control': 'public, max-age=604800, immutable' // 1 week
+      }
     }
   },
-  assetsInclude: ['**/*.png']
+  assetsInclude: ['**/*.png', '**/*.svg']
 });

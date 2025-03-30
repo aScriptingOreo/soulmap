@@ -309,6 +309,23 @@ function highlightText(text: string, query?: string): string {
   return result;
 }
 
+// Add getIconUrl function
+function getIconUrl(iconPath: string): string {
+  if (!iconPath) return '';
+  
+  // Check if it's a full URL or Font Awesome (which doesn't need processing)
+  if (/^(https?:\/\/)/.test(iconPath) || iconPath.startsWith('fa-')) {
+    return iconPath;
+  }
+
+  // Ensure we have a consistent base URL for all icons
+  const normalizedPath = iconPath.startsWith('/') ? iconPath : `/${iconPath}`;
+  const pathWithoutExtension = normalizedPath.replace(/\.svg$/, '');
+  const cacheBuster = new Date().getMonth();
+
+  return `${pathWithoutExtension}.svg?v=${cacheBuster}`;
+}
+
 function renderLocationResult(location: Location & { type: string }, index: number, selectedIndex: number, allLocations: (Location & { type: string })[]): string {
   const isMultiLocation = Array.isArray(location.coordinates[0]);
   let result = '';
@@ -321,7 +338,7 @@ function renderLocationResult(location: Location & { type: string }, index: numb
         <div class="search-result-icon">
           ${location.icon?.startsWith('fa-') 
             ? `<i class="${location.icon}" style="color: ${location.iconColor || '#FFFFFF'}"></i>`
-            : `<img src="${location.icon}.svg" alt="">`}
+            : `<img src="${getIconUrl(location.icon)}" alt="">`}
         </div>
         <div class="search-result-content">
           <div class="result-name">${highlightText(location.name)}</div>
@@ -366,7 +383,7 @@ function renderLocationResult(location: Location & { type: string }, index: numb
         <div class="search-result-icon">
           ${location.icon?.startsWith('fa-') 
             ? `<i class="${location.icon}" style="color: ${location.iconColor || '#FFFFFF'}"></i>`
-            : `<img src="${location.icon}.svg" alt="">`}
+            : `<img src="${getIconUrl(location.icon)}" alt="">`}
         </div>
         <div class="search-result-content">
           <div class="result-name">

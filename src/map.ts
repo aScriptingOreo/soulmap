@@ -1,6 +1,6 @@
 // src/map.ts
 import * as L from 'leaflet';
-import type { Location } from './types';
+import type { Location, VersionInfo } from './types';
 import { getDeviceType } from './device';
 import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
@@ -8,6 +8,7 @@ import { initializeGrid } from './gridLoader';
 import { generateLocationHash, decodeLocationHash } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
 import { MarkerModal } from './components/MarkerModal';
+import mapVersion from './mapversion.yml';
 // Add visibility middleware import
 import {
   initVisibilityMiddleware,
@@ -19,6 +20,28 @@ import {
 } from './services/visibilityMiddleware';
 
 let tempMarker: L.Marker | null = null;
+
+// Add this helper function at the top of the file, outside of any existing functions
+function getIconUrl(iconPath: string): string {
+  // Check if it's a full URL (starts with http or https)
+  if (/^(https?:\/\/)/.test(iconPath)) {
+    return iconPath;
+  }
+
+  // Ensure we have a consistent base URL for all icons
+  // Make sure the path starts with a slash
+  const normalizedPath = iconPath.startsWith('/') ? iconPath : `/${iconPath}`;
+
+  // Remove any .svg extension if it's there - we'll add it consistently below
+  const pathWithoutExtension = normalizedPath.replace(/\.svg$/, '');
+
+  // Add cache busting parameter based on the app version from mapVersion
+  const versionInfo = mapVersion as VersionInfo;
+  const cacheBuster = versionInfo?.version?.replace(/\./g, '') || '';
+
+  // Return the full path with extension and optional cache buster
+  return `${pathWithoutExtension}.svg?v=${cacheBuster}`;
+}
 
 function updateMetaTags(location: Location & { type: string }, coords: [number, number]) {
     // Update title and description meta
@@ -414,10 +437,10 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                         } else {
                             const sizeMultiplier = location.iconSize || 1;
                             icon = L.icon({
-                                iconUrl: `${location.icon}.svg`,
+                                iconUrl: getIconUrl(location.icon || ''),
                                 iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
                                 iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
-                                className: 'custom-location-icon protected-icon'  // Added protected-icon class
+                                className: 'custom-location-icon protected-icon'
                             });
                         }
                         // Create and add marker
