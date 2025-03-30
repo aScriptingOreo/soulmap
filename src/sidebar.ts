@@ -304,7 +304,8 @@ export class Sidebar {
   async updateContent(
     location: (Location & { type: string }) | null,
     x: number,
-    y: number
+    y: number,
+    nearestLocation?: (Location & { type: string }) | null
   ) {
     await this.ensureInitialized();
 
@@ -325,6 +326,29 @@ export class Sidebar {
       const lastUpdatedEl = this.element.querySelector(".last-updated");
       if (lastUpdatedEl) {
         lastUpdatedEl.remove();
+      }
+
+      // Show relative location if nearest location is provided
+      if (nearestLocation) {
+        let relativeLocationEl = this.element.querySelector(".relative-location");
+        if (!relativeLocationEl) {
+          relativeLocationEl = document.createElement("div");
+          relativeLocationEl.className = "relative-location";
+          // Insert after coordinates element
+          this.coordEl.after(relativeLocationEl);
+        }
+        
+        const nearestCoords = Array.isArray(nearestLocation.coordinates[0])
+          ? nearestLocation.coordinates[0] as [number, number]
+          : nearestLocation.coordinates as [number, number];
+          
+        const direction = getRelativeDirection(
+          [x, y],
+          nearestCoords
+        );
+        relativeLocationEl.textContent = `${direction} of ${nearestLocation.name}`;
+      } else {
+        this.element.querySelector(".relative-location")?.remove();
       }
 
       const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;

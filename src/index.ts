@@ -183,6 +183,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Setup offline indicator
   setupOfflineIndicator();
   
+  // Add to window for easy access from other modules
+  window.isOfflineMode = isOfflineMode;
+  
   // Show greeting first
   await loadGreeting();
   await updateVersionDisplay();
@@ -190,3 +193,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up dismiss handler
   document.querySelector('#popup-content button')?.addEventListener('click', dismissPopup);
 });
+
+// Extend window interface for TypeScript
+declare global {
+  interface Window {
+    isOfflineMode: boolean;
+    sidebarInstance?: any;
+    tempMarker?: any;
+  }
+}

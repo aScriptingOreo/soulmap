@@ -9,6 +9,7 @@ export interface Location {
   iconColor?: string;
   radius?: number;
   lastModified?: number; // Timestamp of when the file was last modified
+  isCoordinateSearch?: boolean; // Special flag for coordinate search results
 }
 
 export interface VersionInfo {

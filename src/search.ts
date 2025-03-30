@@ -2,6 +2,7 @@ import type { Location } from './types';
 import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
 import { setMarkerVisibility } from './services/visibilityMiddleware';
+import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker } from './map';
 
 interface SearchResult {
   location: Location & { type: string };
@@ -26,7 +27,104 @@ export async function initializeSearch(locations: (Location & { type: string })[
     const normalizedQuery = query.toLowerCase();
     const terms = normalizedQuery.split(' ').filter(term => term.length > 0);
 
-    // Search locations only
+    // Check for coordinate patterns first
+    const coordPatterns = [
+      /^\[?\s*(\d+)\s*,\s*(\d+)\s*\]?$/, // [X, Y] or X,Y
+      /^\[?\s*(\d+)\s*\|\s*(\d+)\s*\]?$/, // [X|Y] or X|Y
+      /^\[?\s*(\d+)\s+(\d+)\s*\]?$/       // [X Y] or X Y
+    ];
+    
+    let coordMatch: RegExpMatchArray | null = null;
+    
+    for (const pattern of coordPatterns) {
+      coordMatch = normalizedQuery.match(pattern);
+      if (coordMatch) {
+        const x = parseInt(coordMatch[1], 10);
+        const y = parseInt(coordMatch[2], 10);
+        
+        if (!isNaN(x) && !isNaN(y)) {
+          // Find the nearest location to these coordinates
+          const nearestLocation = locations
+            .filter(loc => loc.type === 'location')
+            .reduce((nearest, loc) => {
+              const locCoords = Array.isArray(loc.coordinates[0]) 
+                ? loc.coordinates[0] 
+                : loc.coordinates as [number, number];
+              
+              const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
+              const nearestDist = nearest ? Math.hypot(
+                x - (Array.isArray(nearest.coordinates[0]) 
+                  ? nearest.coordinates[0][0] 
+                  : nearest.coordinates[0]),
+                y - (Array.isArray(nearest.coordinates[0])
+                  ? nearest.coordinates[0][1]
+                  : nearest.coordinates[1])
+              ) : Infinity;
+              
+              return currentDist < nearestDist ? loc : nearest;
+            }, null as (Location & { type: string }) | null);
+          
+          if (nearestLocation) {
+            const nearestCoords = Array.isArray(nearestLocation.coordinates[0])
+              ? nearestLocation.coordinates[0] as [number, number]
+              : nearestLocation.coordinates as [number, number];
+              
+            const direction = getRelativeDirection(
+              [x, y],
+              nearestCoords
+            );
+            
+            // Add coordinate result
+            results.push({
+              location: {
+                name: `Coordinates [${x}, ${y}]`,
+                coordinates: [x, y],
+                description: `${direction} of ${nearestLocation.name}`,
+                type: 'coordinate',
+                isCoordinateSearch: true
+              } as unknown as (Location & { type: string }),
+              score: 100
+            });
+          }
+          
+          // Check if we have an exact match with any marker
+          const exactMarkerMatch = markers.find(marker => {
+            const pos = marker.getLatLng();
+            // Allow for a small margin of error
+            return Math.abs(pos.lng - x) < 5 && Math.abs(pos.lat - y) < 5;
+          });
+          
+          if (exactMarkerMatch) {
+            const markerContent = exactMarkerMatch.getTooltip()?.getContent() as string;
+            const matchedLocation = locations.find(loc => {
+              if (markerContent?.includes(loc.name)) {
+                // Check if it's a specific coordinate in a multi-location
+                if (Array.isArray(loc.coordinates[0])) {
+                  const allCoords = loc.coordinates as [number, number][];
+                  return allCoords.some(coord => 
+                    Math.abs(coord[0] - x) < 5 && Math.abs(coord[1] - y) < 5
+                  );
+                } else {
+                  const coord = loc.coordinates as [number, number];
+                  return Math.abs(coord[0] - x) < 5 && Math.abs(coord[1] - y) < 5;
+                }
+              }
+              return false;
+            });
+            
+            if (matchedLocation) {
+              results.push({
+                location: matchedLocation,
+                score: 150 // Higher score for exact marker matches
+              });
+            }
+          }
+        }
+        break; // Stop checking other patterns if we have a match
+      }
+    }
+
+    // Regular search for locations
     locations.forEach(location => {
       let score = 0;
       const name = location.name.toLowerCase();
@@ -199,6 +297,36 @@ export async function initializeSearch(locations: (Location & { type: string })[
           const location = locations.find(l => l.name === name);
           if (location) {
             selectResult({ location, score: 0 }, selected);
+          } else if (name?.startsWith('Coordinates ')) {
+            // Handle coordinate search
+            const coordMatch = name.match(/\[(\d+),\s*(\d+)\]/);
+            if (coordMatch) {
+              const x = parseInt(coordMatch[1], 10);
+              const y = parseInt(coordMatch[2], 10);
+              
+              if (!isNaN(x) && !isNaN(y)) {
+                selectCoordinates([x, y]);
+              }
+            }
+          }
+        } else {
+          // Direct coordinate entry in the search box
+          const query = searchInput.value.trim();
+          for (const pattern of [
+            /^\[?\s*(\d+)\s*,\s*(\d+)\s*\]?$/, 
+            /^\[?\s*(\d+)\s*\|\s*(\d+)\s*\]?$/, 
+            /^\[?\s*(\d+)\s+(\d+)\s*\]?$/
+          ]) {
+            const match = query.match(pattern);
+            if (match) {
+              const x = parseInt(match[1], 10);
+              const y = parseInt(match[2], 10);
+              
+              if (!isNaN(x) && !isNaN(y)) {
+                selectCoordinates([x, y]);
+                break;
+              }
+            }
           }
         }
         break;
@@ -281,6 +409,64 @@ export async function initializeSearch(locations: (Location & { type: string })[
       closeSearch();
     }
   });
+
+  function selectCoordinates(coords: [number, number]) {
+    const [x, y] = coords;
+    
+    // Find nearest named location for relative direction
+    const nearestLocation = locations
+      .filter(loc => loc.type === 'location')
+      .reduce((nearest, loc) => {
+        const locCoords = Array.isArray(loc.coordinates[0]) 
+          ? loc.coordinates[0] 
+          : loc.coordinates as [number, number];
+        
+        const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
+        const nearestDist = nearest ? Math.hypot(
+          x - (Array.isArray(nearest.coordinates[0]) 
+            ? nearest.coordinates[0][0] 
+            : nearest.coordinates[0]),
+          y - (Array.isArray(nearest.coordinates[0])
+            ? nearest.coordinates[0][1] 
+            : nearest.coordinates[1])
+        ) : Infinity;
+        
+        return currentDist < nearestDist ? loc : nearest;
+      }, null as (Location & { type: string }) | null);
+    
+    // Check if coordinates match any exact marker first
+    const exactMarker = markers.find(marker => {
+      const pos = marker.getLatLng();
+      return Math.abs(pos.lng - x) < 5 && Math.abs(pos.lat - y) < 5;
+    });
+    
+    if (exactMarker) {
+      // If clicking on an exact marker, remove any temporary marker using our new function
+      removeTemporaryMarker(map);
+      
+      exactMarker.fire('click');
+    } else {
+      // Create temporary marker using the shared function from map.ts
+      const latLng = L.latLng(y, x);
+      createTemporaryMarker(latLng, map);
+      
+      // Center map on coordinates
+      map.setView([y, x], map.getZoom() || 0);
+      
+      // Update URL and sidebar
+      const urlParams = new URLSearchParams();
+      urlParams.set('coord', `${Math.round(x)},${Math.round(y)}`);
+      window.history.replaceState({}, '', `?${urlParams.toString()}`);
+      
+      // Update document title for coordinates
+      updateMetaTags(null, [x, y]);
+      
+      // Use the sidebar to show the coordinate
+      window.sidebarInstance?.updateContent(null, x, y, nearestLocation);
+    }
+    
+    closeSearch();
+  }
 }
 
 function highlightText(text: string, query?: string): string {
@@ -327,6 +513,22 @@ function getIconUrl(iconPath: string): string {
 }
 
 function renderLocationResult(location: Location & { type: string }, index: number, selectedIndex: number, allLocations: (Location & { type: string })[]): string {
+  // Handle coordinate search result specially
+  if (location.isCoordinateSearch) {
+    return `
+      <div class="search-result ${index === selectedIndex ? 'selected' : ''}" 
+           data-type="coordinate"
+           data-name="${location.name}">
+        <div class="search-result-icon">
+          <span class="material-icons">my_location</span>
+        </div>
+        <div class="search-result-content">
+          <div class="result-name">${location.name}</div>
+          <div class="result-description">${location.description}</div>
+        </div>
+      </div>`;
+  }
+
   const isMultiLocation = Array.isArray(location.coordinates[0]);
   let result = '';
 
