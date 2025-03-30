@@ -9,6 +9,8 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+- You can now input coordinates [X,Y] directly into the search bar and it will tell you what's there
+- Re-done precision on some markers
 - Added Enclave markers
 - Added persistant toggle for icons(You can now toggle things and they will stay hidden after a refresh)
 - Better display for clicked markers
@@ -18,6 +20,7 @@ None of this would've been possible without @Remico, our main contributor for th
 
 
 Updated marker for:
+- Location markers
 - World Trees
 - Dungeon Exits
 - Quests
