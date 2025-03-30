@@ -1,9 +1,0 @@
-
-# src/locations/loot/ode_chest.yml
-name: "[oro] The well to Dermak"
-coordinates: [2636, 4067]
-description: "credit: Flaminux"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.75
-iconColor: "#87ffc9"
-imgUrl: "https://i.imgur.com/VZGHHlS.jpeg"

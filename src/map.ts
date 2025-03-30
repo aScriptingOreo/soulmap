@@ -1,13 +1,22 @@
 // src/map.ts
 import * as L from 'leaflet';
 import type { Location } from './types';
-import  { getDeviceType } from './device';
+import { getDeviceType } from './device';
 import { initializeSearch } from './search';
 import { Sidebar } from './sidebar';
 import { initializeGrid } from './gridLoader';
 import { generateLocationHash, decodeLocationHash } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
 import { MarkerModal } from './components/MarkerModal';
+// Add visibility middleware import
+import {
+  initVisibilityMiddleware,
+  isMarkerVisible,
+  setMarkerVisibility,
+  setCategoryVisibility,
+  getHiddenMarkers,
+  getHiddenCategories
+} from './services/visibilityMiddleware';
 
 let tempMarker: L.Marker | null = null;
 
@@ -205,7 +214,7 @@ function createTemporaryMarker(latlng: L.LatLng, map: L.Map): L.Marker {
         iconUrl: './assets/SF_pointer.svg',
         iconSize: [72, 108],      // Increased from [32, 48] by 2.25x
         iconAnchor: [36, 108],    // Adjusted anchor point to match new size
-        className: 'temp-marker-icon'
+        className: 'temp-marker-icon protected-icon'  // Added protected-icon class
     });
     
     // Create and add the marker to the map
@@ -215,7 +224,24 @@ function createTemporaryMarker(latlng: L.LatLng, map: L.Map): L.Marker {
         interactive: false   // Don't make it clickable
     }).addTo(map);
     
+    // Add protection against right-clicking
+    const markerElement = tempMarker.getElement();
+    if (markerElement) {
+        markerElement.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+        });
+    }
+    
     return tempMarker;
+}
+
+function saveVisibilityState(markerId: string, visible: boolean, category?: string): void {
+    if (category) {
+        setCategoryVisibility(category, visible);
+    } else {
+        setMarkerVisibility(markerId, visible);
+    }
 }
 
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<void> {
@@ -233,6 +259,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
     const customMarkerService = new CustomMarkerService();
     const markerModal = new MarkerModal();
     try {
+        // Initialize visibility middleware - now returns a promise
+        await initVisibilityMiddleware();
+
         // Phase 1: Initialize map (50-60%)
         updateProgress(50, 'Initializing map...');
         const deviceType = getDeviceType();
@@ -355,14 +384,23 @@ export async function initializeMap(locations: (Location & { type: string })[], 
         // Now that the map is initialized, set up the update function
         function updateVisibleMarkers() {
             const bounds = map.getBounds();
+            
             locations.forEach(location => {
                 const coords = Array.isArray(location.coordinates[0]) 
                     ? location.coordinates as [number, number][]
                     : [location.coordinates] as [number, number][];
+                
                 coords.forEach((coord, index) => {
                     const markerId = `${location.name}-${index}`;
                     const isVisible = isInBounds(coord, bounds);
-                    if (isVisible && !activeMarkers.has(markerId)) {
+                    
+                    // Use the middleware to check visibility
+                    const shouldBeVisible = isVisible && isMarkerVisible(markerId, location.type);
+                    
+                    if (shouldBeVisible && !markers.some(m => {
+                        const pos = m.getLatLng();
+                        return pos.lat === coord[1] && pos.lng === coord[0];
+                    })) {
                         // Create marker icon
                         let icon: L.Icon | L.DivIcon;
                         if (location.icon && location.icon.startsWith('fa-')) {
@@ -379,7 +417,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                                 iconUrl: `${location.icon}.svg`,
                                 iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
                                 iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
-                                className: 'custom-location-icon'
+                                className: 'custom-location-icon protected-icon'  // Added protected-icon class
                             });
                         }
                         // Create and add marker
@@ -430,15 +468,52 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                                 location.radius,
                                 location.iconColor
                             );
+                            
                             circle.addTo(map);
                             // Store circle reference with marker for removal
                             (marker as any).uncertaintyCircle = circle;
+                            
+                            // Set visibility based on middleware
+                            if (!isMarkerVisible(markerId, location.type)) {
+                                circle.setStyle({
+                                    opacity: 0,
+                                    fillOpacity: 0
+                                });
+                            }
                         }
+                        marker.on('add', () => {
+                            const markerElement = marker.getElement();
+                            if (markerElement) {
+                                markerElement.addEventListener('contextmenu', (e) => {
+                                    e.preventDefault();
+                                    return false;
+                                });
+                                
+                                // Find all images within the marker and protect them
+                                const images = markerElement.querySelectorAll('img');
+                                images.forEach(img => {
+                                    img.addEventListener('contextmenu', (e) => {
+                                        e.preventDefault();
+                                        return false;
+                                    });
+                                });
+                            }
+                        });
+                        
+                        // If marker should not be visible, hide it
+                        if (!isMarkerVisible(markerId, location.type)) {
+                            const markerElement = marker.getElement();
+                            if (markerElement) {
+                                markerElement.style.display = "none";
+                            }
+                        }
+                        
                         marker.addTo(markerGroup);
                         markers.push(marker);
                         activeMarkers.add(markerId);
-                    } else if (!isVisible && activeMarkers.has(markerId)) {
-                        // Remove out-of-bounds marker and its circle
+                    } 
+                    // Remove out-of-bounds marker and its circle
+                    else if (!isVisible && activeMarkers.has(markerId)) {
                         const markerIndex = markers.findIndex(m => {
                             const pos = m.getLatLng();
                             return pos.lat === coord[1] && pos.lng === coord[0];
@@ -469,7 +544,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
             element: sidebarElement,
             locations,
             map,
-            markers
+            markers,
+            visibilityMiddleware: {
+                isMarkerVisible,
+                setMarkerVisibility,
+                setCategoryVisibility,
+                getHiddenMarkers,
+                getHiddenCategories
+            }
         });
         // Handle URL navigation parameters
         await handleUrlNavigation(map, sidebar, locations, new URLSearchParams(window.location.search));

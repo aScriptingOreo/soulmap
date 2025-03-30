@@ -2499,3 +2499,27 @@ mark {
   70% { transform: translateY(5px) scale(1.05); }
   100% { transform: translateY(0) scale(1); opacity: 0.9; }
 }
+
+/* Protection against right-clicks on icons */
+.protected-icon,
+.temp-marker-icon,
+.custom-location-icon,
+.location-icon-image,
+.leaflet-marker-icon img {
+  pointer-events: auto;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Add global right-click protection for icons */
+.leaflet-marker-pane,
+.location-icon-container,
+.location-icon {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}

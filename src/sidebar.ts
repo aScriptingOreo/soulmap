@@ -2,13 +2,20 @@ import * as L from "leaflet";
 import type { Location, ItemDrop } from "./types";
 import { generateLocationHash, getRelativeDirection } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
-import { loadDrops, findDropLocations } from "./drops/dropsLoader"; // Add this import
+import { loadDrops, findDropLocations } from "./drops/dropsLoader";
 
 export interface SidebarOptions {
   element: HTMLElement;
   locations: (Location & { type: string })[];
   map: L.Map;
   markers: L.Marker[];
+  visibilityMiddleware?: {
+    isMarkerVisible: (markerId: string, category?: string) => boolean;
+    setMarkerVisibility: (markerId: string, visible: boolean) => Promise<void>;
+    setCategoryVisibility: (category: string, visible: boolean) => Promise<void>;
+    getHiddenMarkers: () => Set<string>;
+    getHiddenCategories: () => Set<string>;
+  };
 }
 
 export class Sidebar {
@@ -32,9 +39,10 @@ export class Sidebar {
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
   private customMarkerService: CustomMarkerService;
-  private hasCustomCategory: boolean = false; // Add this flag
-  private dropsContent!: HTMLElement; // Add this property
-  private locationContent!: HTMLElement; // Add this property
+  private hasCustomCategory: boolean = false;
+  private dropsContent!: HTMLElement;
+  private locationContent!: HTMLElement;
+  private visibilityMiddleware: SidebarOptions['visibilityMiddleware'];
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
@@ -42,6 +50,26 @@ export class Sidebar {
     this.map = options.map;
     this.markers = options.markers;
     this.customMarkerService = new CustomMarkerService();
+    this.visibilityMiddleware = options.visibilityMiddleware;
+
+    // Initialize visibility state from middleware if available
+    if (this.visibilityMiddleware) {
+      const hiddenMarkers = this.visibilityMiddleware.getHiddenMarkers();
+      this.visibleMarkers = new Set(
+        this.locations.flatMap(loc => {
+          if (Array.isArray(loc.coordinates[0])) {
+            const multiCoords = loc.coordinates as [number, number][];
+            return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
+          }
+          return [loc.name];
+        }).filter(id => !hiddenMarkers.has(id))
+      );
+
+      const hiddenCategories = this.visibilityMiddleware.getHiddenCategories();
+      this.visibleCategories = new Set(
+        this.locations.map(loc => loc.type).filter(cat => !hiddenCategories.has(cat))
+      );
+    }
 
     // Create and add toggle button immediately
     this.createToggleButton();
@@ -53,7 +81,7 @@ export class Sidebar {
       );
       if (customCategory) {
         customCategory.remove();
-        this.hasCustomCategory = false; // Update flag when removing category
+        this.hasCustomCategory = false;
       }
     });
   }
@@ -61,7 +89,6 @@ export class Sidebar {
   private createToggleButton(): void {
     this.toggleButton = document.createElement("button");
     this.toggleButton.id = "sidebar-toggle";
-    // Start with both sidebar and button collapsed
     this.toggleButton.className = "sidebar-toggle collapsed";
     this.element.classList.add("collapsed");
 
@@ -72,24 +99,19 @@ export class Sidebar {
 
     document.body.appendChild(this.toggleButton);
 
-    // Initialize toggle functionality
     this.toggleButton.addEventListener("click", async (e) => {
       e.stopPropagation();
       await this.ensureInitialized();
 
       const isCollapsed = this.element.classList.contains("collapsed");
       if (isCollapsed) {
-        // Opening sidebar
         this.element.classList.remove("collapsed");
         this.toggleButton.classList.remove("collapsed");
       } else {
-        // Closing sidebar
         this.element.classList.add("collapsed");
         this.toggleButton.classList.add("collapsed");
-        // Clear URL parameters
         window.history.replaceState({}, "", window.location.pathname);
 
-        // Remove selected state from markers
         document
           .querySelectorAll(".custom-location-icon.selected")
           .forEach((el) => {
@@ -98,7 +120,6 @@ export class Sidebar {
       }
     });
 
-    // Add keyboard shortcut
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "b") {
         e.preventDefault();
@@ -106,18 +127,15 @@ export class Sidebar {
       }
     });
 
-    // Make button visible immediately with correct initial state
     requestAnimationFrame(() => {
       this.toggleButton.classList.add("loaded");
       this.element.classList.add("loaded");
     });
   }
 
-  // Update showSidebar method to ensure consistent state
   private showSidebar(): void {
     this.element.classList.remove("collapsed");
     this.toggleButton.classList.remove("collapsed");
-    // Add loaded class if not already present
     if (!this.element.classList.contains("loaded")) {
       this.element.classList.add("loaded");
     }
@@ -135,71 +153,105 @@ export class Sidebar {
 
   private async initialize(): Promise<void> {
     this.initializeElements();
-    this.createTabInterface(); // Add this
+    this.createTabInterface();
     await this.loadVisibilityState();
     await this.initializeComponentsAsync();
-    await this.createDropsInterface(); // Add this
+    await this.createDropsInterface();
     this.initialized = true;
 
-    // Always show loaded state
     requestAnimationFrame(() => {
       this.element.classList.add("loaded");
       this.toggleButton.classList.add("loaded");
     });
   }
 
-  // Helper method to find closest location
-  private findClosestLocation(
-    coords: [number, number]
-  ): (Location & { type: string }) | undefined {
-    let closest = this.locations[0];
-    let minDist = Infinity;
+  private async loadVisibilityState(): Promise<void> {
+    if (this.visibilityMiddleware) {
+      const hiddenMarkers = this.visibilityMiddleware.getHiddenMarkers();
+      const hiddenCategories = this.visibilityMiddleware.getHiddenCategories();
 
-    this.locations.forEach((location) => {
-      const locCoords = Array.isArray(location.coordinates[0])
-        ? location.coordinates[0]
-        : (location.coordinates as [number, number]);
-
-      const dist = Math.hypot(
-        coords[0] - locCoords[0],
-        coords[1] - locCoords[1]
+      this.visibleMarkers = new Set(
+        this.locations.flatMap(loc => {
+          if (Array.isArray(loc.coordinates[0])) {
+            const multiCoords = loc.coordinates as [number, number][];
+            return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
+          }
+          return [loc.name];
+        }).filter(id => !hiddenMarkers.has(id))
       );
-      if (dist < minDist) {
-        minDist = dist;
-        closest = location;
-      }
-    });
 
-    return closest;
+      this.visibleCategories = new Set(
+        this.locations.map(loc => loc.type).filter(cat => !hiddenCategories.has(cat))
+      );
+    } else {
+      try {
+        const markersJson = localStorage.getItem("soulmap_visible_markers");
+        const categoriesJson = localStorage.getItem("soulmap_visible_categories");
+
+        const initialVisibleMarkers = new Set(this.locations.map((l) => l.name));
+        if (markersJson) {
+          const savedMarkers = new Set(JSON.parse(markersJson));
+          this.visibleMarkers =
+            savedMarkers.size > 0 ? savedMarkers : initialVisibleMarkers;
+        } else {
+          this.visibleMarkers = initialVisibleMarkers;
+        }
+
+        const initialVisibleCategories = new Set(
+          this.locations.map((l) => l.type)
+        );
+        if (categoriesJson) {
+          const savedCategories = new Set(JSON.parse(categoriesJson));
+          this.visibleCategories =
+            savedCategories.size > 0 ? savedCategories : initialVisibleCategories;
+        } else {
+          this.visibleCategories = initialVisibleCategories;
+        }
+
+        this.saveVisibilityState();
+      } catch (error) {
+        console.error("Error loading visibility state:", error);
+        this.visibleMarkers = new Set(this.locations.map((l) => l.name));
+        this.visibleCategories = new Set(this.locations.map((l) => l.type));
+      }
+    }
   }
 
-  private async loadVisibilityState(): Promise<void> {
-    // Default: make everything visible
-    this.visibleMarkers = new Set(this.locations.map((l) => l.name));
-    this.visibleCategories = new Set(this.locations.map((l) => l.type));
+  private saveVisibilityState(): void {
+    if (this.visibilityMiddleware) {
+      return;
+    } else {
+      try {
+        localStorage.setItem(
+          "soulmap_visible_markers",
+          JSON.stringify(Array.from(this.visibleMarkers))
+        );
+        localStorage.setItem(
+          "soulmap_visible_categories",
+          JSON.stringify(Array.from(this.visibleCategories))
+        );
+      } catch (error) {
+        console.error("Error saving visibility state:", error);
+      }
+    }
   }
 
   private async initializeComponentsAsync(): Promise<void> {
-    // Create the locations list container
     const locationsList = document.createElement("div");
     locationsList.className = "locations-list drawer-content";
 
-    // Create the categories container
     const categoriesContainer = document.createElement("div");
     categoriesContainer.className = "categories";
     locationsList.appendChild(categoriesContainer);
 
-    // Group locations by type
     const groupedLocations = this.locations.reduce((acc, location) => {
       if (!acc[location.type]) acc[location.type] = [];
       acc[location.type].push(location);
       return acc;
     }, {} as Record<string, (Location & { type: string })[]>);
 
-    // Initialize handlers that don't depend on DOM creation
     this.initializeImageHandlers();
 
-    // Create location drawer elements asynchronously in chunks
     const chunkSize = 10;
     for (
       let i = 0;
@@ -217,7 +269,6 @@ export class Sidebar {
       });
     }
 
-    // Create drawer container with header
     const drawerHeader = document.createElement("div");
     drawerHeader.className = "drawer-header";
     drawerHeader.id = "drawer-toggle";
@@ -228,14 +279,11 @@ export class Sidebar {
     drawerContainer.appendChild(drawerHeader);
     drawerContainer.appendChild(locationsList);
 
-    // Add drawer to sidebar
     this.element.appendChild(drawerContainer);
 
-    // Store reference to location drawer
     this.locationDrawer = drawerContainer;
   }
 
-  // Update this method to ensure initialization before updating content
   async updateContent(
     location: (Location & { type: string }) | null,
     x: number,
@@ -244,27 +292,22 @@ export class Sidebar {
     await this.ensureInitialized();
 
     if (!location) {
-      // Handle coordinate-only display
       this.titleEl.textContent = "Current Coordinate";
       this.descEl.textContent = "No location marker at this position";
       this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
       this.imgEl.style.display = "none";
       this.imgEl.src = "";
 
-      // Remove icon if it exists
-      const existingIcon = this.element.querySelector('.location-icon-container');
+      const existingIcon = this.element.querySelector(".location-icon-container");
       if (existingIcon) {
         existingIcon.remove();
       }
 
-      // Update URL with raw coordinates
       const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
       window.history.replaceState({}, "", urlParams);
     } else {
-      // Handle location display
       let locationTitle = location.name;
 
-      // Check if this is part of a multi-location marker
       if (Array.isArray(location.coordinates[0])) {
         const coords = location.coordinates as [number, number][];
         const index = coords.findIndex(
@@ -275,32 +318,30 @@ export class Sidebar {
         }
       }
 
-      // Update title text
       this.titleEl.textContent = locationTitle;
 
-      // Get the location info container
-      const locationInfoContainer = this.element.querySelector('.location-info-container');
-      
-      // Remove existing icon if any
-      const existingIcon = locationInfoContainer?.querySelector('.location-icon-container');
+      const locationInfoContainer = this.element.querySelector(
+        ".location-info-container"
+      );
+
+      const existingIcon =
+        locationInfoContainer?.querySelector(".location-icon-container");
       if (existingIcon) {
         existingIcon.remove();
       }
-      
-      // Create icon container
+
       if (location.icon || location.iconColor) {
-        const iconContainer = document.createElement('div');
-        iconContainer.className = 'location-icon-container';
-        
+        const iconContainer = document.createElement("div");
+        iconContainer.className = "location-icon-container";
+
         if (location.icon) {
-          // Determine if this is a Font Awesome icon or SVG
-          const isFontAwesome = location.icon.startsWith("fa-") || location.icon.includes("fa-");
+          const isFontAwesome =
+            location.icon.startsWith("fa-") || location.icon.includes("fa-");
           const size = location.iconSize || 1;
-          
+
           if (isFontAwesome) {
-            // Handle Font Awesome icon
             const faIcon = document.createElement("i");
-            faIcon.className = location.icon; // Font Awesome class
+            faIcon.className = location.icon;
             faIcon.style.fontSize = `${32 * size}px`;
             if (location.iconColor) {
               faIcon.style.color = location.iconColor;
@@ -308,7 +349,6 @@ export class Sidebar {
             faIcon.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.7)";
             iconContainer.appendChild(faIcon);
           } else {
-            // Handle SVG icon
             const standardSize = 32 * size;
             const iconImg = document.createElement("img");
             iconImg.src = `${location.icon}.svg`;
@@ -322,26 +362,26 @@ export class Sidebar {
             iconContainer.appendChild(iconImg);
           }
         } else if (location.iconColor) {
-          // Default icon with color if no icon but color is specified
           const defaultIcon = document.createElement("span");
           defaultIcon.className = "material-icons default-location-icon";
           defaultIcon.textContent = "location_on";
           defaultIcon.style.color = location.iconColor;
           iconContainer.appendChild(defaultIcon);
         }
-        
-        // Insert at the beginning of the location info container
+
         if (locationInfoContainer) {
-          locationInfoContainer.insertBefore(iconContainer, locationInfoContainer.firstChild);
+          locationInfoContainer.insertBefore(
+            iconContainer,
+            locationInfoContainer.firstChild
+          );
         }
       }
 
-      // Add relative location info if not a location marker type
       if (location.type !== "location") {
         const nearestLocation = this.locations
           .filter((loc) => loc.type === "location")
           .reduce((nearest, loc) => {
-            const locCoords = loc.coordinates as [number, number]; // Location markers are single point
+            const locCoords = loc.coordinates as [number, number];
             const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
 
             const nearestCoords = nearest.coordinates as [number, number];
@@ -353,7 +393,6 @@ export class Sidebar {
             return currentDist < nearestDist ? loc : nearest;
           });
 
-        // Create or update relative location element
         let relativeLocationEl =
           this.element.querySelector(".relative-location");
         if (!relativeLocationEl) {
@@ -367,11 +406,9 @@ export class Sidebar {
         );
         relativeLocationEl.textContent = `${direction} of ${nearestLocation.name}`;
       } else {
-        // Remove relative location element if it exists
         this.element.querySelector(".relative-location")?.remove();
       }
 
-      // Show main description and image for both parent and child items
       this.descEl.textContent =
         location.description || "No description available";
       this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
@@ -385,11 +422,9 @@ export class Sidebar {
       }
     }
 
-    // Show sidebar when updating content
     this.showSidebar();
   }
 
-  // Initialize image modal handlers
   private initializeImageHandlers() {
     const closeModal = () => {
       this.imageModal.style.display = "none";
@@ -413,13 +448,11 @@ export class Sidebar {
     });
   }
 
-  // Initialize location drawer
   private initializeLocationDrawer() {
     const categoriesContainer = this.element.querySelector(
       ".categories"
     ) as HTMLElement;
 
-    // Group locations by type
     const groupedLocations = this.locations.reduce((acc, location) => {
       if (!acc[location.type]) {
         acc[location.type] = [];
@@ -428,24 +461,20 @@ export class Sidebar {
       return acc;
     }, {} as { [key: string]: (Location & { type: string })[] });
 
-    // Always create custom category first, regardless of whether there are custom markers
     this.createCategorySection(
       "custom",
       groupedLocations["custom"] || [],
       categoriesContainer
     );
-    delete groupedLocations["custom"]; // Remove custom from grouped locations
+    delete groupedLocations["custom"];
 
-    // Create other category sections
     Object.entries(groupedLocations).forEach(([category, items]) => {
       this.createCategorySection(category, items, categoriesContainer);
     });
 
-    // Remove the empty category event listener since we want to keep the category
     window.removeEventListener("customMarkersEmpty", () => {});
   }
 
-  // Create category section
   private createCategorySection(
     category: string,
     items: (Location & { type: string })[],
@@ -464,7 +493,13 @@ export class Sidebar {
 
     const visibilityToggle = document.createElement("span");
     visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleCategories.has(category);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
 
     const chevronIcon = document.createElement("i");
     chevronIcon.className = "fa-solid fa-chevron-down";
@@ -476,7 +511,6 @@ export class Sidebar {
     const categoryContent = document.createElement("div");
     categoryContent.className = "category-content";
 
-    // Special handling for custom category
     if (category === "custom") {
       if (items.length === 0) {
         const emptyMessage = document.createElement("div");
@@ -493,7 +527,6 @@ export class Sidebar {
       items.forEach((item) => this.createLocationItem(item, categoryContent));
     }
 
-    // Add category visibility toggle
     visibilityToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleCategoryVisibility(category, items, visibilityToggle);
@@ -509,7 +542,6 @@ export class Sidebar {
     container.appendChild(categoryDiv);
   }
 
-  // Create location item
   private createLocationItem(
     item: Location & { type: string },
     container: HTMLElement
@@ -532,9 +564,8 @@ export class Sidebar {
       deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
       deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.customMarkerService.deleteMarker((item as CustomMarker).id); // Add this.
+        this.customMarkerService.deleteMarker((item as CustomMarker).id);
         container.removeChild(itemDiv);
-        // Remove marker from map
         const coords = item.coordinates as [number, number];
         const marker = this.markers.find((m) => {
           const pos = m.getLatLng();
@@ -549,7 +580,7 @@ export class Sidebar {
         e.stopPropagation();
         const yaml = this.customMarkerService.exportMarkerAsYaml(
           (item as CustomMarker).id
-        ); // Add this.
+        );
         const blob = new Blob([yaml], { type: "text/yaml" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -567,7 +598,6 @@ export class Sidebar {
     }
   }
 
-  // Create multi-location item
   private createMultiLocationItem(
     item: Location & { type: string },
     container: HTMLElement
@@ -579,17 +609,15 @@ export class Sidebar {
     const headerDiv = document.createElement("div");
     headerDiv.className = "category-header";
 
-    // Add icon if available
     const iconContainer = document.createElement("div");
     iconContainer.className = "location-icon";
-    
+
     if (item.icon) {
-      // Check if this is a Font Awesome icon
-      const isFontAwesome = item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const isFontAwesome =
+        item.icon.startsWith("fa-") || item.icon.includes("fa-");
       const size = item.iconSize || 1;
-      
+
       if (isFontAwesome) {
-        // For Font Awesome icons
         const faIcon = document.createElement("i");
         faIcon.className = item.icon;
         faIcon.style.fontSize = `${20 * size}px`;
@@ -599,7 +627,6 @@ export class Sidebar {
         faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
         iconContainer.appendChild(faIcon);
       } else {
-        // For SVG icons
         const standardSize = 20 * size;
         const iconImg = document.createElement("img");
         iconImg.src = `${item.icon}.svg`;
@@ -612,7 +639,6 @@ export class Sidebar {
         iconContainer.appendChild(iconImg);
       }
     } else {
-      // Default icon if none is provided
       const defaultIcon = document.createElement("span");
       defaultIcon.className = "material-icons default-location-icon";
       defaultIcon.textContent = "location_on";
@@ -627,7 +653,13 @@ export class Sidebar {
 
     const visibilityToggle = document.createElement("span");
     visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleMarkers.has(item.name);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
 
     const chevronIcon = document.createElement("i");
     chevronIcon.className = "fa-solid fa-chevron-down";
@@ -650,7 +682,14 @@ export class Sidebar {
 
       const coordToggle = document.createElement("span");
       coordToggle.className = "material-icons visibilityz-toggle";
-      coordToggle.textContent = "visibility";
+      
+      // Set initial visibility icon based on actual visibility state
+      const markerId = `${item.name}-${index}`;
+      const isMarkerVisible = this.visibleMarkers.has(markerId);
+      coordToggle.textContent = isMarkerVisible ? "visibility" : "visibility_off";
+      if (!isMarkerVisible) {
+        coordToggle.classList.add("hidden");
+      }
 
       locationOption.appendChild(coordSpan);
       locationOption.appendChild(coordToggle);
@@ -683,7 +722,6 @@ export class Sidebar {
     container.appendChild(parentDiv);
   }
 
-  // Create single location item
   private createSingleLocationItem(
     item: Location & { type: string },
     container: HTMLElement
@@ -691,17 +729,15 @@ export class Sidebar {
     const itemDiv = document.createElement("div");
     itemDiv.className = "location-item";
 
-    // Add icon if available
     const iconContainer = document.createElement("div");
     iconContainer.className = "location-icon";
-    
+
     if (item.icon) {
-      // Check if this is a Font Awesome icon
-      const isFontAwesome = item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const isFontAwesome =
+        item.icon.startsWith("fa-") || item.icon.includes("fa-");
       const size = item.iconSize || 1;
-      
+
       if (isFontAwesome) {
-        // For Font Awesome icons
         const faIcon = document.createElement("i");
         faIcon.className = item.icon;
         faIcon.style.fontSize = `${20 * size}px`;
@@ -711,7 +747,6 @@ export class Sidebar {
         faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
         iconContainer.appendChild(faIcon);
       } else {
-        // For SVG icons
         const standardSize = 20 * size;
         const iconImg = document.createElement("img");
         iconImg.src = `${item.icon}.svg`;
@@ -724,7 +759,6 @@ export class Sidebar {
         iconContainer.appendChild(iconImg);
       }
     } else {
-      // Default icon if none is provided
       const defaultIcon = document.createElement("span");
       defaultIcon.className = "material-icons default-location-icon";
       defaultIcon.textContent = "location_on";
@@ -740,7 +774,13 @@ export class Sidebar {
 
     const visibilityToggle = document.createElement("span");
     visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleMarkers.has(item.name);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
 
     itemDiv.appendChild(iconContainer);
     itemDiv.appendChild(nameSpan);
@@ -760,7 +800,6 @@ export class Sidebar {
     return itemDiv;
   }
 
-  // Handle location click
   private handleLocationClick(
     coords: [number, number],
     item: Location & { type: string }
@@ -774,7 +813,6 @@ export class Sidebar {
     const targetZoom = this.calculateOptimalZoom(distance);
     const duration = this.calculateAnimationDuration(distance);
 
-    // Disable marker animations during flyTo
     this.map.once("movestart", () => {
       document
         .querySelector(".leaflet-marker-pane")
@@ -812,19 +850,16 @@ export class Sidebar {
         });
       marker.getElement()?.classList.add("selected");
 
-      // Delay the marker click event until the animation is complete
       const animationDuration = this.calculateAnimationDuration(distance);
       setTimeout(() => {
         marker.fire("click");
       }, animationDuration * 1000);
 
-      // Get marker index for multi-location items
       const markerContent = marker.getTooltip()?.getContent() as string;
       const markerIndex = markerContent.includes("#")
         ? parseInt(markerContent.split("#")[1]) - 1
         : undefined;
 
-      // Update URL with location hash and index if applicable
       const locationHash = generateLocationHash(item.name);
       const urlParams =
         markerIndex !== undefined
@@ -835,9 +870,7 @@ export class Sidebar {
     }
   }
 
-  // Add these improved helper methods to the Sidebar class
   private calculateOptimalZoom(distance: number): number {
-    // Adjust zoom based on distance to target
     if (distance > 10000) return -2;
     if (distance > 5000) return -1;
     if (distance > 2000) return 0;
@@ -846,22 +879,20 @@ export class Sidebar {
   }
 
   private calculateAnimationDuration(distance: number): number {
-    // Base duration in seconds
     const baseDuration = 1.2;
-    // Additional duration based on distance and zoom difference
     const distanceFactor = Math.min(distance / 5000, 1);
     const currentZoom = this.map.getZoom();
     const targetZoom = this.calculateOptimalZoom(distance);
     const zoomDiff = Math.abs(currentZoom - targetZoom);
-    const zoomFactor = Math.min(zoomDiff / 3, 1); // Normalize zoom difference
+    const zoomFactor = Math.min(zoomDiff / 3, 1);
 
-    // Combine distance and zoom factors
     return baseDuration + distanceFactor * 1.5 + zoomFactor * 0.8;
   }
 
   private async toggleMarkerVisibility(
     locationName: string,
-    toggleElement: HTMLElement
+    toggleElement: HTMLElement,
+    coords?: [number, number]
   ): Promise<void> {
     const markerElement = toggleElement.closest(".location-item");
     const index = markerElement
@@ -877,12 +908,10 @@ export class Sidebar {
       index !== undefined ? `${locationName}-${index}` : locationName;
     const isVisible = this.visibleMarkers.has(markerKey);
 
-    // Find the specific marker
     const marker = this.markers.find((m) => {
       const pos = m.getLatLng();
       const markerContent = m.getTooltip()?.getContent();
       if (index !== undefined) {
-        // For multi-location items, match both position and index
         return markerContent?.includes(`${locationName} #${index + 1}`);
       }
       return markerContent === locationName;
@@ -892,9 +921,7 @@ export class Sidebar {
       const markerElement = marker.getElement();
       if (markerElement) {
         if (isVisible) {
-          // Hide marker
           markerElement.style.display = "none";
-          // Directly check if radius exists and is greater than 0
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0,
@@ -905,9 +932,7 @@ export class Sidebar {
           toggleElement.textContent = "visibility_off";
           toggleElement.classList.add("hidden");
         } else {
-          // Show marker
           markerElement.style.display = "";
-          // Directly check if radius exists and is greater than 0
           if ((marker as any).uncertaintyCircle) {
             (marker as any).uncertaintyCircle.setStyle({
               opacity: 0.6,
@@ -917,12 +942,22 @@ export class Sidebar {
           this.visibleMarkers.add(markerKey);
           toggleElement.textContent = "visibility";
           toggleElement.classList.remove("hidden");
+          
+          // Force marker to redraw by refreshing its position
+          marker.setLatLng(marker.getLatLng());
         }
       }
     }
 
-    // Update category visibility state
+    if (this.visibilityMiddleware) {
+      await this.visibilityMiddleware.setMarkerVisibility(markerKey, !isVisible);
+    }
+
     this.updateCategoryVisibility(toggleElement);
+
+    if (!this.visibilityMiddleware) {
+      this.saveVisibilityState();
+    }
   }
 
   private async toggleCategoryVisibility(
@@ -933,12 +968,10 @@ export class Sidebar {
     const isVisible = this.visibleCategories.has(category);
 
     if (isVisible) {
-      // Hide category and all its items
       this.visibleCategories.delete(category);
       toggle.textContent = "visibility_off";
       toggle.classList.add("hidden");
 
-      // Update all visibility toggles in this category
       const categoryElement = toggle.closest(".category");
       const allToggles =
         categoryElement?.querySelectorAll(".visibility-toggle");
@@ -947,7 +980,6 @@ export class Sidebar {
         t.classList.add("hidden");
       });
 
-      // Remove all markers in this category from visible set
       items.forEach((item) => {
         this.visibleMarkers.delete(item.name);
         if (Array.isArray(item.coordinates[0])) {
@@ -956,7 +988,6 @@ export class Sidebar {
           });
         }
 
-        // Update markers visibility
         this.markers.forEach((marker) => {
           const markerName = marker
             .getTooltip()
@@ -967,17 +998,22 @@ export class Sidebar {
             const element = marker.getElement();
             if (element) {
               element.style.display = "none";
+
+              if ((marker as any).uncertaintyCircle) {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0,
+                  fillOpacity: 0,
+                });
+              }
             }
           }
         });
       });
     } else {
-      // Show category and all its items
       this.visibleCategories.add(category);
       toggle.textContent = "visibility";
       toggle.classList.remove("hidden");
 
-      // Update all visibility toggles in this category
       const categoryElement = toggle.closest(".category");
       const allToggles =
         categoryElement?.querySelectorAll(".visibility-toggle");
@@ -986,7 +1022,6 @@ export class Sidebar {
         t.classList.remove("hidden");
       });
 
-      // Add all markers in this category to visible set
       items.forEach((item) => {
         this.visibleMarkers.add(item.name);
         if (Array.isArray(item.coordinates[0])) {
@@ -995,7 +1030,6 @@ export class Sidebar {
           });
         }
 
-        // Update markers visibility
         this.markers.forEach((marker) => {
           const markerName = marker
             .getTooltip()
@@ -1006,10 +1040,38 @@ export class Sidebar {
             const element = marker.getElement();
             if (element) {
               element.style.display = "";
+
+              if ((marker as any).uncertaintyCircle) {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0.6,
+                  fillOpacity: 0.2,
+                });
+              }
+              
+              // Force marker to redraw by refreshing its position
+              marker.setLatLng(marker.getLatLng());
             }
           }
         });
       });
+    }
+
+    if (this.visibilityMiddleware) {
+      await this.visibilityMiddleware.setCategoryVisibility(category, !isVisible);
+
+      for (const item of items) {
+        if (Array.isArray(item.coordinates[0])) {
+          for (let index = 0; index < (item.coordinates as [number, number][]).length; index++) {
+            await this.visibilityMiddleware.setMarkerVisibility(`${item.name}-${index}`, !isVisible);
+          }
+        } else {
+          await this.visibilityMiddleware.setMarkerVisibility(item.name, !isVisible);
+        }
+      }
+    }
+
+    if (!this.visibilityMiddleware) {
+      this.saveVisibilityState();
     }
   }
 
@@ -1021,12 +1083,10 @@ export class Sidebar {
     const coordinates = item.coordinates as [number, number][];
 
     if (isVisible) {
-      // Hide main item and all child markers
       this.visibleMarkers.delete(item.name);
       toggle.textContent = "visibility_off";
       toggle.classList.add("hidden");
 
-      // Update child toggles
       const itemElement = toggle.closest("[data-name]");
       const childToggles = itemElement?.querySelectorAll(
         ".location-item .visibility-toggle"
@@ -1036,12 +1096,10 @@ export class Sidebar {
         t.classList.add("hidden");
       });
 
-      // Remove individual coordinate markers from visible set
       coordinates.forEach((_, index) => {
         this.visibleMarkers.delete(`${item.name}-${index}`);
       });
 
-      // Update marker visibility
       this.markers.forEach((marker) => {
         const markerName = marker
           .getTooltip()
@@ -1052,23 +1110,20 @@ export class Sidebar {
           const element = marker.getElement();
           if (element) {
             element.style.display = "none";
-          }
-          // Directly check for uncertainty circle
-          if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0,
-              fillOpacity: 0,
-            });
+            if ((marker as any).uncertaintyCircle) {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0,
+                fillOpacity: 0,
+              });
+            }
           }
         }
       });
     } else {
-      // Show main item and all child markers
       this.visibleMarkers.add(item.name);
       toggle.textContent = "visibility";
       toggle.classList.remove("hidden");
 
-      // Update child toggles
       const itemElement = toggle.closest("[data-name]");
       const childToggles = itemElement?.querySelectorAll(
         ".location-item .visibility-toggle"
@@ -1078,12 +1133,10 @@ export class Sidebar {
         t.classList.remove("hidden");
       });
 
-      // Add individual coordinate markers to visible set
       coordinates.forEach((_, index) => {
         this.visibleMarkers.add(`${item.name}-${index}`);
       });
 
-      // Update marker visibility
       this.markers.forEach((marker) => {
         const markerName = marker
           .getTooltip()
@@ -1094,17 +1147,27 @@ export class Sidebar {
           const element = marker.getElement();
           if (element) {
             element.style.display = "";
-          }
-          // Directly check for uncertainty circle
-          if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0.6,
-              fillOpacity: 0.2,
-            });
+            if ((marker as any).uncertaintyCircle) {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0.6,
+                fillOpacity: 0.2,
+              });
+            }
+            
+            // Force marker to redraw by refreshing its position
+            marker.setLatLng(marker.getLatLng());
           }
         }
       });
     }
+
+    if (this.visibilityMiddleware) {
+      for (let index = 0; index < coordinates.length; index++) {
+        await this.visibilityMiddleware.setMarkerVisibility(`${item.name}-${index}`, !isVisible);
+      }
+    }
+
+    this.saveVisibilityState();
   }
 
   public async addCustomMarker(
@@ -1112,10 +1175,8 @@ export class Sidebar {
   ): Promise<void> {
     await this.ensureInitialized();
 
-    // Add to locations array
     this.locations.push(marker);
 
-    // Find custom category (it should always exist)
     const customCategory = this.element.querySelector(
       '[data-category="custom"]'
     );
@@ -1129,13 +1190,11 @@ export class Sidebar {
       }
     }
 
-    // Make marker visible by default
     this.visibleMarkers.add(marker.name);
     this.visibleCategories.add("custom");
   }
 
   private initializeElements(): void {
-    // Get references to DOM elements
     this.titleEl = this.element.querySelector(".location-title") as HTMLElement;
     this.descEl = this.element.querySelector(
       ".location-description"
@@ -1167,13 +1226,11 @@ export class Sidebar {
     const category = categoryElement.getAttribute("data-category");
     if (!category) return;
 
-    // Check if all items in category are hidden
     const itemToggles = categoryElement.querySelectorAll(".visibility-toggle");
     const allHidden = Array.from(itemToggles).every((t) =>
       t.classList.contains("hidden")
     );
 
-    // Update category visibility toggle
     const categoryToggle = categoryElement.querySelector(
       ".category-header .visibility-toggle"
     );
@@ -1191,71 +1248,57 @@ export class Sidebar {
   }
 
   private createTabInterface(): void {
-    // Create tabs container
     const tabsContainer = document.createElement("div");
     tabsContainer.className = "sidebar-tabs";
 
-    // Create location tab
     const locationTab = document.createElement("button");
     locationTab.className = "sidebar-tab active";
     locationTab.innerHTML =
       '<span class="material-icons">place</span>Location Info';
 
-    // Create drops tab
     const dropsTab = document.createElement("button");
     dropsTab.className = "sidebar-tab";
     dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Drops';
 
-    // Get existing content containers
     const locationContent = this.element.querySelector(
       ".sidebar-content.location-info"
     ) as HTMLElement;
     const dropsContent = document.createElement("div");
     dropsContent.className = "sidebar-content drops-content";
 
-    // Add event listeners for tabs
     tabsContainer.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
       const tab = target.closest(".sidebar-tab");
       if (!tab) return;
 
-      // Update tab states
       tabsContainer
         .querySelectorAll(".sidebar-tab")
         .forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
 
-      // Update content visibility
       const isDrops = tab === dropsTab;
       locationContent.classList.toggle("active", !isDrops);
       dropsContent.classList.toggle("active", isDrops);
     });
 
-    // Assemble tabs section
     tabsContainer.appendChild(locationTab);
     tabsContainer.appendChild(dropsTab);
 
-    // Find the tab system container
     const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
 
-    // Insert tabs and drops content
     tabSystem.insertBefore(tabsContainer, tabSystem.firstChild);
     tabSystem.appendChild(dropsContent);
 
-    // Store references
     this.dropsContent = dropsContent;
     this.locationContent = locationContent;
   }
 
   private async toggleDropLocations(item: ItemDrop): Promise<void> {
-    // Reset all markers to visible first
     this.resetMarkersVisibility();
 
-    // Get locations that can drop this item
     const dropLocations = findDropLocations(item, this.locations);
     const dropLocationNames = new Set(dropLocations.map((l) => l.name));
 
-    // Hide markers that don't drop this item
     this.markers.forEach((marker) => {
       const markerElement = marker.getElement();
       if (!markerElement) return;
@@ -1341,7 +1384,6 @@ export class Sidebar {
         const headerElement = document.createElement("div");
         headerElement.className = "drop-header";
 
-        // Create icon element based on icon type
         let iconHtml = "";
         if (item.icon) {
           if (item.icon.startsWith("fa-")) {
@@ -1358,7 +1400,6 @@ export class Sidebar {
             }px; height: ${24 * size}px;" alt="">`;
           }
         } else {
-          // Default icon if none specified
           iconHtml = `<i class="fa-solid fa-box" style="color: ${
             item.iconColor || "#FFFFFF"
           }"></i>`;
@@ -1409,11 +1450,9 @@ export class Sidebar {
           </div>
         `;
 
-        // Rest of the existing code...
         itemElement.appendChild(headerElement);
         itemElement.appendChild(detailsElement);
 
-        // Existing event listeners...
         headerElement.addEventListener("click", (e) => {
           e.stopPropagation();
           itemElement.classList.toggle("active");
@@ -1437,7 +1476,6 @@ export class Sidebar {
           }
         });
 
-        // Update source link click handling
         const sourcesList = detailsElement.querySelector(".sources-list");
         if (sourcesList) {
           sourcesList.addEventListener("click", (e) => {
@@ -1454,7 +1492,6 @@ export class Sidebar {
             if (location) {
               let coords: [number, number];
               if (Array.isArray(location.coordinates[0])) {
-                // For multiple coordinates, pick a random one
                 const coordsList = location.coordinates as [
                   number,
                   number
@@ -1486,7 +1523,6 @@ export class Sidebar {
         itemsList.appendChild(itemElement);
       });
 
-      // Category collapse/expand functionality
       categoryHeader.addEventListener("click", () => {
         itemsList.classList.toggle("collapsed");
         const chevron = categoryHeader.querySelector(".fa-chevron-down");

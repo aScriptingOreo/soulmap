@@ -137,6 +137,25 @@
       'floating-chat.donateButton.zIndex': '1000'
     });
   </script>
+  <script>
+    // Prevent right-click on protected elements
+    document.addEventListener('contextmenu', function(e) {
+      const target = e.target;
+      // Check if the target is an icon or contained within a marker
+      if (
+        target.classList.contains('protected-icon') ||
+        target.classList.contains('temp-marker-icon') ||
+        target.classList.contains('custom-location-icon') ||
+        target.classList.contains('location-icon-image') ||
+        target.closest('.leaflet-marker-icon') ||
+        target.closest('.location-icon-container') ||
+        target.closest('.location-icon')
+      ) {
+        e.preventDefault();
+        return false;
+      }
+    }, true);
+  </script>
   <div id="discord-button">
     <a href="https://discord.gg/WWEf2cM4eu" target="_blank" rel="noopener noreferrer">
       <i class="fab fa-discord"></i>
