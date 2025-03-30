@@ -2,7 +2,7 @@
 name: "[oro] Pensive's Chest"
 coordinates: [2474, 3122]
 description: "credits: Yuritau"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.75
+icon: "/SF_chest"
+iconSize: 1.25
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/P72F62h.jpeg"

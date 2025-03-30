@@ -2,7 +2,7 @@
 name: "[oro] North of Fort Curlail"
 coordinates: [2642, 4066]
 description: "credits: ElderlyDreamer"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.75
+icon: "/SF_chest"
+iconSize: 1.25
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/7U4DvGQ.png"

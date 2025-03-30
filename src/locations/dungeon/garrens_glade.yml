@@ -1,5 +1,5 @@
 name: "[Glade] Garren's Shrine"
 coordinates: [2612, 3625]
 description: ""
-icon: "fa-brands fa-canadian-maple-leaf"
-iconSize: 1.25
+icon: "/quests/garen"
+iconSize: 2

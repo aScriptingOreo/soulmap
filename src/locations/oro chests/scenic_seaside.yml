@@ -2,7 +2,7 @@
 name: "[oro] Scenic Seaside"
 coordinates: [1728, 3571]
 description: "credits: Flaminux"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.75
+icon: "/SF_chest"
+iconSize: 1.25
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/lDQqhIX.png"

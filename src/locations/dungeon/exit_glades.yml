@@ -4,6 +4,6 @@ coordinates:
   - [3088, 4141]
 
 description: "These are possible exits for Glades tileset dungeons. credits: Contestant"
-icon: "fa-solid fa-person-running"
+icon: "/SF_exit"
 iconSize: 1.25
 iconColor: "#bfe234"

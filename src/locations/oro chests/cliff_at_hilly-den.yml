@@ -2,7 +2,7 @@
 name: "[oro] Cliff at hilly-den"
 coordinates: [1995, 3535]
 description: "credits: Dystopia"
-icon: "fa-solid fa-chess-rook"
-iconSize: 0.75
+icon: "/SF_chest"
+iconSize: 1.25
 iconColor: "#87ffc9"
 imgUrl: "https://i.imgur.com/Y7Yk439.jpeg"
