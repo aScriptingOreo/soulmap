@@ -308,6 +308,12 @@ close-button:hover {
   z-index: 1000;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   font-family: "Roboto", sans-serif;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.version-box:hover {
+  background: rgba(61, 61, 61, 0.95);
 }
 
 /* Location drawer - always expanded */

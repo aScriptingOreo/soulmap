@@ -1,0 +1,8 @@
+
+name: "This area is out of bounds"
+coordinates: 
+  - [2438, 6497]
+description: "Don't worry too much about getting here, the data we have about this place is mainly for record keeping but the contents are not relevant for your gameplay experience. You can still explore it if you want to."
+icon: "fa-solid fa-circle-exclamation"
+iconSize: 2
+iconColor: "#FF0000"

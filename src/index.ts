@@ -7,6 +7,29 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 import type { VersionInfo } from './types';
 import mapVersion from './mapversion.yml';
 
+// Extract the greeting loading into a separate function that can be reused
+async function showGreetingPopup() {
+    try {
+        const versionData = mapVersion as VersionInfo;
+        const response = await fetch('./greetings.md');
+        let markdown = await response.text();
+        
+        // Replace version placeholders
+        markdown = markdown.replace('{version}', versionData.version)
+                       .replace('{game_version}', versionData.game_version);
+        
+        const html = marked(markdown);
+        
+        const popupText = document.getElementById('popup-text');
+        if (popupText) {
+            popupText.innerHTML = html;
+            document.getElementById('popup-overlay')!.style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Error showing greeting popup:', error);
+    }
+}
+
 async function loadGreeting() {
     try {
         const versionData = mapVersion as VersionInfo;
@@ -17,20 +40,7 @@ async function loadGreeting() {
         
         // Show popup if version is different
         if (lastSeenVersion !== versionData.version) {
-            const response = await fetch('./greetings.md');
-            let markdown = await response.text();
-            
-            // Replace version placeholders
-            markdown = markdown.replace('{version}', versionData.version)
-                           .replace('{game_version}', versionData.game_version);
-            
-            const html = marked(markdown);
-            
-            const popupText = document.getElementById('popup-text');
-            if (popupText) {
-                popupText.innerHTML = html;
-                document.getElementById('popup-overlay')!.style.display = 'flex';
-            }
+            await showGreetingPopup();
             
             // Store the new version
             localStorage.setItem('lastSeenVersion', versionData.version);
@@ -51,6 +61,14 @@ async function updateVersionDisplay() {
     const versionDisplay = document.getElementById('version-display');
     if (versionDisplay) {
       versionDisplay.textContent = `Soulmap | v${versionData.version} | up to date with ${versionData.game_version}`;
+      
+      // Add cursor style to indicate it's clickable
+      versionDisplay.style.cursor = 'pointer';
+      
+      // Add click event listener to show the greeting popup
+      versionDisplay.addEventListener('click', () => {
+        showGreetingPopup();
+      });
     }
   } catch (error) {
     console.error('Error loading version:', error);
