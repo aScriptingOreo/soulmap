@@ -1,8 +1,7 @@
 import * as L from "leaflet";
-import type { Location, ItemDrop } from "./types";
+import type { Location } from "./types";
 import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
-import { loadDrops, findDropLocations } from "./drops/dropsLoader";
 
 export interface SidebarOptions {
   element: HTMLElement;
@@ -40,7 +39,6 @@ export class Sidebar {
   private initializationPromise: Promise<void> | null = null;
   private customMarkerService: CustomMarkerService;
   private hasCustomCategory: boolean = false;
-  private dropsContent!: HTMLElement;
   private locationContent!: HTMLElement;
   private visibilityMiddleware: SidebarOptions['visibilityMiddleware'];
 
@@ -156,7 +154,6 @@ export class Sidebar {
     this.createTabInterface();
     await this.loadVisibilityState();
     await this.initializeComponentsAsync();
-    await this.createDropsInterface();
     this.initialized = true;
 
     requestAnimationFrame(() => {
@@ -1287,284 +1284,23 @@ export class Sidebar {
     locationTab.innerHTML =
       '<span class="material-icons">place</span>Location Info';
 
-    const dropsTab = document.createElement("button");
-    dropsTab.className = "sidebar-tab";
-    dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Drops';
-
-    const locationContent = this.element.querySelector(
-      ".sidebar-content.location-info"
-    ) as HTMLElement;
-    const dropsContent = document.createElement("div");
-    dropsContent.className = "sidebar-content drops-content";
-
-    tabsContainer.addEventListener("click", (e) => {
-      const target = e.target as HTMLElement;
-      const tab = target.closest(".sidebar-tab");
-      if (!tab) return;
-
-      tabsContainer
-        .querySelectorAll(".sidebar-tab")
-        .forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-
-      const isDrops = tab === dropsTab;
-      locationContent.classList.toggle("active", !isDrops);
-      dropsContent.classList.toggle("active", isDrops);
-    });
+    const dropsTab = document.createElement("a");
+    dropsTab.className = "sidebar-tab external-link";
+    dropsTab.href = "https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca";
+    dropsTab.target = "_blank";
+    dropsTab.rel = "noopener noreferrer";
+    dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Items';
 
     tabsContainer.appendChild(locationTab);
     tabsContainer.appendChild(dropsTab);
 
     const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
+    const locationContent = this.element.querySelector(
+      ".sidebar-content.location-info"
+    ) as HTMLElement;
 
     tabSystem.insertBefore(tabsContainer, tabSystem.firstChild);
-    tabSystem.appendChild(dropsContent);
 
-    this.dropsContent = dropsContent;
     this.locationContent = locationContent;
-  }
-
-  private async toggleDropLocations(item: ItemDrop): Promise<void> {
-    this.resetMarkersVisibility();
-
-    const dropLocations = findDropLocations(item, this.locations);
-    const dropLocationNames = new Set(dropLocations.map((l) => l.name));
-
-    this.markers.forEach((marker) => {
-      const markerElement = marker.getElement();
-      if (!markerElement) return;
-
-      const markerLocation = markerElement.getAttribute("data-location");
-      if (markerLocation && !dropLocationNames.has(markerLocation)) {
-        markerElement.style.display = "none";
-        if ((marker as any).uncertaintyCircle) {
-          (marker as any).uncertaintyCircle.setStyle({
-            opacity: 0,
-            fillOpacity: 0,
-          });
-        }
-      }
-    });
-  }
-
-  private resetMarkersVisibility(): void {
-    this.markers.forEach((marker) => {
-      const markerElement = marker.getElement();
-      if (!markerElement) return;
-
-      markerElement.style.display = "";
-      if ((marker as any).uncertaintyCircle) {
-        (marker as any).uncertaintyCircle.setStyle({
-          opacity: 0.6,
-          fillOpacity: 0.2,
-        });
-      }
-    });
-  }
-
-  private getRarityColor(rarity: string): string {
-    const rarityLower = rarity.toLowerCase();
-    switch (rarityLower) {
-      case "common":
-        return "#9e9e9e";
-      case "uncommon":
-        return "#4CAF50";
-      case "rare":
-        return "#2196F3";
-      case "quest":
-        return "#9C27B0";
-      default:
-        return "#f44336";
-    }
-  }
-
-  private getLinkColor(source: string): string {
-    const matchingLocation = this.locations.find(
-      (loc) => loc.name.toLowerCase() === source.toLowerCase()
-    );
-    return (
-      matchingLocation?.iconColor || (matchingLocation ? "#4CAF50" : "#9e9e9e")
-    );
-  }
-
-  private async createDropsInterface(): Promise<void> {
-    const drops = await loadDrops();
-
-    Object.entries(drops).forEach(([category, items]) => {
-      const categoryContainer = document.createElement("div");
-      categoryContainer.className = "drops-category";
-
-      const categoryHeader = document.createElement("div");
-      categoryHeader.className = "drops-category-header";
-
-      categoryHeader.innerHTML = `
-        <div class="category-title">
-          <span>${category}</span>
-          <span class="item-count">(${items.length})</span>
-        </div>
-        <i class="fa-solid fa-chevron-down"></i>
-      `;
-
-      const itemsList = document.createElement("div");
-      itemsList.className = "drops-items collapsed";
-
-      items.forEach((item) => {
-        const itemElement = document.createElement("div");
-        itemElement.className = "drop-item";
-
-        const headerElement = document.createElement("div");
-        headerElement.className = "drop-header";
-
-        let iconHtml = "";
-        if (item.icon) {
-          if (item.icon.startsWith("fa-")) {
-            const size = item.iconSize || 1;
-            iconHtml = `<i class="${item.icon}" style="font-size: ${
-              24 * size
-            }px; color: ${
-              item.iconColor || "#FFFFFF"
-            }; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
-          } else {
-            const size = item.iconSize || 1;
-            iconHtml = `<img src="${item.icon}.svg" style="width: ${
-              24 * size
-            }px; height: ${24 * size}px;" alt="">`;
-          }
-        } else {
-          iconHtml = `<i class="fa-solid fa-box" style="color: ${
-            item.iconColor || "#FFFFFF"
-          }"></i>`;
-        }
-
-        headerElement.innerHTML = `
-          <div class="drop-icon">
-            ${iconHtml}
-          </div>
-          <div class="drop-title">${item.name}</div>
-          <i class="fa-solid fa-chevron-down"></i>
-        `;
-
-        const detailsElement = document.createElement("div");
-        detailsElement.className = "drop-details";
-        detailsElement.innerHTML = `
-          <div class="drop-description">${item.description}</div>
-          <div class="drop-info-grid">
-            <div class="drop-type">Type: ${item.type}</div>
-            <div class="drop-rarity">
-              <span class="rarity-badge" style="background-color: ${this.getRarityColor(
-                item.rarity
-              )}">
-                ${item.rarity}
-              </span>
-            </div>
-          </div>
-          <div class="drop-sources">
-            <div class="sources-title">Sources:</div>
-            <div class="sources-list">
-              ${item.sources
-                .map((source) => {
-                  const linkColor = this.getLinkColor(source);
-                  const isClickable = this.locations.some(
-                    (loc) =>
-                      loc.name.toLowerCase() === source.toLowerCase()
-                  );
-                  return `
-                  <a href="#" 
-                     class="source-link ${isClickable ? "clickable" : ""}" 
-                     data-source="${source}"
-                     style="color: ${linkColor}; border-color: ${linkColor}">
-                    ${source}
-                  </a>`;
-                })
-                .join("")}
-            </div>
-          </div>
-        `;
-
-        itemElement.appendChild(headerElement);
-        itemElement.appendChild(detailsElement);
-
-        headerElement.addEventListener("click", (e) => {
-          e.stopPropagation();
-          itemElement.classList.toggle("active");
-          const chevron = headerElement.querySelector(".fa-chevron-down");
-          if (chevron) {
-            chevron.classList.toggle("rotated");
-          }
-
-          if (itemElement.classList.contains("active")) {
-            itemsList.querySelectorAll(".drop-item").forEach((el) => {
-              if (el !== itemElement) {
-                el.classList.remove("active");
-                el
-                  .querySelector(".fa-chevron-down")
-                  ?.classList.remove("rotated");
-              }
-            });
-            this.toggleDropLocations(item);
-          } else {
-            this.resetMarkersVisibility();
-          }
-        });
-
-        const sourcesList = detailsElement.querySelector(".sources-list");
-        if (sourcesList) {
-          sourcesList.addEventListener("click", (e) => {
-            const link = (e.target as HTMLElement).closest(".source-link");
-            if (!link || !link.classList.contains("clickable")) return;
-
-            e.preventDefault();
-            const sourceName = link.getAttribute("data-source");
-            const location = this.locations.find(
-              (loc) =>
-                loc.name.toLowerCase() === sourceName?.toLowerCase()
-            );
-
-            if (location) {
-              let coords: [number, number];
-              if (Array.isArray(location.coordinates[0])) {
-                const coordsList = location.coordinates as [
-                  number,
-                  number
-                ][];
-                coords =
-                  coordsList[
-                    Math.floor(Math.random() * coordsList.length)
-                  ];
-              } else {
-                coords = location.coordinates as [number, number];
-              }
-
-              const marker = this.markers.find((m) => {
-                const pos = m.getLatLng();
-                return pos.lat === coords[1] && pos.lng === coords[0];
-              });
-
-              if (marker) {
-                this.map.setView(
-                  [coords[1], coords[0]],
-                  this.map.getZoom()
-                );
-                marker.fire("click");
-              }
-            }
-          });
-        }
-
-        itemsList.appendChild(itemElement);
-      });
-
-      categoryHeader.addEventListener("click", () => {
-        itemsList.classList.toggle("collapsed");
-        const chevron = categoryHeader.querySelector(".fa-chevron-down");
-        if (chevron) {
-          chevron.classList.toggle("rotated");
-        }
-      });
-
-      categoryContainer.appendChild(categoryHeader);
-      categoryContainer.appendChild(itemsList);
-      this.dropsContent.appendChild(categoryContainer);
-    });
   }
 }

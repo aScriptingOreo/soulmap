@@ -2,15 +2,14 @@
 import { marked } from 'marked';
 import { loadLocations, clearLocationsCache } from './loader';
 import { initializeMap } from './map';
-import { clearTileCache } from './gridLoader'; // Add this import
-import { clearDropsCache } from './drops/dropsLoader';
+import { clearTileCache } from './gridLoader';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 import type { VersionInfo } from './types';
+import mapVersion from './mapversion.yml';
 
 async function loadGreeting() {
     try {
-        const versionModule = await import('./mapversion.yml');
-        const versionData = versionModule.default as VersionInfo;
+        const versionData = mapVersion as VersionInfo;
         const lastSeenVersion = localStorage.getItem('lastSeenVersion');
 
         // Start loading the map immediately
@@ -47,8 +46,7 @@ async function loadGreeting() {
 
 async function updateVersionDisplay() {
   try {
-    const versionModule = await import('./mapversion.yml');
-    const versionData = versionModule.default as VersionInfo;
+    const versionData = mapVersion as VersionInfo;
     
     const versionDisplay = document.getElementById('version-display');
     if (versionDisplay) {
@@ -59,7 +57,6 @@ async function updateVersionDisplay() {
   }
 }
 
-// Remove map initialization from dismissPopup
 function dismissPopup() {
   document.getElementById('popup-overlay')!.style.display = 'none';
 }
@@ -73,7 +70,6 @@ async function checkForUpdates() {
             // Clear all caches if hash changed
             await Promise.all([
                 clearLocationsCache(),
-                clearDropsCache(),
                 clearTileCache()
             ]);
             setStoredHash(contentHash);

@@ -1,13 +1,10 @@
-import type { ItemDrop, Location } from './types';
+import type { Location } from './types';
 import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
-import { loadDrops } from './drops/dropsLoader';
 import { setMarkerVisibility } from './services/visibilityMiddleware';
 
 interface SearchResult {
-  type: 'location' | 'drop';
-  location?: Location & { type: string };
-  drop?: ItemDrop;
+  location: Location & { type: string };
   score: number;
 }
 
@@ -29,14 +26,13 @@ export async function initializeSearch(locations: (Location & { type: string })[
     const normalizedQuery = query.toLowerCase();
     const terms = normalizedQuery.split(' ').filter(term => term.length > 0);
 
-    // Search locations
+    // Search locations only
     locations.forEach(location => {
       let score = 0;
       const name = location.name.toLowerCase();
       const description = (location.description || '').toLowerCase();
 
       terms.forEach(term => {
-        // Existing location scoring logic
         if (name === term) score += 100;
         if (name.includes(term)) score += 75;
         if (name.split(' ').some(word => word.startsWith(term))) score += 60;
@@ -46,28 +42,7 @@ export async function initializeSearch(locations: (Location & { type: string })[
       });
 
       if (score > 0) {
-        results.push({ type: 'location', location, score });
-      }
-    });
-
-    // Search drops
-    const drops = await loadDrops();
-    Object.values(drops).flat().forEach(drop => {
-      let score = 0;
-      const name = drop.name.toLowerCase();
-      const description = drop.description.toLowerCase();
-      const type = drop.type.toLowerCase();
-
-      terms.forEach(term => {
-        if (name === term) score += 100;
-        if (name.includes(term)) score += 75;
-        if (type === term) score += 60;
-        if (description === term) score += 50;
-        if (description.includes(term)) score += 25;
-      });
-
-      if (score > 0) {
-        results.push({ type: 'drop', drop, score });
+        results.push({ location, score });
       }
     });
 
@@ -79,69 +54,13 @@ export async function initializeSearch(locations: (Location & { type: string })[
       resultsContainer.innerHTML = results
         .slice(0, 8)
         .map((result, index) => {
-          if (result.type === 'location') {
-            return renderLocationResult(result.location!, index, selectedIndex, locations);
-          } else {
-            return renderDropResult(result.drop!, index, selectedIndex);
-          }
+          return renderLocationResult(result.location, index, selectedIndex, locations);
         })
         .join('');
     } else {
       resultsContainer.innerHTML = '<div class="no-results">No results found</div>';
     }
     resultsContainer.style.display = 'block';
-  }
-
-  function renderDropResult(drop: ItemDrop, index: number, selectedIndex: number): string {
-    let iconHtml = '';
-    if (drop.icon) {
-      const size = drop.iconSize || 1;
-      if (drop.icon.startsWith('fa-')) {
-        iconHtml = `<i class="${drop.icon}" style="font-size: ${20 * size}px; color: ${drop.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
-      } else {
-        iconHtml = `<img src="${drop.icon}.svg" style="width: ${20 * size}px; height: ${20 * size}px;" alt="">`;
-      }
-    } else {
-      iconHtml = `<i class="fa-solid fa-box" style="color: ${drop.iconColor || '#FFFFFF'}"></i>`;
-    }
-
-    return `
-      <div class="search-result drop-result ${index === selectedIndex ? 'selected' : ''}" 
-           data-type="drop"
-           data-name="${drop.name}">
-        <div class="search-result-icon">
-          ${iconHtml}
-        </div>
-        <div class="search-result-content">
-          <div class="result-name">${highlightText(drop.name)}</div>
-          <div class="result-type">
-            <span class="rarity-badge" style="background-color: ${getRarityColor(drop.rarity)}">
-              ${drop.rarity}
-            </span>
-            <span class="type-label">${drop.type}</span>
-          </div>
-          ${drop.description ? 
-            `<div class="result-description">${highlightText(drop.description)}</div>` : 
-            ''}
-          <div class="result-sources">
-            ${drop.sources.map(source => `
-              <span class="source-tag">${source}</span>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function getRarityColor(rarity: string): string {
-    const rarityLower = rarity.toLowerCase();
-    switch (rarityLower) {
-      case 'common': return '#9e9e9e';
-      case 'uncommon': return '#4CAF50';
-      case 'rare': return '#2196F3';
-      case 'quest': return '#9C27B0';
-      default: return '#f44336';
-    }
   }
 
   function selectLocation(location: Location & { type: string }, coordIndex?: number) {
@@ -241,32 +160,28 @@ export async function initializeSearch(locations: (Location & { type: string })[
   }
 
   function selectResult(result: SearchResult, clickedElement?: HTMLElement) {
-    if (result.type === 'location' && result.location) {
-        const tabSystem = document.querySelector('.tab-system');
-        const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
-        if (locationsTab) {
-            locationsTab.click();
-        }
-
-        let coordIndex: number | undefined = undefined;
-        
-        if (clickedElement) {
-            const indexAttr = clickedElement.getAttribute('data-coord-index');
-            if (indexAttr) {
-                coordIndex = parseInt(indexAttr);
-            }
-        } else {
-            const resultElement = document.querySelector('.search-result.selected') as HTMLElement;
-            const indexAttr = resultElement?.getAttribute('data-coord-index');
-            if (indexAttr) {
-                coordIndex = parseInt(indexAttr);
-            }
-        }
-        
-        selectLocation(result.location, coordIndex);
-    } else if (result.type === 'drop' && result.drop) {
-        // Existing drop handling code
+    const tabSystem = document.querySelector('.tab-system');
+    const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
+    if (locationsTab) {
+        locationsTab.click();
     }
+
+    let coordIndex: number | undefined = undefined;
+    
+    if (clickedElement) {
+        const indexAttr = clickedElement.getAttribute('data-coord-index');
+        if (indexAttr) {
+            coordIndex = parseInt(indexAttr);
+        }
+    } else {
+        const resultElement = document.querySelector('.search-result.selected') as HTMLElement;
+        const indexAttr = resultElement?.getAttribute('data-coord-index');
+        if (indexAttr) {
+            coordIndex = parseInt(indexAttr);
+        }
+    }
+    
+    selectLocation(result.location, coordIndex);
     closeSearch();
   }
 
@@ -279,21 +194,11 @@ export async function initializeSearch(locations: (Location & { type: string })[
         e.preventDefault();
         if (selectedIndex >= 0) {
           const selected = results[selectedIndex] as HTMLElement;
-          const type = selected.getAttribute('data-type');
           const name = selected.getAttribute('data-name');
           
-          if (type === 'location') {
-            const location = locations.find(l => l.name === name);
-            if (location) {
-              selectResult({ type: 'location', location, score: 0 }, selected);
-            }
-          } else if (type === 'drop') {
-            loadDrops().then(drops => {
-              const drop = Object.values(drops).flat().find(d => d.name === name);
-              if (drop) {
-                selectResult({ type: 'drop', drop, score: 0 }, selected);
-              }
-            });
+          const location = locations.find(l => l.name === name);
+          if (location) {
+            selectResult({ location, score: 0 }, selected);
           }
         }
         break;
@@ -350,20 +255,11 @@ export async function initializeSearch(locations: (Location & { type: string })[
     const resultElement = (e.target as HTMLElement).closest('.search-result');
     if (!resultElement) return;
 
-    const type = resultElement.getAttribute('data-type');
     const name = resultElement.getAttribute('data-name');
-
-    if (type === 'location') {
-      const location = locations.find(l => l.name === name);
-      if (location) {
-        selectResult({ type: 'location', location, score: 0 }, resultElement);
-      }
-    } else if (type === 'drop') {
-      const drops = Object.values(await loadDrops()).flat();
-      const drop = drops.find(d => d.name === name);
-      if (drop) {
-        selectResult({ type: 'drop', drop, score: 0 }, resultElement);
-      }
+    const location = locations.find(l => l.name === name);
+    
+    if (location) {
+      selectResult({ location, score: 0 }, resultElement);
     }
   });
 
@@ -544,7 +440,7 @@ function calculateOptimalZoom(distance: number): number {
 function calculateAnimationDuration(distance: number): number {
   const baseDuration = 1.2;
   const distanceFactor = Math.min(distance / 5000, 1);
-  const zoomFactor = 0.5; // Default value since we don't have access to currentZoom here
+  const zoomFactor = 0.5;
   
   return baseDuration + distanceFactor * 1.5 + zoomFactor * 0.8;
 }
