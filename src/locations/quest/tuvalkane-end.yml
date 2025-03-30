@@ -1,6 +1,6 @@
 name: "Tuvalkane End"
 coordinates: [3540, 3825]
 description: "Drop the fallen helmet here to unlock Tuvalkane"
-icon: "/quests/joinery"
-iconSize: 1.75
+icon: "/SF_exclam"
+iconSize: 2.5
 iconColor: "#FF72FF"

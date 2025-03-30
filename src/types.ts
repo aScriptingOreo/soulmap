@@ -8,6 +8,7 @@ export interface Location {
   imgUrl?: string;
   iconColor?: string;
   radius?: number;
+  lastModified?: number; // Timestamp of when the file was last modified
 }
 
 export interface VersionInfo {

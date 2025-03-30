@@ -1,0 +1,7 @@
+# src/locations/loot/ode_chest.yml
+name: "Orengall Quest Balloon"
+coordinates: [2118, 4413]
+description: "Grab the note from the balloon to begin this quest"
+icon: "/SF_exclam"
+iconSize: 2.5
+iconColor: "#fa3d3d"

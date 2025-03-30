@@ -4,6 +4,7 @@ import localforage from 'localforage';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 
 const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
+const METADATA_CACHE_KEY = 'soulmap_metadata_cache';
 
 // Initialize localforage instance for locations
 const locationStore = localforage.createInstance({
@@ -17,12 +18,42 @@ const locationStore = localforage.createInstance({
   storeName: 'locations' // Add explicit store name
 });
 
+// Load file metadata from Vite's development server or static JSON in production
+async function loadFileMetadata(): Promise<Record<string, { lastModified: number }>> {
+  try {
+    // Try to get cached metadata first
+    const cachedMetadata = await locationStore.getItem<Record<string, { lastModified: number }>>(METADATA_CACHE_KEY);
+    if (cachedMetadata) {
+      return cachedMetadata;
+    }
+
+    // If no cached metadata, fetch from server API endpoint
+    const response = await fetch('/api/file-metadata');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch metadata: ${response.status}`);
+    }
+
+    const metadata = await response.json();
+    
+    // Cache the metadata
+    await locationStore.setItem(METADATA_CACHE_KEY, metadata);
+    
+    return metadata;
+  } catch (error) {
+    console.warn('Error loading file metadata:', error);
+    return {}; // Return empty object if metadata can't be loaded
+  }
+}
+
 export async function loadLocations(): Promise<(Location & { type: string })[]> {
   try {
     await locationStore.ready(); // Ensure store is ready
 
     const contentHash = await generateContentHash();
     const storedHash = getStoredHash();
+
+    // Fetch file metadata (will be used later)
+    const fileMetadata = await loadFileMetadata();
 
     // Use cached data if hashes match
     const cachedData = await locationStore.getItem<{
@@ -32,7 +63,20 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
     
     if (cachedData && cachedData.hash === contentHash) {
       console.log('Using cached locations data');
-      return cachedData.data;
+      
+      // Even if using cached data, update the lastModified timestamps
+      // from the latest metadata (in case files were modified)
+      const updatedData = cachedData.data.map(location => {
+        const filePath = `src/locations/${location.type}/${location.name.toLowerCase().replace(/\s+/g, '_')}.yml`;
+        const metadata = fileMetadata[filePath];
+        
+        return {
+          ...location,
+          lastModified: metadata?.lastModified || location.lastModified
+        };
+      });
+      
+      return updatedData;
     }
 
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -72,7 +116,17 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
           loaded++;
           const progress = (loaded / totalFiles) * 50;
           updateProgress(progress, 'Loading location data...');
-          return { ...module.default, type: path.split('/')[2] };
+          
+          // Use real file lastModified from metadata if available
+          const relativePath = path.replace(/^\.\//, ''); // Remove leading ./
+          const metadata = fileMetadata[relativePath];
+          const lastModified = metadata?.lastModified || Date.now();
+          
+          return { 
+            ...module.default, 
+            type: path.split('/')[2],
+            lastModified
+          };
         } catch (error) {
           console.error(`Error loading location file: ${path}`, error);
           return null;
@@ -102,6 +156,7 @@ export async function loadLocations(): Promise<(Location & { type: string })[]> 
 export async function clearLocationsCache(): Promise<void> {
   try {
     await locationStore.removeItem(LOCATIONS_CACHE_KEY);
+    await locationStore.removeItem(METADATA_CACHE_KEY);
   } catch (error) {
     console.error('Error clearing locations cache:', error);
   }

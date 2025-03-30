@@ -1,11 +1,11 @@
-name: "Flute Statue"
+name: "Yoke Idol Statue"
 coordinates:
   - [2261, 4969]
   - [1971, 3647]
   - [2571, 3777]
   - [1827, 4226]
-description: "These are statues that have bindings on them. credits: Contestant, MagowDeath"
-icon: "fa-solid fa-music"
-iconSize: 0.75
+description: "These have random spawn chance. Thanks @Arco for helping us figure out a better name!"
+icon: "/SF_yokeidol"
+iconSize: 2.25
 iconColor: "#bfe234"
 imgUrl: "https://i.imgur.com/FFKfAY8.jpeg"

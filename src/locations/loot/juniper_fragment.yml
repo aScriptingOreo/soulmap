@@ -1,6 +1,9 @@
 # src/locations/loot/ode_chest.yml
 name: "Juniper Fragment"
-coordinates: [1666, 3087]
+coordinates: 
+  - [1666, 3087]
+  - [2429, 3150]
+  - [3234, 3889]
 description: "You must Soul mode and use the last emote at the hut for Juniper. Credit: Hobie-wan"
 icon: "fa-solid fa-house"
 iconSize: 1

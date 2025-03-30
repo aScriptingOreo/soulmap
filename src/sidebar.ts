@@ -1,6 +1,6 @@
 import * as L from "leaflet";
 import type { Location, ItemDrop } from "./types";
-import { generateLocationHash, getRelativeDirection } from "./utils";
+import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
 import { loadDrops, findDropLocations } from "./drops/dropsLoader";
 
@@ -292,15 +292,22 @@ export class Sidebar {
     await this.ensureInitialized();
 
     if (!location) {
+      // For empty location, keep the same order
       this.titleEl.textContent = "Current Coordinate";
-      this.descEl.textContent = "No location marker at this position";
       this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
+      this.descEl.textContent = "No location marker at this position";
       this.imgEl.style.display = "none";
       this.imgEl.src = "";
 
       const existingIcon = this.element.querySelector(".location-icon-container");
       if (existingIcon) {
         existingIcon.remove();
+      }
+
+      // Remove any last updated element
+      const lastUpdatedEl = this.element.querySelector(".last-updated");
+      if (lastUpdatedEl) {
+        lastUpdatedEl.remove();
       }
 
       const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
@@ -318,8 +325,7 @@ export class Sidebar {
         }
       }
 
-      this.titleEl.textContent = locationTitle;
-
+      // 1. Icon (already first)
       const locationInfoContainer = this.element.querySelector(
         ".location-info-container"
       );
@@ -334,6 +340,7 @@ export class Sidebar {
         const iconContainer = document.createElement("div");
         iconContainer.className = "location-icon-container";
 
+        // Icon code... (unchanged)
         if (location.icon) {
           const isFontAwesome =
             location.icon.startsWith("fa-") || location.icon.includes("fa-");
@@ -377,6 +384,13 @@ export class Sidebar {
         }
       }
 
+      // 2. Title
+      this.titleEl.textContent = locationTitle;
+
+      // 3. Coordinates
+      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
+
+      // Handle relative location (this is part of coordinates context)
       if (location.type !== "location") {
         const nearestLocation = this.locations
           .filter((loc) => loc.type === "location")
@@ -393,13 +407,14 @@ export class Sidebar {
             return currentDist < nearestDist ? loc : nearest;
           });
 
-        let relativeLocationEl =
-          this.element.querySelector(".relative-location");
+        let relativeLocationEl = this.element.querySelector(".relative-location");
         if (!relativeLocationEl) {
           relativeLocationEl = document.createElement("div");
           relativeLocationEl.className = "relative-location";
-          this.titleEl.after(relativeLocationEl);
+          // Insert after coordinates element
+          this.coordEl.after(relativeLocationEl);
         }
+        
         const direction = getRelativeDirection(
           nearestLocation.coordinates as [number, number],
           [x, y]
@@ -409,10 +424,26 @@ export class Sidebar {
         this.element.querySelector(".relative-location")?.remove();
       }
 
-      this.descEl.textContent =
-        location.description || "No description available";
-      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
+      // 4. Description
+      this.descEl.textContent = location.description || "No description available";
 
+      // 5. Last updated information
+      let lastUpdatedEl = this.element.querySelector(".last-updated");
+      if (!lastUpdatedEl) {
+        lastUpdatedEl = document.createElement("div");
+        lastUpdatedEl.className = "last-updated";
+        // Insert after description element
+        this.descEl.after(lastUpdatedEl);
+      }
+
+      if (location.lastModified) {
+        lastUpdatedEl.textContent = formatLastUpdated(location.lastModified);
+        lastUpdatedEl.style.display = "block";
+      } else {
+        lastUpdatedEl.style.display = "none";
+      }
+
+      // 6. Image (already last)
       if (location.imgUrl) {
         this.imgEl.src = location.imgUrl;
         this.imgEl.style.display = "block";

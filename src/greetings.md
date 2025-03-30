@@ -3,6 +3,9 @@
 #### This project is not affiliated with Digital Extremes
 if you have any suggestions of content or found something broken please check our discord server!
 
+## WE NEED HELP!
+Avakot needs players that are willing to help with data gathering inside the game, with P9 the game got REALLY huge! We need all the help we can get to grow the data inside the map, if you feel like you can help, just pop up in our discord and let a Developer know!
+
 
 # Changelog 
 - Added Enclave markers
