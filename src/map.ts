@@ -9,6 +9,7 @@ import { generateLocationHash, decodeLocationHash } from './utils';
 import { CustomMarkerService } from './services/customMarkers';
 import { MarkerModal } from './components/MarkerModal';
 import mapVersion from './mapversion.yml';
+import analytics from './analytics'; // Add analytics import
 // Add visibility middleware import
 import {
   initVisibilityMiddleware,
@@ -357,7 +358,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
               ) : Infinity;
               return currentDist < closestDist ? loc : closest;
           });
-          // If clicked very close to a marker, show that location
+          // If clicked very close to a marker, show that location and track the event
           const minDistance = 50;
           const closestDistance = Math.hypot(
               coords[0] - (Array.isArray(closest.coordinates[0]) 
@@ -368,6 +369,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                   : closest.coordinates[1])
           );
           if (closestDistance < minDistance) {
+              // Track the marker click
+              analytics.trackLocationView(closest.name, closest.type);
+              
               // Update meta tags and sidebar with location
               updateMetaTags(closest, coords);
               sidebar.updateContent(closest, coords[0], coords[1]);
@@ -378,6 +382,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                   tempMarker = null;
               }
           } else {
+              // Track coordinate click
+              analytics.trackEvent('coordinate_click', {
+                  x: Math.round(coords[0]),
+                  y: Math.round(coords[1])
+              });
+              
               // No marker at this position - create a temporary marker
               createTemporaryMarker(e.latlng, map);
               
@@ -530,6 +540,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                           className: 'leaflet-tooltip'
                       });
                       marker.on('click', () => {
+                          analytics.trackLocationView(location.name, location.type); // Track marker click
                           sidebar.updateContent(location, coord[0], coord[1]);
                           document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
                               el.classList.remove('selected');

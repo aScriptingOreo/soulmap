@@ -121,6 +121,75 @@ body {
   background-color: #ccc; /* Light gray on hover */
 }
 
+/* Privacy Policy Popup Styles */
+#privacy-policy-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2100; /* Higher than other popups */
+}
+
+#privacy-policy-content {
+  position: relative;
+  max-width: 800px;
+  max-height: 80vh;
+  background-color: #333; /* Dark background matching the app theme */
+  color: #fff; /* White text */
+  padding: 30px;
+  border-radius: 10px;
+  overflow-y: auto;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#privacy-policy-text h1 {
+  color: #eee;
+  border-bottom: 2px solid #444;
+  padding-bottom: 10px;
+  margin-top: 0;
+}
+
+#privacy-policy-text h2, #privacy-policy-text h3 {
+  color: #eee;
+}
+
+#privacy-policy-text a {
+  color: #6bbeff;
+  text-decoration: none;
+}
+
+#privacy-policy-text a:hover {
+  text-decoration: underline;
+}
+
+#privacy-policy-text code {
+  background-color: #444;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+#privacy-policy-content button {
+  padding: 10px 20px;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+  transition: background-color 0.2s;
+}
+
+#privacy-policy-content button:hover {
+  background-color: #666;
+}
+
+/* Rest of existing CSS */
 .right-sidebar {
   display: flex;
   flex-direction: column;

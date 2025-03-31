@@ -3,6 +3,7 @@ import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
 import { setMarkerVisibility } from './services/visibilityMiddleware';
 import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker } from './map';
+import analytics from './analytics';
 
 interface SearchResult {
   location: Location & { type: string };
@@ -149,6 +150,9 @@ export async function initializeSearch(locations: (Location & { type: string })[
 
   function updateResults(results: SearchResult[]) {
     if (results.length > 0) {
+      // Track search with result count
+      analytics.trackSearch(searchInput.value.trim(), results.length);
+      
       resultsContainer.innerHTML = results
         .slice(0, 8)
         .map((result, index) => {
@@ -156,6 +160,9 @@ export async function initializeSearch(locations: (Location & { type: string })[
         })
         .join('');
     } else {
+      // Track search with no results
+      analytics.trackSearch(searchInput.value.trim(), 0);
+      
       resultsContainer.innerHTML = '<div class="no-results">No results found</div>';
     }
     resultsContainer.style.display = 'block';
@@ -258,6 +265,12 @@ export async function initializeSearch(locations: (Location & { type: string })[
   }
 
   function selectResult(result: SearchResult, clickedElement?: HTMLElement) {
+    // Track search result selection
+    analytics.trackEvent('search_result_click', {
+      location_name: result.location.name,
+      location_type: result.location.type
+    });
+    
     const tabSystem = document.querySelector('.tab-system');
     const locationsTab = tabSystem?.querySelector('.sidebar-tab:nth-child(1)') as HTMLElement;
     if (locationsTab) {

@@ -1,16 +1,20 @@
-<!-- src/index.html -->
 <!DOCTYPE html>
-<html lang="en"> <!-- Add language attribute for better SEO -->
+<html lang="en">
 
 <head>
-  <title>Soulmap - Interactive Map for Soulframe</title> <!-- Improved title with keywords -->
-  <meta charset="UTF-8"> <!-- Add charset declaration -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Add viewport for mobile -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" />
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="./styles/main.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-STQ0ZXTT03"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-STQ0ZXTT03');
+  </script>
+  
+  <title>Soulmap - Interactive Map for Soulframe</title>
   
   <!-- Enhanced SEO meta tags -->
   <meta name="description" content="Soulframe interactive map with locations, dungeons, loot, and more. The most comprehensive Soulframe map built by the community for the community.">
@@ -18,23 +22,23 @@
   <meta name="author" content="The Avakot Community">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content=""> <!-- Add your Google verification code when available -->
-
-  <!-- Open Graph / Facebook with enhanced descriptions -->
+  
+  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://soulmap.info/"> <!-- Replace with your actual domain when ready -->
+  <meta property="og:url" content="https://soulmap.avakot.org/">
   <meta property="og:title" content="Soulmap - Interactive Map for Soulframe">
   <meta property="og:description" content="Discover all locations, dungeons, loot, and points of interest in Soulframe with this interactive community-built map.">
-  <meta property="og:image" content="https://soulmap.info/thumbnail.jpg"> <!-- Replace with actual URL -->
+  <meta property="og:image" content="https://soulmap.avakot.org/thumbnail.jpg"> <!-- Replace with actual URL -->
   <meta property="og:site_name" content="Soulmap">
   
-  <!-- Twitter with enhanced descriptions -->
+  <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="https://soulmap.info/"> <!-- Replace with your actual domain -->
+  <meta property="twitter:url" content="https://soulmap.avakot.org/">
   <meta property="twitter:title" content="Soulmap - Interactive Map for Soulframe">
   <meta property="twitter:description" content="Explore Soulframe's world with this detailed interactive map featuring all locations, resources, and points of interest.">
-  <meta property="twitter:image" content="https://soulmap.info/thumbnail.jpg"> <!-- Replace with actual URL -->
-
-  <!-- Enhanced Schema.org structured data for better Google visibility -->
+  <meta property="twitter:image" content="https://soulmap.avakot.org/thumbnail.jpg"> <!-- Replace with actual URL -->
+  
+  <!-- Enhanced Schema.org structured data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -61,29 +65,38 @@
     }
   }
   </script>
-
-  <!-- Add canonical URL to prevent duplicate content issues -->
-  <link rel="canonical" href="https://soulmap.info/">
   
-  <!-- Add the favicon link -->
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://soulmap.avakot.org/">
+  
+  <!-- Favicon -->
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-
-  <!-- Add preload for common icons -->
+  
+  <!-- Preload common resources -->
   <link rel="preload" href="/SF_world_tree.svg" as="image" type="image/svg+xml">
   <link rel="preload" href="/SF_pointer.svg" as="image" type="image/svg+xml">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="./styles/main.css" />
 </head>
 
 <body>
   <div id="map">
     <div id="overlay"></div>
   </div>
+  
   <div class="search-overlay"></div>
-  <div class="search-container">
-  </div>
+  <div class="search-container"></div>
+  
   <div id="image-dropdown" style="position: absolute; top: 10px; right: 10px; display: none;">
-    <img id="dropdown-image" src="" alt="Imagem da Localização" style="max-width: 200px; max-height: 200px;">
+    <img id="dropdown-image" src="" alt="Location Image" style="max-width: 200px; max-height: 200px;">
   </div>
+  
   <div class="right-sidebar">
     <div class="tab-system">
       <div class="sidebar-tabs"></div>
@@ -102,8 +115,8 @@
       </div>
     </div>
   </div>
-
-  <!-- Move location drawer outside the right-sidebar -->
+  
+  <!-- Location drawer outside the right-sidebar -->
   <div class="location-drawer">
     <div class="drawer-header" id="drawer-toggle">
       <span>Locations List</span>
@@ -112,15 +125,36 @@
       <div class="categories"></div>
     </div>
   </div>
-
+  
+  <!-- Popup overlay for changelog -->
   <div id="popup-overlay">
     <div id="popup-content">
       <div id="popup-text">
         <!-- Markdown content will be inserted here -->
       </div>
-      <button onclick="dismissPopup()">Dismiss</button>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button onclick="dismissPopup()">Dismiss</button>
+        <button onclick="showPrivacyPolicy()" style="background-color: #555;">Privacy Policy</button>
+      </div>
     </div>
   </div>
+  
+  <!-- Privacy Policy popup overlay -->
+  <div id="privacy-policy-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: none; justify-content: center; align-items: center; z-index: 2100;">
+    <div id="privacy-policy-content" style="position: relative; max-width: 800px; max-height: 80vh; background-color: #333; padding: 30px; border-radius: 10px; overflow-y: auto; color: white;">
+      <!-- Analytics opt-out indicator -->
+      <div id="analytics-opt-out-indicator" style="position: absolute; top: 15px; right: 15px; padding: 5px 10px; background-color: #555; color: white; border-radius: 5px; font-size: 12px; display: none;">
+        You have opted out
+      </div>
+      <!-- Privacy policy content will be loaded here -->
+      <div id="privacy-policy-text"></div>
+      <div style="margin-top: 20px; text-align: center;">
+        <button onclick="dismissPrivacyPolicy()" style="padding: 10px 20px; background-color: #555; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Image modal -->
   <div id="image-modal" style="display: none;">
     <div class="modal-content">
       <button class="close-button">&times;</button>
@@ -131,11 +165,14 @@
       </div>
     </div>
   </div>
+  
   <div class="version-box" id="version-display"></div>
+  
   <div id="debug-info" style="display: none;">
     <div class="debug-coordinates"></div>
     <div class="debug-grid"></div>
   </div>
+  
   <div id="loading-overlay">
     <div class="loading-container">
       <div class="loading-text">Loading map...</div>
@@ -145,8 +182,12 @@
       <div class="loading-percentage">0%</div>
     </div>
   </div>
+  
+  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script type="module" src="./index.ts"></script> <!-- Entry point -->
+  <script type="module" src="./index.ts"></script>
+  
+  <!-- Ko-fi widget -->
   <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
   <script>
     kofiWidgetOverlay.draw('ascriptingoreo', {
@@ -160,8 +201,9 @@
       'floating-chat.donateButton.zIndex': '1000'
     });
   </script>
+  
+  <!-- Prevent right-click on protected elements -->
   <script>
-    // Prevent right-click on protected elements
     document.addEventListener('contextmenu', function(e) {
       const target = e.target;
       // Check if the target is an icon or contained within a marker
@@ -179,15 +221,58 @@
       }
     }, true);
   </script>
+  
+  <!-- Discord button -->
   <div id="discord-button">
     <a href="https://discord.gg/WWEf2cM4eu" target="_blank" rel="noopener noreferrer">
       <i class="fab fa-discord"></i>
       Discord
     </a>
   </div>
+  
+  <!-- Dismiss popup and privacy policy functions -->
   <script>
     function dismissPopup() {
       document.getElementById('popup-overlay').style.display = 'none';
+    }
+    
+    function showPrivacyPolicy() {
+      // Fetch and display privacy policy
+      fetch('/privacy-policy.html')
+        .then(response => response.text())
+        .then(html => {
+          // Extract the content from the privacy policy HTML
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = html;
+          const contentDiv = tempDiv.querySelector('.container');
+          
+          if (contentDiv) {
+            document.getElementById('privacy-policy-text').innerHTML = contentDiv.innerHTML;
+            document.getElementById('privacy-policy-overlay').style.display = 'flex';
+            
+            // Check if user has opted out of analytics
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasOptedOut = urlParams.get('noAnalytics') === 'true';
+            
+            // Show or hide the opt-out indicator based on the URL parameter
+            const optOutIndicator = document.getElementById('analytics-opt-out-indicator');
+            if (optOutIndicator) {
+              optOutIndicator.style.display = hasOptedOut ? 'block' : 'none';
+            }
+          } else {
+            console.error('Could not find privacy policy content');
+          }
+        })
+        .catch(error => {
+          console.error('Error loading privacy policy:', error);
+          document.getElementById('privacy-policy-text').innerHTML = 
+            '<h1>Error Loading Privacy Policy</h1><p>Sorry, we were unable to load the privacy policy. Please try again later.</p>';
+          document.getElementById('privacy-policy-overlay').style.display = 'flex';
+        });
+    }
+    
+    function dismissPrivacyPolicy() {
+      document.getElementById('privacy-policy-overlay').style.display = 'none';
     }
   </script>
 </body>
