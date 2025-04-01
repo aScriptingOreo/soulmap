@@ -5,6 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
+  <!-- Force HTTPS for all resources -->
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  
   <!-- Google Analytics (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-STQ0ZXTT03"></script>
   <script>
@@ -184,7 +187,7 @@
   </div>
   
   <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
   <script type="module" src="./index.ts"></script>
   
   <!-- Ko-fi widget -->
