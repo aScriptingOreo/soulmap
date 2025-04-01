@@ -2,7 +2,7 @@ import type { Location } from './types';
 import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
 import { setMarkerVisibility } from './services/visibilityMiddleware';
-import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker } from './map';
+import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker, getMap } from './map';
 import analytics from './analytics';
 
 interface SearchResult {
@@ -10,7 +10,7 @@ interface SearchResult {
   score: number;
 }
 
-export async function initializeSearch(locations: (Location & { type: string })[], map: L.Map, markers: L.Marker[]) {
+export async function initializeSearch(locations: (Location & { type: string })[], map: L.Map | null, markers: L.Marker[]) {
   const searchContainer = document.querySelector('.search-container') as HTMLElement;
   const searchOverlay = document.querySelector('.search-overlay') as HTMLElement;
   
@@ -169,6 +169,33 @@ export async function initializeSearch(locations: (Location & { type: string })[
   }
 
   function selectLocation(location: Location & { type: string }, coordIndex?: number) {
+    // Use the map parameter, but fall back to getMap() if necessary
+    const activeMap = map || getMap();
+    
+    if (!activeMap) {
+      console.warn("Cannot select location: map is not initialized");
+      
+      // Even without a map, we can still update the URL and metadata
+      const isMultiLocation = Array.isArray(location.coordinates[0]);
+      const urlParams = isMultiLocation && coordIndex !== undefined
+        ? `?loc=${generateLocationHash(location.name)}&index=${coordIndex}`
+        : `?loc=${generateLocationHash(location.name)}`;
+      window.history.replaceState({}, '', urlParams);
+      
+      // Try to update sidebar content
+      window.sidebarInstance?.updateContent(
+        location, 
+        isMultiLocation && coordIndex !== undefined
+          ? (location.coordinates as [number, number][])[coordIndex][0]
+          : (location.coordinates as [number, number])[0],
+        isMultiLocation && coordIndex !== undefined
+          ? (location.coordinates as [number, number][])[coordIndex][1]
+          : (location.coordinates as [number, number])[1]
+      );
+      
+      return;
+    }
+
     const isMultiLocation = Array.isArray(location.coordinates[0]);
     let coords: [number, number];
     
@@ -180,8 +207,8 @@ export async function initializeSearch(locations: (Location & { type: string })[
       coords = location.coordinates as [number, number];
     }
 
-    const currentCenter = map.getCenter();
-    const distance = map.distance(
+    const currentCenter = activeMap.getCenter();
+    const distance = activeMap.distance(
         [currentCenter.lat, currentCenter.lng],
         [coords[1], coords[0]]
     );
@@ -189,19 +216,19 @@ export async function initializeSearch(locations: (Location & { type: string })[
     const targetZoom = calculateOptimalZoom(distance);
     const duration = calculateAnimationDuration(distance);
 
-    map.once("movestart", () => {
+    activeMap.once("movestart", () => {
         document
             .querySelector(".leaflet-marker-pane")
             ?.classList.add("leaflet-zoom-hide");
     });
 
-    map.once("moveend", () => {
+    activeMap.once("moveend", () => {
         document
             .querySelector(".leaflet-marker-pane")
             ?.classList.remove("leaflet-zoom-hide");
     });
 
-    map.flyTo([coords[1], coords[0]], targetZoom, {
+    activeMap.flyTo([coords[1], coords[0]], targetZoom, {
         duration: duration,
         easeLinearity: 0.25,
         noMoveStart: true,
@@ -426,26 +453,25 @@ export async function initializeSearch(locations: (Location & { type: string })[
   function selectCoordinates(coords: [number, number]) {
     const [x, y] = coords;
     
-    // Find nearest named location for relative direction
-    const nearestLocation = locations
-      .filter(loc => loc.type === 'location')
-      .reduce((nearest, loc) => {
-        const locCoords = Array.isArray(loc.coordinates[0]) 
-          ? loc.coordinates[0] 
-          : loc.coordinates as [number, number];
-        
-        const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
-        const nearestDist = nearest ? Math.hypot(
-          x - (Array.isArray(nearest.coordinates[0]) 
-            ? nearest.coordinates[0][0] 
-            : nearest.coordinates[0]),
-          y - (Array.isArray(nearest.coordinates[0])
-            ? nearest.coordinates[0][1] 
-            : nearest.coordinates[1])
-        ) : Infinity;
-        
-        return currentDist < nearestDist ? loc : nearest;
-      }, null as (Location & { type: string }) | null);
+    // Use the map parameter, but fall back to getMap()
+    const activeMap = map || getMap();
+    
+    if (!activeMap) {
+      console.warn("Cannot select coordinates: map is not initialized");
+      
+      // Even without a map, we can still update the URL
+      const urlParams = new URLSearchParams();
+      urlParams.set('coord', `${Math.round(x)},${Math.round(y)}`);
+      window.history.replaceState({}, '', `?${urlParams.toString()}`);
+      
+      // Update metadata
+      updateMetaTags(null, [x, y]);
+      
+      // Try to update sidebar content
+      window.sidebarInstance?.updateContent(null, x, y);
+      
+      return;
+    }
     
     // Check if coordinates match any exact marker first
     const exactMarker = markers.find(marker => {
@@ -455,16 +481,16 @@ export async function initializeSearch(locations: (Location & { type: string })[
     
     if (exactMarker) {
       // If clicking on an exact marker, remove any temporary marker using our new function
-      removeTemporaryMarker(map);
+      removeTemporaryMarker(activeMap);
       
       exactMarker.fire('click');
     } else {
       // Create temporary marker using the shared function from map.ts
       const latLng = L.latLng(y, x);
-      createTemporaryMarker(latLng, map);
+      createTemporaryMarker(latLng, activeMap);
       
       // Center map on coordinates
-      map.setView([y, x], map.getZoom() || 0);
+      activeMap.setView([y, x], activeMap.getZoom() || 0);
       
       // Update URL and sidebar
       const urlParams = new URLSearchParams();
@@ -475,7 +501,7 @@ export async function initializeSearch(locations: (Location & { type: string })[
       updateMetaTags(null, [x, y]);
       
       // Use the sidebar to show the coordinate
-      window.sidebarInstance?.updateContent(null, x, y, nearestLocation);
+      window.sidebarInstance?.updateContent(null, x, y, findNearestNamedLocation([x, y], locations));
     }
     
     closeSearch();

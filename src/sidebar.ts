@@ -2,6 +2,7 @@ import * as L from "leaflet";
 import type { Location } from "./types";
 import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
+import { getMap } from "./map"; // Import the helper function
 
 function getIconUrl(iconPath: string): string {
   // Check if it's a full URL (starts with http or https)
@@ -26,7 +27,7 @@ function getIconUrl(iconPath: string): string {
 export interface SidebarOptions {
   element: HTMLElement;
   locations: (Location & { type: string })[];
-  map: L.Map;
+  map?: L.Map; // Map is now optional
   markers: L.Marker[];
   visibilityMiddleware?: {
     isMarkerVisible: (markerId: string, category?: string) => boolean;
@@ -40,7 +41,7 @@ export interface SidebarOptions {
 export class Sidebar {
   private element: HTMLElement;
   private locations: (Location & { type: string })[];
-  private map: L.Map;
+  private map: L.Map | null; // Map can be null
   private markers: L.Marker[];
   private titleEl!: HTMLElement;
   private descEl!: HTMLElement;
@@ -65,29 +66,35 @@ export class Sidebar {
   constructor(options: SidebarOptions) {
     this.element = options.element;
     this.locations = options.locations;
-    this.map = options.map;
+    this.map = options.map || null; // Handle potentially missing map
     this.markers = options.markers;
     this.customMarkerService = new CustomMarkerService();
-    this.visibilityMiddleware = options.visibilityMiddleware;
+    
+    // Ensure middleware is defined with fallback functions
+    this.visibilityMiddleware = options.visibilityMiddleware || {
+        isMarkerVisible: () => true,
+        setMarkerVisibility: async () => {},
+        setCategoryVisibility: async () => {},
+        getHiddenMarkers: () => new Set<string>(),
+        getHiddenCategories: () => new Set<string>()
+    };
 
     // Initialize visibility state from middleware if available
-    if (this.visibilityMiddleware) {
-      const hiddenMarkers = this.visibilityMiddleware.getHiddenMarkers();
-      this.visibleMarkers = new Set(
+    const hiddenMarkers = this.visibilityMiddleware?.getHiddenMarkers() || new Set<string>();
+    this.visibleMarkers = new Set(
         this.locations.flatMap(loc => {
-          if (Array.isArray(loc.coordinates[0])) {
-            const multiCoords = loc.coordinates as [number, number][];
-            return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
-          }
-          return [loc.name];
+            if (Array.isArray(loc.coordinates[0])) {
+                const multiCoords = loc.coordinates as [number, number][];
+                return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
+            }
+            return [loc.name];
         }).filter(id => !hiddenMarkers.has(id))
-      );
+    );
 
-      const hiddenCategories = this.visibilityMiddleware.getHiddenCategories();
-      this.visibleCategories = new Set(
+    const hiddenCategories = this.visibilityMiddleware?.getHiddenCategories() || new Set<string>();
+    this.visibleCategories = new Set(
         this.locations.map(loc => loc.type).filter(cat => !hiddenCategories.has(cat))
-      );
-    }
+    );
 
     // Create and add toggle button immediately
     this.createToggleButton();
@@ -102,6 +109,9 @@ export class Sidebar {
         this.hasCustomCategory = false;
       }
     });
+    
+    // Start initialization right away
+    this.initialize();
   }
 
   private createToggleButton(): void {
@@ -170,16 +180,21 @@ export class Sidebar {
   }
 
   private async initialize(): Promise<void> {
-    this.initializeElements();
-    this.createTabInterface();
-    await this.loadVisibilityState();
-    await this.initializeComponentsAsync();
-    this.initialized = true;
+    // Initialize elements ASAP
+    try {
+      this.initializeElements();
+      this.createTabInterface();
+      await this.loadVisibilityState();
+      await this.initializeComponentsAsync();
+      this.initialized = true;
 
-    requestAnimationFrame(() => {
-      this.element.classList.add("loaded");
-      this.toggleButton.classList.add("loaded");
-    });
+      requestAnimationFrame(() => {
+        this.element.classList.add("loaded");
+        this.toggleButton.classList.add("loaded");
+      });
+    } catch (error) {
+      console.error("Failed to initialize sidebar:", error);
+    }
   }
 
   private async loadVisibilityState(): Promise<void> {
@@ -301,7 +316,7 @@ export class Sidebar {
     this.locationDrawer = drawerContainer;
   }
 
-  async updateContent(
+  public async updateContent(
     location: (Location & { type: string }) | null,
     x: number,
     y: number,
@@ -317,9 +332,27 @@ export class Sidebar {
       this.imgEl.style.display = "none";
       this.imgEl.src = "";
 
+      // Remove any existing icon
       const existingIcon = this.element.querySelector(".location-icon-container");
       if (existingIcon) {
         existingIcon.remove();
+      }
+      
+      // Add temporary marker icon
+      const iconContainer = document.createElement("div");
+      iconContainer.className = "location-icon-container";
+      
+      const tempIcon = document.createElement("img");
+      tempIcon.src = "./assets/SF_pointer.svg";
+      tempIcon.alt = "";
+      tempIcon.className = "location-icon-image";
+      tempIcon.style.width = "32px";
+      tempIcon.style.height = "32px";
+      iconContainer.appendChild(tempIcon);
+
+      const locationInfoContainer = this.element.querySelector(".location-info-container");
+      if (locationInfoContainer) {
+        locationInfoContainer.insertBefore(iconContainer, locationInfoContainer.firstChild);
       }
 
       // Remove any last updated element
@@ -350,9 +383,6 @@ export class Sidebar {
       } else {
         this.element.querySelector(".relative-location")?.remove();
       }
-
-      const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
-      window.history.replaceState({}, "", urlParams);
     } else {
       let locationTitle = location.name;
 
@@ -491,6 +521,17 @@ export class Sidebar {
       } else {
         this.imgEl.style.display = "none";
         this.imgEl.src = "";
+      }
+    }
+
+    // Only try to update the map URL if we have a location
+    if (location || (x !== undefined && y !== undefined)) {
+      if (location) {
+        const urlParams = `?loc=${generateLocationHash(location.name)}`;
+        window.history.replaceState({}, "", urlParams);
+      } else {
+        const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
+        window.history.replaceState({}, "", urlParams);
       }
     }
 
@@ -876,8 +917,23 @@ export class Sidebar {
     coords: [number, number],
     item: Location & { type: string }
   ) {
-    const currentCenter = this.map.getCenter();
-    const distance = this.map.distance(
+    // Get map - try from instance, then fallback to global helper
+    const map = this.map || getMap();
+    
+    if (!map) {
+      console.warn("Cannot navigate to location: map is not initialized");
+      
+      // Even without a map, we can still update the URL and metadata
+      const locationHash = generateLocationHash(item.name);
+      window.history.replaceState({}, "", `?loc=${locationHash}`);
+      
+      // Try to update sidebar content
+      this.updateContent(item, coords[0], coords[1]);
+      return;
+    }
+
+    const currentCenter = map.getCenter();
+    const distance = map.distance(
       [currentCenter.lat, currentCenter.lng],
       [coords[1], coords[0]]
     );
@@ -885,19 +941,19 @@ export class Sidebar {
     const targetZoom = this.calculateOptimalZoom(distance);
     const duration = this.calculateAnimationDuration(distance);
 
-    this.map.once("movestart", () => {
+    map.once("movestart", () => {
       document
         .querySelector(".leaflet-marker-pane")
         ?.classList.add("leaflet-zoom-hide");
     });
 
-    this.map.once("moveend", () => {
+    map.once("moveend", () => {
       document
         .querySelector(".leaflet-marker-pane")
         ?.classList.remove("leaflet-zoom-hide");
     });
 
-    this.map.flyTo([coords[1], coords[0]], targetZoom, {
+    map.flyTo([coords[1], coords[0]], targetZoom, {
       duration: duration,
       easeLinearity: 0.25,
       noMoveStart: true,
@@ -953,7 +1009,7 @@ export class Sidebar {
   private calculateAnimationDuration(distance: number): number {
     const baseDuration = 1.2;
     const distanceFactor = Math.min(distance / 5000, 1);
-    const currentZoom = this.map.getZoom();
+    const currentZoom = this.map?.getZoom() || 0;
     const targetZoom = this.calculateOptimalZoom(distance);
     const zoomDiff = Math.abs(currentZoom - targetZoom);
     const zoomFactor = Math.min(zoomDiff / 3, 1);
@@ -993,39 +1049,52 @@ export class Sidebar {
       const markerElement = marker.getElement();
       if (markerElement) {
         if (isVisible) {
-          markerElement.style.display = "none";
+          // Instead of setting style.display, use classList to add a CSS class
+          markerElement.classList.add("marker-hidden");
+          
           if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0,
-              fillOpacity: 0,
-            });
+            const circleElement = (marker as any).uncertaintyCircle._path;
+            if (circleElement) {
+              circleElement.classList.add("circle-hidden");
+            } else {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0,
+                fillOpacity: 0
+              });
+            }
           }
+          
           this.visibleMarkers.delete(markerKey);
           toggleElement.textContent = "visibility_off";
           toggleElement.classList.add("hidden");
         } else {
-          markerElement.style.display = "";
+          // Use classList to remove the hidden class
+          markerElement.classList.remove("marker-hidden");
+          
           if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0.6,
-              fillOpacity: 0.2,
-            });
+            const circleElement = (marker as any).uncertaintyCircle._path;
+            if (circleElement) {
+              circleElement.classList.remove("circle-hidden");
+            } else {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0.6,
+                fillOpacity: 0.2
+              });
+            }
           }
+          
           this.visibleMarkers.add(markerKey);
           toggleElement.textContent = "visibility";
           toggleElement.classList.remove("hidden");
-          
-          // Force marker to redraw by refreshing its position
-          marker.setLatLng(marker.getLatLng());
         }
       }
     }
 
+    this.updateCategoryVisibility(toggleElement);
+
     if (this.visibilityMiddleware) {
       await this.visibilityMiddleware.setMarkerVisibility(markerKey, !isVisible);
     }
-
-    this.updateCategoryVisibility(toggleElement);
 
     if (!this.visibilityMiddleware) {
       this.saveVisibilityState();
@@ -1069,13 +1138,18 @@ export class Sidebar {
           if (markerName === item.name) {
             const element = marker.getElement();
             if (element) {
-              element.style.display = "none";
+              element.classList.add("marker-hidden");
 
               if ((marker as any).uncertaintyCircle) {
-                (marker as any).uncertaintyCircle.setStyle({
-                  opacity: 0,
-                  fillOpacity: 0,
-                });
+                const circleElement = (marker as any).uncertaintyCircle._path;
+                if (circleElement) {
+                  circleElement.classList.add("circle-hidden");
+                } else {
+                  (marker as any).uncertaintyCircle.setStyle({
+                    opacity: 0,
+                    fillOpacity: 0
+                  });
+                }
               }
             }
           }
@@ -1111,13 +1185,18 @@ export class Sidebar {
           if (markerName === item.name) {
             const element = marker.getElement();
             if (element) {
-              element.style.display = "";
+              element.classList.remove("marker-hidden");
 
               if ((marker as any).uncertaintyCircle) {
-                (marker as any).uncertaintyCircle.setStyle({
-                  opacity: 0.6,
-                  fillOpacity: 0.2,
-                });
+                const circleElement = (marker as any).uncertaintyCircle._path;
+                if (circleElement) {
+                  circleElement.classList.remove("circle-hidden");
+                } else {
+                  (marker as any).uncertaintyCircle.setStyle({
+                    opacity: 0.6, 
+                    fillOpacity: 0.2
+                  });
+                }
               }
               
               // Force marker to redraw by refreshing its position
@@ -1181,12 +1260,18 @@ export class Sidebar {
         if (markerName === item.name) {
           const element = marker.getElement();
           if (element) {
-            element.style.display = "none";
+            element.classList.add("marker-hidden");
+            
             if ((marker as any).uncertaintyCircle) {
-              (marker as any).uncertaintyCircle.setStyle({
-                opacity: 0,
-                fillOpacity: 0,
-              });
+              const circleElement = (marker as any).uncertaintyCircle._path;
+              if (circleElement) {
+                circleElement.classList.add("circle-hidden");
+              } else {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0,
+                  fillOpacity: 0
+                });
+              }
             }
           }
         }
@@ -1218,12 +1303,18 @@ export class Sidebar {
         if (markerName === item.name) {
           const element = marker.getElement();
           if (element) {
-            element.style.display = "";
+            element.classList.remove("marker-hidden");
+            
             if ((marker as any).uncertaintyCircle) {
-              (marker as any).uncertaintyCircle.setStyle({
-                opacity: 0.6,
-                fillOpacity: 0.2,
-              });
+              const circleElement = (marker as any).uncertaintyCircle._path;
+              if (circleElement) {
+                circleElement.classList.remove("circle-hidden");
+              } else {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0.6,
+                  fillOpacity: 0.2
+                });
+              }
             }
             
             // Force marker to redraw by refreshing its position
@@ -1320,13 +1411,23 @@ export class Sidebar {
   }
 
   private createTabInterface(): void {
+    // Find the tab system container
+    const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
+    if (!tabSystem) return;
+    
+    // Check if tabs already exist and clear them to prevent duplicates
+    const existingTabs = tabSystem.querySelector(".sidebar-tabs");
+    if (existingTabs) {
+      existingTabs.remove();
+    }
+
+    // Create fresh tab elements
     const tabsContainer = document.createElement("div");
     tabsContainer.className = "sidebar-tabs";
 
     const locationTab = document.createElement("button");
     locationTab.className = "sidebar-tab active";
-    locationTab.innerHTML =
-      '<span class="material-icons">place</span>Location Info';
+    locationTab.innerHTML = '<span class="material-icons">place</span>Location Info';
 
     const dropsTab = document.createElement("a");
     dropsTab.className = "sidebar-tab external-link";
@@ -1338,13 +1439,15 @@ export class Sidebar {
     tabsContainer.appendChild(locationTab);
     tabsContainer.appendChild(dropsTab);
 
-    const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
+    // Find the location content element
     const locationContent = this.element.querySelector(
       ".sidebar-content.location-info"
     ) as HTMLElement;
 
+    // Insert the tabs container
     tabSystem.insertBefore(tabsContainer, tabSystem.firstChild);
 
+    // Store reference to location content
     this.locationContent = locationContent;
   }
 }

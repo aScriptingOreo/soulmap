@@ -9,6 +9,12 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+0.9.4
+- Improved load times and no more jagged chessboard like map tiles
+- Retired irrelevant markers from P7/P8
+- A LOT of code refactoring, but that's boring
+
+0.9.x
 - You can now input coordinates [X,Y] directly into the search bar and it will tell you what's there
 - Re-done precision on some markers
 - Added Enclave markers
@@ -18,19 +24,5 @@ None of this would've been possible without @Remico, our main contributor for th
 - New marker for on-click on random coordinates, so it's easier to share screenshots.
 - Removed 'Drops' system from soulmap entirely, there is a lovely community tool called Soulframe Plus that is handling item tracking and acquisition, check them out!
 
-
-Updated marker for:
-- Location markers
-- World Trees
-- Dungeon Exits
-- Quests
-- Collectors
-- World Trees
-- Quests
-- Dungeon Entrances
-- Oro Chests
-- Ode Chests
-- Stag
-- So many others
 
 __all icons, assets and map itself are property of Digital Extremes and the avakot team holds no right to any of it, if you're a member of Digital Extremes and wants to take any content down please contact us via discord!__

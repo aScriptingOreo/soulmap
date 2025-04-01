@@ -1,7 +1,7 @@
 // src/index.ts
 import { marked } from 'marked';
 import { loadLocations, clearLocationsCache } from './loader';
-import { initializeMap } from './map';
+import { initializeMap, updateMetaTags } from './map';
 import { clearTileCache } from './gridLoader';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 import type { VersionInfo } from './types';
@@ -74,9 +74,6 @@ async function loadGreeting() {
         const versionData = mapVersion as VersionInfo;
         const lastSeenVersion = localStorage.getItem('lastSeenVersion');
 
-        // Start loading the map immediately
-        const mapInitialization = initMain();
-        
         // Show popup if version is different and not in offline mode
         if (lastSeenVersion !== versionData.version && !isOfflineMode) {
             await showGreetingPopup();
@@ -84,12 +81,8 @@ async function loadGreeting() {
             // Store the new version
             localStorage.setItem('lastSeenVersion', versionData.version);
         }
-
-        // Wait for map initialization to complete
-        await mapInitialization;
     } catch (error) {
         console.error('Error loading greeting:', error);
-        initMain();
     }
 }
 
@@ -162,18 +155,29 @@ async function initMain() {
         });
 
         if (locations.length > 0) {
-            await initializeMap(locations, debug);
+            // Initialize the map with locations - this also initializes the sidebar
+            const map = await initializeMap(locations);
+            
+            // If map initialization failed, nothing more to do as the map.ts
+            // will display an appropriate error message
+            if (!map) {
+                console.error("Map initialization failed");
+            }
         } else {
             throw new Error("No locations loaded. Map initialization aborted.");
         }
     } catch (error) {
-        console.error("Failed to initialize map:", error);
+        console.error("Failed to initialize application:", error);
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) {
-            const loadingText = loadingOverlay.querySelector('.loading-text');
-            if (loadingText) {
-                loadingText.textContent = 'Error loading map. Please refresh the page.';
-            }
+            loadingOverlay.innerHTML = `
+                <div class="loading-container">
+                    <div class="loading-text">Error Loading Application</div>
+                    <div class="error-message">${error?.message || 'Unknown error'}</div>
+                    <button onclick="location.reload()">Retry</button>
+                </div>
+            `;
+            loadingOverlay.style.display = 'flex';
         }
     }
 }
@@ -189,6 +193,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show greeting first
   await loadGreeting();
   await updateVersionDisplay();
+  
+  // Initialize the main application after showing the greeting
+  await initMain();
   
   // Set up dismiss handler
   document.querySelector('#popup-content button')?.addEventListener('click', dismissPopup);

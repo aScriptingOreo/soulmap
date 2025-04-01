@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=width=device-width, initial-scale=1.0">
   
   <!-- Force HTTPS for all resources -->
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
@@ -81,16 +81,96 @@
   <link rel="preload" href="/SF_pointer.svg" as="image" type="image/svg+xml">
   
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" onerror="handleLeafletCssError()" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" onerror="handleMarkerClusterCssError()" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" onerror="handleMarkerClusterDefaultCssError()" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="stylesheet" href="./styles/main.css" />
+  
+  <!-- Debug styles - NO important flags -->
+  <style>
+    /* Debug styles to highlight marker containers */
+    .leaflet-marker-pane {
+      min-width: 10px;
+      min-height: 10px;
+    }
+  </style>
+  
+  <script>
+    // Function to handle Leaflet CSS loading error
+    function handleLeafletCssError() {
+      console.log("CDN Leaflet CSS failed to load, trying local fallback");
+      
+      // Try loading the local fallback CSS immediately
+      const localCssLink = document.createElement('link');
+      localCssLink.rel = 'stylesheet';
+      localCssLink.href = './styles/leaflet.css'; 
+      localCssLink.onload = function() {
+        console.log("Local Leaflet CSS loaded successfully");
+      };
+      
+      localCssLink.onerror = function() {
+        console.error("Local Leaflet CSS failed to load as well");
+      };
+      
+      document.head.appendChild(localCssLink);
+    }
+    
+    // Function to handle MarkerCluster CSS loading error
+    function handleMarkerClusterCssError() {
+      console.log("CDN MarkerCluster CSS failed to load, trying local fallback");
+      
+      // Try loading the local fallback CSS
+      const localCssLink = document.createElement('link');
+      localCssLink.rel = 'stylesheet';
+      localCssLink.href = './styles/MarkerCluster.css';
+      document.head.appendChild(localCssLink);
+    }
+    
+    // Function to handle MarkerCluster Default CSS loading error
+    function handleMarkerClusterDefaultCssError() {
+      console.log("CDN MarkerCluster Default CSS failed to load, trying local fallback");
+      
+      // Try loading the local fallback CSS
+      const localCssLink = document.createElement('link');
+      localCssLink.rel = 'stylesheet';
+      localCssLink.href = './styles/MarkerCluster.Default.css';
+      document.head.appendChild(localCssLink);
+    }
+    
+    // Additional check - verify if Leaflet CSS has loaded properly after timeout
+    window.addEventListener('load', function() {
+      setTimeout(() => {
+        // Check if a basic Leaflet class has been applied correctly
+        const testElement = document.createElement('div');
+        testElement.className = 'leaflet-container';
+        document.body.appendChild(testElement);
+        
+        const computedStyle = window.getComputedStyle(testElement);
+        if (!computedStyle || computedStyle.position !== 'relative') {
+          // Try local CSS as fallback
+          const fallbackLink = document.createElement('link');
+          fallbackLink.rel = 'stylesheet';
+          fallbackLink.href = './styles/leaflet.css';
+          document.head.appendChild(fallbackLink);
+        }
+        
+        document.body.removeChild(testElement);
+      }, 2000); // Check 2 seconds after page load
+    });
+  </script>
 </head>
 
 <body>
   <div id="map">
     <div id="overlay"></div>
+  </div>
+  
+  <!-- Leaflet CSS Error Indicator -->
+  <div id="leaflet-error-indicator" class="offline-indicator" style="background-color: #e67e22; display: none; top: 60px;">
+    <span class="material-icons">error_outline</span> Map styles unavailable. Some features may not display correctly.
   </div>
   
   <div class="search-overlay"></div>
@@ -187,7 +267,21 @@
   </div>
   
   <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+          crossorigin="anonymous"
+          onerror="handleLeafletJsError()"></script>
+  <script>
+    function handleLeafletJsError() {
+      console.warn('CDN Leaflet JS failed to load, trying local fallback');
+      const script = document.createElement('script');
+      script.src = './assets/leaflet.js'; // Ensure you have a local copy
+      script.onerror = function() { 
+        console.error('Failed to load local Leaflet JS fallback'); 
+      };
+      document.head.appendChild(script);
+    }
+  </script>
   <script type="module" src="./index.ts"></script>
   
   <!-- Ko-fi widget -->

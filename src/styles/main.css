@@ -189,6 +189,24 @@ body {
   background-color: #666;
 }
 
+/* Map error message */
+.map-error-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  max-width: 80%;
+}
+
+.error-message {
+  color: #ff5252;
+  margin: 10px 0 20px;
+  padding: 10px;
+  background: rgba(255, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
 /* Rest of existing CSS */
 .right-sidebar {
   display: flex;
@@ -2334,4 +2352,188 @@ mark {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced marker cluster styling */
+.marker-cluster {
+  background-color: rgba(181, 226, 140, 0.6) !important;
+  background-clip: padding-box !important;
+  border-radius: 20px !important;
+  transition: transform 0.2s ease !important;
+}
+
+.marker-cluster:hover {
+  transform: scale(1.1) !important;
+  z-index: 1010 !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6) !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin-left: 5px !important;
+  margin-top: 5px !important;
+  text-align: center !important;
+  border-radius: 15px !important;
+  font-size: 12px !important;
+  color: #fff !important;
+  font-weight: bold !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Specific category styling */
+.cluster-icon-dungeons {
+  background-color: rgba(165, 42, 42, 0.6) !important;
+}
+.cluster-icon-dungeons div {
+  background-color: rgba(165, 42, 42, 0.9) !important;
+}
+
+.cluster-icon-poi {
+  background-color: rgba(0, 128, 128, 0.6) !important;
+}
+.cluster-icon-poi div {
+  background-color: rgba(0, 128, 128, 0.9) !important;
+}
+
+.cluster-icon-resources {
+  background-color: rgba(34, 139, 34, 0.6) !important;
+}
+.cluster-icon-resources div {
+  background-color: rgba(34, 139, 34, 0.9) !important;
+}
+
+/* Force visibility for markers that need to be visible */
+.forcibly-visible-marker {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+/* Custom Marker Cluster Styles */
+.marker-cluster {
+  background-color: rgba(181, 226, 140, 0.6);
+  background-clip: padding-box;
+  border-radius: 20px;
+  transition: transform 0.2s ease;
+}
+
+.marker-cluster:hover {
+  transform: scale(1.1);
+  z-index: 1010 !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6);
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  margin-top: 5px;
+  text-align: center;
+  border-radius: 15px;
+  font-size: 12px;
+  color: #fff;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Specific category styling */
+.cluster-icon-dungeons {
+  background-color: rgba(165, 42, 42, 0.6) !important;
+}
+.cluster-icon-dungeons div {
+  background-color: rgba(165, 42, 42, 0.9) !important;
+}
+
+.cluster-icon-poi {
+  background-color: rgba(0, 128, 128, 0.6) !important;
+}
+.cluster-icon-poi div {
+  background-color: rgba(0, 128, 128, 0.9) !important;
+}
+
+.cluster-icon-resources {
+  background-color: rgba(34, 139, 34, 0.6) !important;
+}
+.cluster-icon-resources div {
+  background-color: rgba(34, 139, 34, 0.9) !important;
+}
+
+/* Force marker visibility - these styles are causing the issue */
+.leaflet-marker-icon {
+  /* Remove the !important flags that prevent toggling */
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+/* Add a new class for hidden markers that takes precedence */
+.marker-hidden {
+  display: none !important;
+}
+
+/* Make uncertainty circles properly toggleable */
+.circle-hidden {
+  opacity: 0 !important;
+  fill-opacity: 0 !important;
+}
+
+/* Make cluster icons visible */
+.marker-cluster {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 0.8 !important;
+  z-index: 1000 !important;
+  background-color: rgba(181, 226, 140, 0.6) !important;
+  background-clip: padding-box !important;
+  border-radius: 20px !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6) !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin-left: 5px !important;
+  margin-top: 5px !important;
+  text-align: center !important;
+  border-radius: 15px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Uncertainty circle styling */
+.leaflet-interactive {
+  pointer-events: visibleStroke;
+}
+
+/* Make uncertainty circles look better */
+.uncertainty-circle {
+  stroke-dasharray: 5, 5;
+  animation: dash 10s linear infinite;
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+/* Ensure uncertainty circles stay visible even when markers are clustered */
+.leaflet-overlay-pane path {
+  pointer-events: none;
+  z-index: 600;
 }

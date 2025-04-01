@@ -180,3 +180,84 @@ export async function clearLocationsCache(): Promise<void> {
     console.error('Error clearing locations cache:', error);
   }
 }
+
+// Prepare locations for clustering based on zoom level and proximity
+export function prepareLocationsForClustering(
+  locations: (Location & { type: string })[]
+): { 
+  clusterable: (Location & { type: string })[], 
+  unclustered: (Location & { type: string })[] 
+} {
+  // Some locations may need to remain unclustered (e.g., important landmarks)
+  const clusterable: (Location & { type: string })[] = [];
+  const unclustered: (Location & { type: string })[] = [];
+  
+  locations.forEach(location => {
+    // Skip locations without coordinates
+    if (!location.coordinates || location.coordinates.length === 0) return;
+    
+    // Check if location has a property indicating it shouldn't be clustered
+    // This allows control over which markers can be clustered
+    if (location.noCluster === true) {
+      unclustered.push(location);
+    } else {
+      clusterable.push(location);
+    }
+  });
+  
+  return { clusterable, unclustered };
+}
+
+// Get location types for use with cluster categorization
+export function getLocationTypeGroups(locations: (Location & { type: string })[]): Record<string, string[]> {
+  const typeGroups: Record<string, string[]> = {};
+  
+  locations.forEach(location => {
+    if (!typeGroups[location.type]) {
+      typeGroups[location.type] = [];
+    }
+    
+    if (!typeGroups[location.type].includes(location.name)) {
+      typeGroups[location.type].push(location.name);
+    }
+  });
+  
+  return typeGroups;
+}
+
+// Helper function to determine cluster icon based on contained marker types
+export function determineClusterIcon(cluster: any, locationTypes: Record<string, string[]>): string {
+  // Get all markers in this cluster
+  const markers = cluster.getAllChildMarkers();
+  
+  // Count marker types in this cluster
+  const typeCounts: Record<string, number> = {};
+  let dominantType = '';
+  let maxCount = 0;
+  
+  markers.forEach(marker => {
+    // Get location data from marker
+    const locationData = marker.options.locationData;
+    if (!locationData || !locationData.type) return;
+    
+    // Count this type
+    if (!typeCounts[locationData.type]) {
+      typeCounts[locationData.type] = 0;
+    }
+    typeCounts[locationData.type]++;
+    
+    // Track dominant type
+    if (typeCounts[locationData.type] > maxCount) {
+      maxCount = typeCounts[locationData.type];
+      dominantType = locationData.type;
+    }
+  });
+  
+  // Return appropriate icon class based on dominant type
+  if (dominantType) {
+    return `cluster-icon-${dominantType.toLowerCase()}`;
+  }
+  
+  // Default cluster icon
+  return 'default-cluster-icon';
+}
