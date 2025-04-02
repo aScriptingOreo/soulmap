@@ -14,14 +14,73 @@ export async function initializeSearch(locations: (Location & { type: string })[
   const searchContainer = document.querySelector('.search-container') as HTMLElement;
   const searchOverlay = document.querySelector('.search-overlay') as HTMLElement;
   
+  // Add the Font Awesome icon to the container
   searchContainer.innerHTML = `
+    <i class="fa-solid fa-magnifying-glass"></i>
     <input type="text" id="location-search" placeholder="Press Ctrl + Space to search...">
     <div class="search-results"></div>
   `;
 
   const searchInput = document.getElementById('location-search') as HTMLInputElement;
   const resultsContainer = document.querySelector('.search-results') as HTMLDivElement;
+  const searchIcon = searchContainer.querySelector('.fa-magnifying-glass') as HTMLElement;
   let selectedIndex = -1;
+  
+  // Check if we're on mobile
+  const isMobile = () => window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1);
+
+  // Mobile-specific event handlers
+  if (isMobile()) {
+    // Update placeholder text for mobile
+    searchInput.placeholder = "Search locations...";
+    
+    // Make icon clickable and expand search on click
+    searchIcon.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent clicks from bubbling to document
+      if (!searchContainer.classList.contains('expanded')) {
+        expandSearch();
+      }
+    });
+    
+    // Click on container also expands search
+    searchContainer.addEventListener('click', (e) => {
+      if (!searchContainer.classList.contains('expanded') && e.target === searchContainer) {
+        e.stopPropagation();
+        expandSearch();
+      }
+    });
+
+    // Click outside search container collapses it
+    document.addEventListener('click', (e) => {
+      if (
+        searchContainer.classList.contains('expanded') && 
+        !searchContainer.contains(e.target as Node) &&
+        !resultsContainer.contains(e.target as Node)
+      ) {
+        collapseSearch();
+      }
+    });
+
+    // Handle focus on input for better mobile experience
+    searchInput.addEventListener('focus', () => {
+      if (!searchContainer.classList.contains('expanded')) {
+        expandSearch();
+      }
+    });
+  }
+
+  // Search expansion functions for mobile
+  function expandSearch() {
+    searchContainer.classList.add('expanded');
+    setTimeout(() => searchInput.focus(), 300); // Delay focus until animation completes
+  }
+
+  function collapseSearch() {
+    searchContainer.classList.remove('expanded');
+    searchInput.value = '';
+    resultsContainer.style.display = 'none';
+    selectedIndex = -1;
+  }
 
   async function searchAll(query: string): Promise<SearchResult[]> {
     const results: SearchResult[] = [];
@@ -288,6 +347,14 @@ export async function initializeSearch(locations: (Location & { type: string })[
         window.history.replaceState({}, '', urlParams);
     }
 
+    // Hide search bar on small screens when a location is selected from search
+    if (window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1)) {
+        const searchContainer = document.querySelector('.search-container');
+        if (searchContainer) {
+            searchContainer.classList.add('hidden-mobile');
+        }
+    }
+
     closeSearch();
   }
 
@@ -405,12 +472,18 @@ export async function initializeSearch(locations: (Location & { type: string })[
     selectedIndex = -1;
   }
 
+  // Update closeSearch function to handle mobile UI state
   function closeSearch() {
     searchContainer.classList.remove('expanded');
     searchOverlay.classList.remove('active');
     resultsContainer.style.display = 'none';
     searchInput.value = '';
     selectedIndex = -1;
+    
+    // For mobile, collapse back to icon
+    if (isMobile()) {
+      collapseSearch();
+    }
   }
 
   searchOverlay.addEventListener('click', (e) => {

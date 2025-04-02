@@ -135,6 +135,14 @@ export class Sidebar {
       if (isCollapsed) {
         this.element.classList.remove("collapsed");
         this.toggleButton.classList.remove("collapsed");
+        
+        // Hide search bar on small screens when sidebar is open
+        if (this.isSmallScreenOrVertical()) {
+          const searchContainer = document.querySelector('.search-container');
+          if (searchContainer) {
+            searchContainer.classList.add('hidden-mobile');
+          }
+        }
       } else {
         this.element.classList.add("collapsed");
         this.toggleButton.classList.add("collapsed");
@@ -145,20 +153,53 @@ export class Sidebar {
           .forEach((el) => {
             el.classList.remove("selected");
           });
+        
+        // Show search bar again on small screens when sidebar is closed
+        if (this.isSmallScreenOrVertical()) {
+          const searchContainer = document.querySelector('.search-container');
+          if (searchContainer) {
+            searchContainer.classList.remove('hidden-mobile');
+          }
+        }
       }
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.key === "b") {
-        e.preventDefault();
-        this.toggleButton.click();
-      }
-    });
+    // Add resize listener to handle orientation changes
+    window.addEventListener('resize', this.handleResize.bind(this));
 
     requestAnimationFrame(() => {
       this.toggleButton.classList.add("loaded");
       this.element.classList.add("loaded");
+      
+      // Initial check for search visibility based on sidebar state
+      if (this.isSmallScreenOrVertical() && !this.element.classList.contains('collapsed')) {
+        const searchContainer = document.querySelector('.search-container');
+        if (searchContainer) {
+          searchContainer.classList.add('hidden-mobile');
+        }
+      }
     });
+  }
+
+  // Helper method to check if we're on a small screen or in vertical orientation
+  private isSmallScreenOrVertical(): boolean {
+    return window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1);
+  }
+
+  // Handle window resize events
+  private handleResize(): void {
+    const isSmall = this.isSmallScreenOrVertical();
+    const sidebarOpen = !this.element.classList.contains('collapsed');
+    
+    // Toggle search visibility
+    const searchContainer = document.querySelector('.search-container');
+    if (searchContainer) {
+      if (isSmall && sidebarOpen) {
+        searchContainer.classList.add('hidden-mobile');
+      } else {
+        searchContainer.classList.remove('hidden-mobile');
+      }
+    }
   }
 
   private showSidebar(): void {
@@ -773,7 +814,7 @@ export class Sidebar {
           if (modalContent) {
             const existingIframe = modalContent.querySelector('iframe');
             if (existingIframe) {
-              existingIframe.remove();
+              modalContent.remove();
             }
           }
         }

@@ -598,6 +598,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
                               `?loc=${locationHash}`;
                           window.history.replaceState({}, '', urlParams);
                           updateMetaTags(location, coord);
+                          
+                          // Hide search bar on small screens when marker is clicked (which opens sidebar)
+                          if (window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1)) {
+                              const searchContainer = document.querySelector('.search-container');
+                              if (searchContainer) {
+                                  searchContainer.classList.add('hidden-mobile');
+                              }
+                          }
                       });
                       
                       // Set initial visibility state based on middleware

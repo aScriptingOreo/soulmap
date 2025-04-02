@@ -90,18 +90,20 @@ async function updateVersionDisplay() {
   try {
     const versionData = mapVersion as VersionInfo;
     
-    const versionDisplay = document.getElementById('version-display');
-    if (versionDisplay) {
-      versionDisplay.textContent = `Soulmap | v${versionData.version} | up to date with ${versionData.game_version}`;
-      
-      // Add cursor style to indicate it's clickable
-      versionDisplay.style.cursor = 'pointer';
-      
-      // Add click event listener to show the greeting popup
-      versionDisplay.addEventListener('click', () => {
-        showGreetingPopup();
-      });
-    }
+    // Create version display box
+    const versionDisplay = document.createElement('div');
+    versionDisplay.id = 'version-display';
+    versionDisplay.className = 'version-box';
+    versionDisplay.textContent = `Soulmap | v${versionData.version} | up to date with ${versionData.game_version}`;
+    versionDisplay.style.cursor = 'pointer';
+    
+    // Add click event listener to show the greeting popup
+    versionDisplay.addEventListener('click', () => {
+      showGreetingPopup();
+    });
+    
+    // Add to document body (sidebar.ts will move it if needed)
+    document.body.appendChild(versionDisplay);
   } catch (error) {
     console.error('Error loading version:', error);
   }
