@@ -107,9 +107,9 @@ export class CustomMarkerService {
         iconColor: marker.iconColor || '#FFFFFF'
     };
 
-    // Only add imgUrl if it exists
-    if (marker.imgUrl) {
-        Object.assign(exportData, { imgUrl: marker.imgUrl });
+    // Only add mediaUrl if it exists
+    if (marker.mediaUrl) {
+        Object.assign(exportData, { mediaUrl: marker.mediaUrl });
     }
     
     // Use js-yaml dump with specific options

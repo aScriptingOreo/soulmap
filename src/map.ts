@@ -94,8 +94,8 @@ export function updateMetaTags(location: Location & { type: string } | null, coo
       `${location.name} - Located at [${x}, ${y}]. ${description}`);
   
   let previewImage = '';
-  if (location.imgUrl) {
-      previewImage = location.imgUrl;
+  if (location.mediaUrl) {
+      previewImage = location.mediaUrl;
   } else if (location.icon?.startsWith('fa-')) {
       const canvas = document.createElement('canvas');
       canvas.width = 1200;

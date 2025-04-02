@@ -331,6 +331,7 @@ export class Sidebar {
       this.descEl.textContent = "No location marker at this position";
       this.imgEl.style.display = "none";
       this.imgEl.src = "";
+      this.imgEl.classList.remove('youtube-thumbnail');
 
       // Remove any existing icon
       const existingIcon = this.element.querySelector(".location-icon-container");
@@ -455,8 +456,50 @@ export class Sidebar {
         }
       }
 
-      // 2. Title
+      // 2. Title - Now with spoilers button if applicable
       this.titleEl.textContent = locationTitle;
+      
+      // Add spoilers button if spoiler content exists
+      if (location.spoilers) {
+        // Remove any existing spoiler button first
+        const existingSpoilerBtn = this.element.querySelector('.spoiler-button');
+        if (existingSpoilerBtn) {
+          existingSpoilerBtn.remove();
+        }
+        
+        // Create spoiler button
+        const spoilerBtn = document.createElement('button');
+        spoilerBtn.className = 'spoiler-button';
+        spoilerBtn.innerHTML = '<i class="fa-solid fa-scroll"></i>';
+        spoilerBtn.title = 'Show spoilers';
+        
+        // Position it after the title
+        this.titleEl.parentNode?.insertBefore(spoilerBtn, this.titleEl.nextSibling);
+        
+        // Create hidden spoiler content container
+        let spoilerContent = this.element.querySelector('.spoiler-content') as HTMLElement;
+        if (!spoilerContent) {
+          spoilerContent = document.createElement('div');
+          spoilerContent.className = 'spoiler-content';
+          this.descEl.parentNode?.insertBefore(spoilerContent, this.descEl.nextSibling);
+        }
+        spoilerContent.innerHTML = location.spoilers;
+        spoilerContent.style.display = 'none';
+        
+        // Add click handler for spoiler toggle
+        spoilerBtn.addEventListener('click', () => {
+          const isVisible = spoilerContent.style.display !== 'none';
+          spoilerContent.style.display = isVisible ? 'none' : 'block';
+          spoilerBtn.title = isVisible ? 'Show spoilers' : 'Hide spoilers';
+          spoilerBtn.classList.toggle('active', !isVisible);
+        });
+      } else {
+        // Remove spoiler button and content if they exist
+        const existingSpoilerBtn = this.element.querySelector('.spoiler-button');
+        const existingSpoilerContent = this.element.querySelector('.spoiler-content');
+        if (existingSpoilerBtn) existingSpoilerBtn.remove();
+        if (existingSpoilerContent) existingSpoilerContent.remove();
+      }
 
       // 3. Coordinates
       this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
@@ -498,7 +541,49 @@ export class Sidebar {
       // 4. Description
       this.descEl.textContent = location.description || "No description available";
 
-      // 5. Last updated information
+      // 5. Lore section - new implementation
+      const existingLoreSection = this.element.querySelector('.lore-section');
+      if (existingLoreSection) {
+        existingLoreSection.remove();
+      }
+      
+      if (location.lore) {
+        const loreSection = document.createElement('div');
+        loreSection.className = 'lore-section';
+        
+        const loreHeader = document.createElement('div');
+        loreHeader.className = 'lore-header';
+        
+        const loreTitle = document.createElement('span');
+        loreTitle.textContent = 'Game Lore';
+        
+        const loreToggle = document.createElement('span');
+        loreToggle.className = 'lore-toggle';
+        loreToggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+        
+        loreHeader.appendChild(loreTitle);
+        loreHeader.appendChild(loreToggle);
+        
+        const loreContent = document.createElement('div');
+        loreContent.className = 'lore-content';
+        loreContent.style.display = 'none'; // Initially hidden
+        loreContent.innerHTML = location.lore;
+        
+        loreSection.appendChild(loreHeader);
+        loreSection.appendChild(loreContent);
+        
+        // Insert after description
+        this.descEl.after(loreSection);
+        
+        // Add click handler for toggling
+        loreHeader.addEventListener('click', () => {
+          const isVisible = loreContent.style.display !== 'none';
+          loreContent.style.display = isVisible ? 'none' : 'block';
+          loreToggle.querySelector('i')?.classList.toggle('fa-rotate-180', !isVisible);
+        });
+      }
+
+      // 6. Last updated information
       let lastUpdatedEl = this.element.querySelector(".last-updated");
       if (!lastUpdatedEl) {
         lastUpdatedEl = document.createElement("div");
@@ -514,20 +599,115 @@ export class Sidebar {
         lastUpdatedEl.style.display = "none";
       }
 
-      // 6. Image (already last)
-      if (location.imgUrl) {
-        this.imgEl.src = location.imgUrl;
-        this.imgEl.style.display = "block";
+      // 7. Media (image or YouTube video)
+      if (location.mediaUrl) {
+        // Check if it's a YouTube video
+        const youtubeId = this.getYoutubeVideoId(location.mediaUrl);
+        
+        if (youtubeId) {
+          // For YouTube videos, show a button instead of a thumbnail
+          this.imgEl.style.display = "none"; // Hide the image element
+          
+          // Remove any existing video button first
+          const existingBtn = this.element.querySelector('.video-button');
+          if (existingBtn) {
+            existingBtn.remove();
+          }
+          
+          // Create a button to open the video
+          const videoBtn = document.createElement('button');
+          videoBtn.className = 'video-button';
+          videoBtn.innerHTML = '<i class="fa-brands fa-youtube"></i> Open Video';
+          videoBtn.title = 'Click to watch video';
+          
+          // Insert the button after the description
+          this.descEl.parentNode?.insertBefore(videoBtn, this.descEl.nextSibling);
+          
+          // Store the YouTube URL in a data attribute on the button
+          videoBtn.dataset.videoUrl = location.mediaUrl;
+          
+          // Add click handler to open the video modal
+          videoBtn.addEventListener('click', () => {
+            // Use the same modal logic as in initializeImageHandlers
+            const youtubeId = this.getYoutubeVideoId(location.mediaUrl!);
+            
+            if (youtubeId) {
+              // Create iframe for the video
+              const iframe = document.createElement('iframe');
+              iframe.width = '100%';
+              iframe.height = '500px';
+              iframe.src = `https://www.youtube.com/embed/${youtubeId}`;
+              iframe.title = "YouTube video player";
+              iframe.frameBorder = "0";
+              iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+              iframe.allowFullscreen = true;
+              
+              // Hide the image element in the modal
+              this.modalImage.style.display = 'none';
+              
+              // Find the modal content container and append iframe
+              const modalContent = this.imageModal.querySelector('.modal-content');
+              if (modalContent) {
+                // Remove any existing iframe
+                const existingIframe = modalContent.querySelector('iframe');
+                if (existingIframe) {
+                  modalContent.removeChild(existingIframe);
+                }
+                
+                modalContent.insertBefore(iframe, this.modalImage);
+              }
+              
+              this.modalTitle.textContent = this.titleEl.textContent || "";
+              this.modalDescription.textContent = this.descEl.textContent || "";
+              this.imageModal.style.display = "flex";
+            }
+          });
+          
+        } else {
+          // For regular images, use the existing image element
+          this.imgEl.src = location.mediaUrl;
+          this.imgEl.style.display = "block";
+          this.imgEl.classList.remove('youtube-thumbnail');
+          
+          // Remove any existing video button
+          const existingBtn = this.element.querySelector('.video-button');
+          if (existingBtn) {
+            existingBtn.remove();
+          }
+        }
       } else {
         this.imgEl.style.display = "none";
         this.imgEl.src = "";
+        this.imgEl.classList.remove('youtube-thumbnail');
+        
+        // Remove any existing video button
+        const existingBtn = this.element.querySelector('.video-button');
+        if (existingBtn) {
+          existingBtn.remove();
+        }
       }
     }
 
     // Only try to update the map URL if we have a location
     if (location || (x !== undefined && y !== undefined)) {
       if (location) {
-        const urlParams = `?loc=${generateLocationHash(location.name)}`;
+        // Check if this is a multi-location and determine which index is being shown
+        const isMultiLocation = Array.isArray(location.coordinates[0]);
+        let indexParam = '';
+        
+        if (isMultiLocation) {
+          const coordinates = location.coordinates as [number, number][];
+          const index = coordinates.findIndex(
+            coord => Math.round(coord[0]) === Math.round(x) && Math.round(coord[1]) === Math.round(y)
+          );
+          
+          if (index !== -1) {
+            indexParam = `&index=${index}`;
+          }
+        }
+        
+        // Include the index parameter if this is a multi-location
+        const urlParams = `?loc=${generateLocationHash(location.name)}${indexParam}`;
         window.history.replaceState({}, "", urlParams);
       } else {
         const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
@@ -541,11 +721,63 @@ export class Sidebar {
   private initializeImageHandlers() {
     const closeModal = () => {
       this.imageModal.style.display = "none";
+      
+      // Clear the modal content when closing
+      // This ensures YouTube videos stop playing when modal is closed
+      const modalContent = this.imageModal.querySelector('.modal-content');
+      if (modalContent) {
+        const iframe = modalContent.querySelector('iframe');
+        if (iframe) {
+          iframe.src = '';
+        }
+      }
     };
 
     this.imgEl.addEventListener("click", () => {
       if (this.imgEl.src) {
-        this.modalImage.src = this.imgEl.src;
+        // Check if the URL is a YouTube link
+        const youtubeId = this.getYoutubeVideoId(this.imgEl.src);
+        
+        if (youtubeId) {
+          // It's a YouTube video - embed it
+          const iframe = document.createElement('iframe');
+          iframe.width = '100%';
+          iframe.height = '500px';
+          iframe.src = `https://www.youtube.com/embed/${youtubeId}`;
+          iframe.title = "YouTube video player";
+          iframe.frameBorder = "0";
+          iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+          iframe.allowFullscreen = true;
+          
+          // Replace the image with iframe
+          this.modalImage.style.display = 'none';
+          
+          // Find the modal content container and append iframe
+          const modalContent = this.imageModal.querySelector('.modal-content');
+          if (modalContent) {
+            // Remove any existing iframe
+            const existingIframe = modalContent.querySelector('iframe');
+            if (existingIframe) {
+              modalContent.removeChild(existingIframe);
+            }
+            
+            modalContent.insertBefore(iframe, this.modalImage);
+          }
+        } else {
+          // It's a regular image
+          this.modalImage.src = this.imgEl.src;
+          this.modalImage.style.display = 'block';
+          
+          // Remove any existing iframe
+          const modalContent = this.imageModal.querySelector('.modal-content');
+          if (modalContent) {
+            const existingIframe = modalContent.querySelector('iframe');
+            if (existingIframe) {
+              existingIframe.remove();
+            }
+          }
+        }
+        
         this.modalTitle.textContent = this.titleEl.textContent || "";
         this.modalDescription.textContent = this.descEl.textContent || "";
         this.imageModal.style.display = "flex";
@@ -559,6 +791,28 @@ export class Sidebar {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeModal();
     });
+  }
+
+  // Helper function to extract YouTube video ID from various YouTube URL formats
+  private getYoutubeVideoId(url: string): string | null {
+    // Match various YouTube URL formats:
+    // - https://www.youtube.com/watch?v=VIDEO_ID
+    // - https://youtu.be/VIDEO_ID
+    // - https://youtube.com/embed/VIDEO_ID
+    // - https://www.youtube.com/v/VIDEO_ID
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\s]+)/,
+      /(?:youtube\.com\/shorts\/)([^&\s]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    return null;
   }
 
   private initializeLocationDrawer() {
@@ -808,7 +1062,8 @@ export class Sidebar {
       locationOption.appendChild(coordToggle);
 
       coordSpan.addEventListener("click", () => {
-        this.handleLocationClick(coords, item);
+        // Pass the index to handleLocationClick
+        this.handleLocationClick(coords, item, index);
       });
 
       coordToggle.addEventListener("click", (e) => {
@@ -915,7 +1170,8 @@ export class Sidebar {
 
   private handleLocationClick(
     coords: [number, number],
-    item: Location & { type: string }
+    item: Location & { type: string },
+    index?: number // Add index parameter
   ) {
     // Get map - try from instance, then fallback to global helper
     const map = this.map || getMap();
@@ -925,7 +1181,11 @@ export class Sidebar {
       
       // Even without a map, we can still update the URL and metadata
       const locationHash = generateLocationHash(item.name);
-      window.history.replaceState({}, "", `?loc=${locationHash}`);
+      // Use the explicitly passed index if available
+      const urlParams = index !== undefined 
+        ? `?loc=${locationHash}&index=${index}` 
+        : `?loc=${locationHash}`;
+      window.history.replaceState({}, "", urlParams);
       
       // Try to update sidebar content
       this.updateContent(item, coords[0], coords[1]);
@@ -984,15 +1244,16 @@ export class Sidebar {
       }, animationDuration * 1000);
 
       const markerContent = marker.getTooltip()?.getContent() as string;
-      const markerIndex = markerContent.includes("#")
-        ? parseInt(markerContent.split("#")[1]) - 1
-        : undefined;
+      // Use the explicitly passed index if available, otherwise try to extract from marker content
+      let markerIndex = index;
+      if (markerIndex === undefined && markerContent && markerContent.includes("#")) {
+        markerIndex = parseInt(markerContent.split("#")[1]) - 1;
+      }
 
       const locationHash = generateLocationHash(item.name);
-      const urlParams =
-        markerIndex !== undefined
-          ? `?loc=${locationHash}&index=${markerIndex}`
-          : `?loc=${locationHash}`;
+      const urlParams = markerIndex !== undefined
+        ? `?loc=${locationHash}&index=${markerIndex}`
+        : `?loc=${locationHash}`;
 
       window.history.replaceState({}, "", urlParams);
     }

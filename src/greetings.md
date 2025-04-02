@@ -9,6 +9,11 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+0.9.4b
+- Added youtube videos on location markers
+- Added lore to some locations
+- Added rudimentary mobile support/ui
+
 0.9.4
 - Improved load times and no more jagged chessboard like map tiles
 - Retired irrelevant markers from P7/P8

@@ -19,5 +19,6 @@ coordinates:
 description: "This unlocks the map region"
 icon: "/SF_world_tree"
 iconColor: "#00FF00"
-imgUrl: "https://i.imgur.com/1GgafcZ.png"
+mediaUrl: "https://i.imgur.com/1GgafcZ.png"
 iconSize: 2
+lore: "It is bad luck indeed to harm one of Alca’s own World Trees. They are widely considered to have been planted by the Fey in the era before humankind… Though there is much speculation as to why."

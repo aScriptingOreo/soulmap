@@ -5,11 +5,12 @@ export interface Location {
   description: string;
   icon?: string;
   iconSize?: number;
-  imgUrl?: string;
+  mediaUrl?: string; // Renamed from mediaUrl - can now be an image or YouTube video URL
   iconColor?: string;
   radius?: number;
   lastModified?: number; // Timestamp of when the file was last modified
   isCoordinateSearch?: boolean; // Special flag for coordinate search results
+  lore?: string; // Contains additional lore information
 }
 
 export interface VersionInfo {
