@@ -650,6 +650,7 @@ export class Sidebar {
           this.imgEl.style.display = "none"; // Hide the image element
           
           // Remove any existing video button first
+          const existingSpoilerBtn = this.element.querySelector('.spoiler-button');
           const existingBtn = this.element.querySelector('.video-button');
           if (existingBtn) {
             existingBtn.remove();
@@ -662,14 +663,11 @@ export class Sidebar {
           videoBtn.title = 'Click to watch video';
           
           // Insert the button after the description
-          this.descEl.parentNode?.insertBefore(videoBtn, this.descEl.nextSibling);
-          
-          // Store the YouTube URL in a data attribute on the button
-          videoBtn.dataset.videoUrl = location.mediaUrl;
+          const insertAfter = this.descEl.nextSibling;
+          this.descEl.parentNode?.insertBefore(videoBtn, insertAfter);
           
           // Add click handler to open the video modal
           videoBtn.addEventListener('click', () => {
-            // Use the same modal logic as in initializeImageHandlers
             const youtubeId = this.getYoutubeVideoId(location.mediaUrl!);
             
             if (youtubeId) {
@@ -692,7 +690,7 @@ export class Sidebar {
                 // Remove any existing iframe
                 const existingIframe = modalContent.querySelector('iframe');
                 if (existingIframe) {
-                  modalContent.removeChild(existingIframe);
+                  existingIframe.remove();
                 }
                 
                 modalContent.insertBefore(iframe, this.modalImage);
@@ -709,6 +707,7 @@ export class Sidebar {
           this.imgEl.src = location.mediaUrl;
           this.imgEl.style.display = "block";
           this.imgEl.classList.remove('youtube-thumbnail');
+          this.imgEl.style.cursor = "pointer"; // Add pointer cursor for better UX
           
           // Remove any existing video button
           const existingBtn = this.element.querySelector('.video-button');
@@ -763,15 +762,16 @@ export class Sidebar {
     const closeModal = () => {
       this.imageModal.style.display = "none";
       
-      // Clear the modal content when closing
-      // This ensures YouTube videos stop playing when modal is closed
-      const modalContent = this.imageModal.querySelector('.modal-content');
-      if (modalContent) {
-        const iframe = modalContent.querySelector('iframe');
-        if (iframe) {
-          iframe.src = '';
-        }
+      // Clean up properly when closing the modal
+      const iframe = this.imageModal.querySelector('iframe');
+      if (iframe) {
+        iframe.src = '';
+        iframe.remove();
       }
+      
+      // Reset image visibility for next use
+      this.modalImage.style.display = 'block';
+      this.modalImage.src = '';
     };
 
     this.imgEl.addEventListener("click", () => {
@@ -790,7 +790,7 @@ export class Sidebar {
           iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
           iframe.allowFullscreen = true;
           
-          // Replace the image with iframe
+          // Hide the image element
           this.modalImage.style.display = 'none';
           
           // Find the modal content container and append iframe
@@ -799,7 +799,7 @@ export class Sidebar {
             // Remove any existing iframe
             const existingIframe = modalContent.querySelector('iframe');
             if (existingIframe) {
-              modalContent.removeChild(existingIframe);
+              existingIframe.remove();
             }
             
             modalContent.insertBefore(iframe, this.modalImage);
@@ -814,7 +814,7 @@ export class Sidebar {
           if (modalContent) {
             const existingIframe = modalContent.querySelector('iframe');
             if (existingIframe) {
-              modalContent.remove();
+              existingIframe.remove();
             }
           }
         }

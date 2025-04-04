@@ -9,6 +9,11 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+0.9.5b
+- Batch marker changes
+- Added Ode chests on new areas
+- Added new location
+
 0.9.5
 - Added youtube videos on location markers
 - Added lore to some locations

@@ -10,6 +10,13 @@ coordinates:
   - [3132, 4296]
   - [2948, 4072]
   - [3075, 3424]
+  - [1712, 1157]
+  - [2379, 1299]
+  - [2401, 1294]
+  - [2782, 1789]
+  - [2270, 1655]
+  - [4468, 3621]
+  - [5346, 3265]
 description: "These chests are not guaranteed spawns. Chance to drop Thistle fragments"
 icon: "/SF_ode"
 iconSize: 1.25
