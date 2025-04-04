@@ -1,10 +1,12 @@
 # src/locations/loot/ode_chest.yml
 name: "Shrimp Spawn"
 coordinates: 
-  - [2703, 3179]
-  - [3011, 3122]
-description: "Spawn not guaranteed, come at night.  Credit: Hellpr"
+  - [1806, 1614]
+  - [3692, 2536]
+  - [4846, 1305]
+
+description: "Spawn not guaranteed, come at night."
 icon: "fa-solid fa-shrimp"
 iconSize: 1.25
 iconColor: "#f04d73"
-radius: 50
+radius: 125
