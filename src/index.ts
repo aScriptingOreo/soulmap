@@ -1,11 +1,12 @@
 // src/index.ts
 import { marked } from 'marked';
 import { loadLocations, clearLocationsCache } from './loader';
-import { initializeMap, updateMetaTags } from './map';
+import { initializeMap, updateMetaTags, getMap } from './map';
 import { clearTileCache } from './gridLoader';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 import type { VersionInfo } from './types';
 import mapVersion from './mapversion.yml';
+import { navigateToLocation, navigateToCoordinates, generateLocationHash } from './search';
 
 // Add offline mode tracking
 let isOfflineMode = !navigator.onLine;
@@ -184,6 +185,124 @@ async function initMain() {
     }
 }
 
+// Create a custom event for URL changes
+const urlChangeEvent = new Event('urlchange');
+
+// Add a flag to track history state changes in progress
+let historyStateChangeInProgress = false;
+
+// Override History API methods to detect URL changes
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function(...args) {
+  if (historyStateChangeInProgress) {
+    console.log('Skipping duplicate pushState call during navigation');
+    return originalPushState.apply(this, args);
+  }
+  
+  historyStateChangeInProgress = true;
+  try {
+    originalPushState.apply(this, args);
+    window.dispatchEvent(urlChangeEvent);
+  } finally {
+    setTimeout(() => {
+      historyStateChangeInProgress = false;
+    }, 0);
+  }
+};
+
+history.replaceState = function(...args) {
+  if (historyStateChangeInProgress) {
+    console.log('Skipping duplicate replaceState call during navigation');
+    return originalReplaceState.apply(this, args);
+  }
+  
+  historyStateChangeInProgress = true;
+  try {
+    originalReplaceState.apply(this, args);
+    window.dispatchEvent(urlChangeEvent);
+  } finally {
+    setTimeout(() => {
+      historyStateChangeInProgress = false;
+    }, 0);
+  }
+};
+
+// Make internal link handler available globally
+(window as any).handleInternalLink = handleInternalLink;
+
+/**
+ * Handles navigation to internal links without page reload
+ */
+function handleInternalLink(url: URL): void {
+  const params = url.searchParams;
+  const locationParam = params.get('loc');
+  const coordParam = params.get('coord');
+  const indexParam = params.get('index');
+  const hash = url.hash ? url.hash.substring(1) : null; // Extract hash without the #
+  
+  try {
+    // First check for hash-based navigation (fragment identifiers)
+    if (hash) {
+      console.log('Handling hash navigation:', hash);
+      navigateToLocation(hash);
+      return;
+    }
+    
+    // Then handle query parameters
+    if (locationParam) {
+      console.log('Handle internal link - location:', locationParam, 'index:', indexParam);
+      
+      // Convert from 1-based (URL) to 0-based (internal)
+      const internalIndex = indexParam ? Math.max(0, parseInt(indexParam, 10) - 1) : undefined;
+      
+      // Add detailed logging for debugging complex coordinate structures
+      console.log(`Navigating to ${locationParam} with internal index: ${internalIndex} (URL index: ${indexParam})`);
+      
+      // Call navigateToLocation even if we're handling history navigation
+      navigateToLocation(locationParam, internalIndex);
+    } 
+    else if (coordParam) {
+      const coordValues = coordParam.split(',').map(val => parseInt(val.trim(), 10));
+      if (coordValues.length === 2 && !isNaN(coordValues[0]) && !isNaN(coordValues[1])) {
+        const [x, y] = coordValues;
+        // Call navigateToCoordinates even if we're handling history navigation
+        navigateToCoordinates([x, y]);
+      }
+    }
+  } catch (error) {
+    console.error('Error navigating to internal link:', error);
+  }
+}
+
+// Event handler for URL changes (both our custom event and popstate)
+function handleUrlChange() {
+  // Check if we're already handling navigation to prevent loops
+  if (window.isHandlingHistoryNavigation) {
+    console.log('Already handling navigation, skipping duplicate');
+    return;
+  }
+  
+  // Set a flag to prevent double history entries
+  window.isHandlingHistoryNavigation = true;
+  
+  try {
+    // Process the new URL
+    const url = new URL(window.location.href);
+    handleInternalLink(url);
+  } finally {
+    // Reset the flag after processing
+    setTimeout(() => {
+      window.isHandlingHistoryNavigation = false;
+    }, 100); // Ensure enough time to complete navigation
+  }
+}
+
+// Listen for URL changes
+window.addEventListener('urlchange', handleUrlChange);
+window.addEventListener('popstate', handleUrlChange);
+
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', async () => {
   // Setup offline indicator
@@ -196,8 +315,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadGreeting();
   await updateVersionDisplay();
   
+  // Make generateLocationHash globally accessible for coordinate link handling
+  window.generateLocationHash = generateLocationHash;
+  
+  // Make markers globally accessible for coordinate checks
+  window.markersGlobal = [];
+  
+  // Export important navigation functions to window for global access
+  window.navigateToCoordinates = navigateToCoordinates;
+
   // Initialize the main application after showing the greeting
   await initMain();
+  
+  // Handle initial navigation after map is loaded
+  // This ensures we handle both hash and search parameters
+  if (window.location.hash || window.location.search) {
+    setTimeout(() => {
+      const url = new URL(window.location.href);
+      handleInternalLink(url);
+    }, 500); // Delay to ensure map is properly initialized
+  }
   
   // Set up dismiss handler
   document.querySelector('#popup-content button')?.addEventListener('click', dismissPopup);
@@ -209,5 +346,12 @@ declare global {
     isOfflineMode: boolean;
     sidebarInstance?: any;
     tempMarker?: any;
+    handleInternalLink: (url: URL) => void;
+    isHandlingHistoryNavigation?: boolean;
+    complexNavigationInProgress?: boolean;  // Add this line
+    clickNavigationInProgress?: boolean;    // Add this line
+    markersGlobal?: L.Marker[];
+    generateLocationHash?: (name: string) => string;
+    navigateToCoordinates?: (coords: [number, number]) => void;
   }
 }

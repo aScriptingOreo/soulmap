@@ -1,5 +1,5 @@
 // src/loader.ts
-import type { Location, VersionInfo } from './types';
+import type { Location, VersionInfo, CoordinateProperties } from './types';
 import localforage from 'localforage';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 
@@ -156,6 +156,9 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
     updateProgress(50, 'Initializing map...');
     const validLocations = locations.filter((loc): loc is Location & { type: string } => loc !== null);
 
+    // Normalize the location data before returning
+    return validLocations.map(loc => normalizeLocationCoordinates(loc));
+
     // Cache the new data with hash
     await locationStore.setItem(LOCATIONS_CACHE_KEY, {
       hash: contentHash,
@@ -179,6 +182,50 @@ export async function clearLocationsCache(): Promise<void> {
   } catch (error) {
     console.error('Error clearing locations cache:', error);
   }
+}
+
+// Helper function to normalize coordinate data structure
+export function normalizeLocationCoordinates(location: Location & { type: string }): Location & { type: string } {
+  if (!location.coordinates || !Array.isArray(location.coordinates)) {
+    return location;
+  }
+  
+  // If this is a single coordinate pair [x, y], return it as is
+  if (location.coordinates.length === 2 && typeof location.coordinates[0] === 'number' && typeof location.coordinates[1] === 'number') {
+    return location;
+  }
+  
+  // Handle the case where coordinates is an array of coordinate pairs or CoordinateProperties
+  const normalizedCoords = location.coordinates.map(coord => {
+    if (Array.isArray(coord)) {
+      // This is a simple coordinate pair [x, y]
+      return coord;
+    } else if (coord && typeof coord === 'object') {
+      // This is a CoordinateProperties object
+      // Special case: if it has its own coordinates property (like in tuvalkane.yml)
+      if (coord.coordinates) {
+        // Make sure the nested coordinates are correctly formatted
+        if (Array.isArray(coord.coordinates) && coord.coordinates.length === 2 &&
+            typeof coord.coordinates[0] === 'number' && typeof coord.coordinates[1] === 'number') {
+          // This is a valid CoordinateProperties object with a nested coordinates pair
+          return coord;
+        }
+        console.warn(`Object has coordinates property but it's not a valid coordinate pair in location ${location.name}:`, coord);
+      }
+      
+      // Invalid or unrecognized format
+      console.warn(`Invalid coordinate properties in location ${location.name}:`, coord);
+      return [0, 0] as [number, number]; // Fallback
+    } else {
+      console.warn(`Invalid coordinate format in location ${location.name}:`, coord);
+      return [0, 0] as [number, number]; // Fallback
+    }
+  });
+  
+  return {
+    ...location,
+    coordinates: normalizedCoords
+  };
 }
 
 // Prepare locations for clustering based on zoom level and proximity

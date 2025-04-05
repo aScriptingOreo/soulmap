@@ -155,57 +155,119 @@ async function handleUrlNavigation(
   const indexParam = urlParams.get('index');
 
   let targetLocation: (Location & { type: string }) | undefined;
-  let targetCoords: [number, number] | undefined;
+  let targetCoords: [number, number] | null = null;
+  let coordIndex: number | undefined;
 
-  if (locationParam) {
+  try {
+    if (locationParam) {
       targetLocation = locations.find(l => generateLocationHash(l.name) === locationParam);
       if (targetLocation) {
-          targetCoords = Array.isArray(targetLocation.coordinates[0])
-              ? (indexParam 
-                  ? targetLocation.coordinates[parseInt(indexParam)]
-                  : targetLocation.coordinates[0]) as [number, number]
-              : targetLocation.coordinates as [number, number];
+        // Convert index from URL (1-based) to internal (0-based)
+        coordIndex = indexParam ? Math.max(0, parseInt(indexParam) - 1) : undefined;
+        
+        // Check for complex coordinate structure
+        const hasComplexCoordinates = typeof targetLocation.coordinates[0] === 'object' && 
+                                     (targetLocation.coordinates[0] as any).coordinates;
+        
+        if (Array.isArray(targetLocation.coordinates[0]) || hasComplexCoordinates) {
+          // Handle multi-location or complex coordinates
+          if (coordIndex !== undefined && coordIndex < targetLocation.coordinates.length) {
+            targetCoords = extractSafeCoordinates(targetLocation, coordIndex);
+          } else {
+            targetCoords = extractSafeCoordinates(targetLocation, 0);
+          }
+        } else {
+          // Handle single location coordinates
+          targetCoords = targetLocation.coordinates as [number, number];
+        }
+        
+        console.log(`URL Navigation: ${targetLocation.name}, index: ${coordIndex}, coords:`, targetCoords);
       }
-  } else if (coordParam) {
+    } else if (coordParam) {
       const [x, y] = coordParam.split(',').map(Number);
       if (!isNaN(x) && !isNaN(y)) {
-          targetCoords = [x, y];
-          const latLng = L.latLng(y, x);
-          createTemporaryMarker(latLng, map);
-          targetLocation = locations.reduce((closest, loc) => {
-              const locCoords = Array.isArray(loc.coordinates[0]) 
-                  ? loc.coordinates[0] 
-                  : loc.coordinates as [number, number];
-              const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
-              const closestDist = closest ? Math.hypot(
-                  x - (Array.isArray(closest.coordinates[0]) 
-                      ? closest.coordinates[0][0] 
-                      : closest.coordinates[0]),
-                  y - (Array.isArray(closest.coordinates[0])
-                      ? closest.coordinates[0][1]
-                      : closest.coordinates[1])
-              ) : Infinity;
+        targetCoords = [x, y];
+        const latLng = L.latLng(y, x);
+        createTemporaryMarker(latLng, map);
+        targetLocation = locations.reduce((closest, loc) => {
+          const locCoords = Array.isArray(loc.coordinates[0]) 
+              ? loc.coordinates[0] 
+              : loc.coordinates as [number, number];
+          
+          // Ensure we have valid coordinates for comparison
+          if (!Array.isArray(locCoords) || locCoords.length !== 2 || 
+              typeof locCoords[0] !== 'number' || typeof locCoords[1] !== 'number') {
+            return closest;
+          }
+          
+          const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
+          const closestDist = closest ? Math.hypot(
+              x - (Array.isArray(closest.coordinates[0]) 
+                  ? closest.coordinates[0][0] 
+                  : closest.coordinates[0]),
+              y - (Array.isArray(closest.coordinates[0])
+                  ? closest.coordinates[0][1]
+                  : closest.coordinates[1])
+          ) : Infinity;
 
-              return currentDist < closestDist ? loc : closest;
-          });
+          return currentDist < closestDist ? loc : closest;
+        });
       }
+    }
+
+    // Validate coordinates before using them
+    if (targetCoords && Array.isArray(targetCoords) && 
+        targetCoords.length === 2 && 
+        typeof targetCoords[0] === 'number' && 
+        typeof targetCoords[1] === 'number' && 
+        !isNaN(targetCoords[0]) && !isNaN(targetCoords[1])) {
+      
+      // Set flag to prevent history update loops
+      window.isHandlingHistoryNavigation = true;
+      
+      try {
+        map.setView([targetCoords[1], targetCoords[0]], 0);
+        sidebar.updateContent(targetLocation, targetCoords[0], targetCoords[1], coordIndex);
+        updateMetaTags(targetLocation, targetCoords);
+      } finally {
+        // Reset the flag after a delay
+        setTimeout(() => {
+          window.isHandlingHistoryNavigation = false;
+        }, 50);
+      }
+    } else if (targetCoords) {
+      console.warn("Invalid coordinates detected:", targetCoords);
+    }
+  } catch (error) {
+    console.error("Error during URL navigation:", error);
+    // Continue map initialization even if URL navigation fails
   }
+}
 
-  if (targetCoords && targetLocation) {
-      map.setView([targetCoords[1], targetCoords[0]], 0);
-      sidebar.updateContent(targetLocation, targetCoords[0], targetCoords[1]);
-      updateMetaTags(targetLocation, targetCoords);
-      const newUrl = new URL(window.location.href);
-      if (locationParam) {
-          newUrl.searchParams.set('loc', generateLocationHash(targetLocation.name));
-          if (indexParam) newUrl.searchParams.set('index', indexParam);
-      } else {
-          newUrl.searchParams.set('coord', `${targetCoords[0]},${targetCoords[1]}`);
-      }
-      window.history.replaceState({}, '', newUrl.toString());
-  } else if (targetCoords && !targetLocation) {
-      map.setView([targetCoords[1], targetCoords[0]], 0);
-      sidebar.updateContent(null, targetCoords[0], targetCoords[1]);
+// Helper function to get coordinate values regardless of format
+function getCoordinateValues(coordItem: any): [number, number] | null {
+  if (!coordItem) return null;
+  
+  try {
+    // If it's a simple coordinate pair
+    if (Array.isArray(coordItem) && coordItem.length === 2 && 
+        typeof coordItem[0] === 'number' && typeof coordItem[1] === 'number') {
+      return coordItem as [number, number];
+    }
+    
+    // If it's a CoordinateProperties object with nested coordinates property
+    if (coordItem.coordinates && Array.isArray(coordItem.coordinates) && 
+        coordItem.coordinates.length === 2 &&
+        typeof coordItem.coordinates[0] === 'number' && 
+        typeof coordItem.coordinates[1] === 'number') {
+      return coordItem.coordinates as [number, number];
+    }
+    
+    console.warn("Invalid coordinate format:", coordItem);
+    return null;
+  } catch (error) {
+    console.error("Error parsing coordinates:", error, coordItem);
+    return null;
   }
 }
 
@@ -481,154 +543,237 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       markers = []; // Store in the exported array
       const activeMarkers = new Set<string>();
 
-      function updateVisibleMarkers() {
-          const bounds = map.getBounds();
-          
-          // Clear markers that are out of bounds
-          markers.forEach((marker, index) => {
-              const pos = marker.getLatLng();
-              const isInView = bounds.contains(pos);
-              if (!isInView && marker.getElement()) {
-                  // Remove marker and its uncertainty circle if out of bounds
-                  if ((marker as any).uncertaintyCircle) {
-                      map.removeLayer((marker as any).uncertaintyCircle);
-                  }
-                  const markerId = marker.options.markerId;
-                  if (markerId) {
-                      activeMarkers.delete(markerId);
-                  }
-                  const targetGroup = (marker as any).options.clusterGroup ? markerClusterGroup : regularMarkerGroup;
-                  targetGroup.removeLayer(marker);
-                  markers.splice(index, 1);
-              }
-          });
-          
-          locations.forEach(location => {
-              const coords = Array.isArray(location.coordinates[0]) 
-                  ? location.coordinates as [number, number][]
-                  : [location.coordinates] as [number, number][];
-              
-              const shouldCluster = !location.noCluster && 
-                                typeof L.markerClusterGroup === 'function' &&
-                                markerClusterGroup.addLayer;
-              const targetGroup = shouldCluster ? markerClusterGroup : regularMarkerGroup;
-              
-              coords.forEach((coord, index) => {
-                  const markerId = `${location.name}-${index}`;
-                  const isVisible = isInBounds(coord, bounds);
-                  
-                  // Check visibility from middleware first
-                  const shouldBeVisible = isVisible && isMarkerVisible(markerId, location.type);
-                  
-                  if (shouldBeVisible && !markers.some(m => {
-                      const pos = m.getLatLng();
-                      return pos.lat === coord[1] && pos.lng === coord[0];
-                  })) {
-                      let icon: L.Icon | L.DivIcon;
-                      if (location.icon && location.icon.startsWith('fa-')) {
-                          const sizeMultiplier = location.iconSize || 1;
-                          icon = L.divIcon({
-                              className: 'custom-location-icon',
-                              html: `<i class="${location.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${location.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`,
-                              iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
-                              iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
-                          });
-                      } else {
-                          const sizeMultiplier = location.iconSize || 1;
-                          icon = L.icon({
-                              iconUrl: getIconUrl(location.icon || ''),
-                              iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
-                              iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
-                              className: 'custom-location-icon protected-icon'
-                          });
-                      }
-                      
-                      const marker = L.marker([coord[1], coord[0]], { 
-                          icon,
-                          riseOnHover: true,
-                          riseOffset: 100,
-                          autoPanOnFocus: false,
-                          keyboard: false,
-                          locationData: location,
-                          markerId: markerId, // Store marker ID for easier identification
-                          clusterGroup: shouldCluster // Store whether this marker should be clustered
-                      });
-                      
-                      // Add uncertainty circle if location has radius
-                      if (location.radius && location.radius > 0) {
-                          const uncertaintyCircle = createUncertaintyCircle(
-                              coord, 
-                              location.radius, 
-                              location.iconColor || '#3388ff'
-                          );
-                          uncertaintyCircle.addTo(map);
-                          (marker as any).uncertaintyCircle = uncertaintyCircle;
-                          
-                          // Set initial visibility based on marker visibility state
-                          if (!isMarkerVisible(markerId, location.type)) {
-                            const circleElement = uncertaintyCircle._path;
-                            if (circleElement) {
-                              circleElement.classList.add("circle-hidden");
-                            } else {
-                              uncertaintyCircle.setStyle({
-                                opacity: 0,
-                                fillOpacity: 0
-                              });
-                            }
-                          }
-                      }
-                      
-                      marker.bindTooltip(coords.length > 1 ? `${location.name} #${index + 1}` : location.name, {
-                          permanent: false,
-                          direction: 'top',
-                          offset: [0, -30],
-                          className: 'leaflet-tooltip'
-                      });
-                      
-                      marker.on('click', () => {
-                          analytics.trackLocationView(location.name, location.type);
-                          sidebar.updateContent(location, coord[0], coord[1]);
-                          document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
-                              el.classList.remove('selected');
-                          });
-                          marker.getElement()?.classList.add('selected');
-                          const locationHash = generateLocationHash(location.name);
-                          const urlParams = coords.length > 1 ? 
-                              `?loc=${locationHash}&index=${index}` : 
-                              `?loc=${locationHash}`;
-                          window.history.replaceState({}, '', urlParams);
-                          updateMetaTags(location, coord);
-                          
-                          // Hide search bar on small screens when marker is clicked (which opens sidebar)
-                          if (window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1)) {
-                              const searchContainer = document.querySelector('.search-container');
-                              if (searchContainer) {
-                                  searchContainer.classList.add('hidden-mobile');
-                              }
-                          }
-                      });
-                      
-                      // Set initial visibility state based on middleware
-                      if (!isMarkerVisible(markerId, location.type)) {
-                          const el = marker.getElement();
-                          if (el) {
-                              el.classList.add("marker-hidden");
-                          }
-                      }
-                      
-                      marker.addTo(targetGroup);
-                      markers.push(marker);
-                      activeMarkers.add(markerId);
-                  }
-              });
-          });
+      // Helper function to get coordinate-specific properties 
+      function getCoordinateProperties(location: Location & { type: string }, coordIndex: number): any {
+        if (!location.coordinates || !Array.isArray(location.coordinates)) {
+          return location;
+        }
+        
+        const coord = location.coordinates[coordIndex];
+        
+        // If this is just a simple coordinate pair, return the location properties
+        if (Array.isArray(coord)) {
+          return location;
+        }
+        
+        // This is a CoordinateProperties object - merge with location defaults
+        return {
+          ...location,
+          ...coord,
+          // Keep the original name and coordinates array
+          name: location.name,
+          coordinates: location.coordinates
+        };
       }
-
+      
+      // Helper function to extract the actual coordinate values
+      function getCoordinateValues(coordItem: [number, number] | CoordinateProperties): [number, number] {
+        if (Array.isArray(coordItem)) {
+          return coordItem;
+        }
+        return coordItem.coordinates;
+      }
+      
+      function updateVisibleMarkers() {
+        const bounds = map.getBounds();
+        
+        // Clear markers that are out of bounds
+        markers.forEach((marker, index) => {
+          const pos = marker.getLatLng();
+          const isInView = bounds.contains(pos);
+          if (!isInView && marker.getElement()) {
+              // Remove marker and its uncertainty circle if out of bounds
+              if ((marker as any).uncertaintyCircle) {
+                  map.removeLayer((marker as any).uncertaintyCircle);
+              }
+              const markerId = marker.options.markerId;
+              if (markerId) {
+                  activeMarkers.delete(markerId);
+              }
+              const targetGroup = (marker as any).options.clusterGroup ? markerClusterGroup : regularMarkerGroup;
+              targetGroup.removeLayer(marker);
+              markers.splice(index, 1);
+          }
+        });
+        
+        locations.forEach(location => {
+          const coords = Array.isArray(location.coordinates[0]) || typeof location.coordinates[0] === 'object'
+            ? location.coordinates as ([number, number] | CoordinateProperties)[]
+            : [location.coordinates] as [number, number][];
+          
+          const shouldCluster = !location.noCluster && 
+                            typeof L.markerClusterGroup === 'function' &&
+                            markerClusterGroup.addLayer;
+          const targetGroup = shouldCluster ? markerClusterGroup : regularMarkerGroup;
+          
+          coords.forEach((coordItem, index) => {
+            // Extract the actual coordinate values
+            const coord = getCoordinateValues(coordItem);
+            
+            const markerId = `${location.name}-${index}`;
+            const isVisible = isInBounds(coord, bounds);
+            
+            // Check visibility from middleware first
+            const shouldBeVisible = isVisible && isMarkerVisible(markerId, location.type);
+            
+            if (shouldBeVisible && !markers.some(m => {
+              const pos = m.getLatLng();
+              return pos.lat === coord[1] && pos.lng === coord[0];
+            })) {
+              // Get coordinate-specific properties
+              const locationWithProps = getCoordinateProperties(location, index);
+              
+              let icon: L.Icon | L.DivIcon;
+              if (locationWithProps.icon && locationWithProps.icon.startsWith('fa-')) {
+                const sizeMultiplier = locationWithProps.iconSize || 1;
+                icon = L.divIcon({
+                  className: 'custom-location-icon',
+                  html: `<i class="${locationWithProps.icon}" style="font-size: ${iconSize[0] * sizeMultiplier}px; color: ${locationWithProps.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`,
+                  iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+                  iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2]
+                });
+              } else {
+                const sizeMultiplier = locationWithProps.iconSize || 1;
+                icon = L.icon({
+                  iconUrl: getIconUrl(locationWithProps.icon || ''),
+                  iconSize: [iconSize[0] * sizeMultiplier, iconSize[1] * sizeMultiplier],
+                  iconAnchor: [iconSize[0] * sizeMultiplier / 2, iconSize[1] * sizeMultiplier / 2],
+                  className: 'custom-location-icon protected-icon'
+                });
+              }
+              
+              const marker = L.marker([coord[1], coord[0]], { 
+                icon,
+                riseOnHover: true,
+                riseOffset: 100,
+                autoPanOnFocus: false,
+                keyboard: false,
+                locationData: locationWithProps,
+                coordIndex: index,
+                markerId: markerId,
+                clusterGroup: shouldCluster
+              });
+              
+              // Add uncertainty circle if location has radius
+              if (locationWithProps.radius && locationWithProps.radius > 0) {
+                const uncertaintyCircle = createUncertaintyCircle(
+                  coord, 
+                  locationWithProps.radius, 
+                  locationWithProps.iconColor || '#3388ff'
+                );
+                uncertaintyCircle.addTo(map);
+                (marker as any).uncertaintyCircle = uncertaintyCircle;
+                
+                // Set initial visibility based on marker visibility state
+                if (!isMarkerVisible(markerId, location.type)) {
+                  const circleElement = uncertaintyCircle._path;
+                  if (circleElement) {
+                    circleElement.classList.add("circle-hidden");
+                  } else {
+                    uncertaintyCircle.setStyle({
+                      opacity: 0,
+                      fillOpacity: 0
+                    });
+                  }
+                }
+              }
+              
+              marker.bindTooltip(coords.length > 1 ? `${location.name} #${index + 1}` : location.name, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -30],
+                className: 'leaflet-tooltip'
+              });
+              
+              marker.on('click', () => {
+                analytics.trackLocationView(location.name, location.type);
+                
+                // Set flag to prevent history update loops
+                window.isHandlingHistoryNavigation = true;
+                
+                try {
+                  // For multi-locations or locations with coordinate properties,
+                  // make sure we extract the correct coordinate-specific properties
+                  const isMultiLocation = Array.isArray(location.coordinates[0]) || 
+                                         (typeof location.coordinates[0] === 'object' && 
+                                          (location.coordinates[0] as any).coordinates);
+                  const specificCoordIndex = isMultiLocation ? marker.options.coordIndex : undefined;
+                  
+                  // Extract coordinates properly regardless of format
+                  const coord = extractSafeCoordinates(location, specificCoordIndex);
+                  if (!coord) {
+                    console.error(`Failed to extract valid coordinates for ${location.name}`);
+                    return;
+                  }
+                  
+                  console.log(`Marker click on ${location.name}, index=${specificCoordIndex}, extracted coordinates: [${coord[0]}, ${coord[1]}]`);
+                  
+                  // Get coordinate-specific properties for this exact marker
+                  const customProps = getMarkerSpecificProperties(location, specificCoordIndex);
+                  
+                  // Update sidebar with these specific properties
+                  sidebar.updateContent(customProps, coord[0], coord[1], specificCoordIndex);
+                  
+                  // Clear any previously selected markers
+                  document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
+                    el.classList.remove('selected');
+                  });
+                  
+                  // Mark this marker as selected
+                  marker.getElement()?.classList.add('selected');
+                  
+                  // Move updateMetaTags inside try block to prevent undefined error
+                  updateMetaTags(customProps || location, coord);
+                  
+                  setTimeout(() => {
+                    // Reset the flag after a delay
+                    window.isHandlingHistoryNavigation = false;
+                    
+                    // Update URL if not in the middle of navigation
+                    if (!window.navigationInProgress) {
+                      const locationHash = generateLocationHash(location.name);
+                      
+                      // Always include index for multi-locations or complex coordinates
+                      const urlParams = isMultiLocation && specificCoordIndex !== undefined ? 
+                        `?loc=${locationHash}&index=${specificCoordIndex + 1}` : 
+                        `?loc=${locationHash}`;
+                      
+                      console.log(`Updating URL to: ${urlParams} (isMulti: ${isMultiLocation}, index: ${specificCoordIndex})`);
+                      window.history.replaceState({ locationName: location.name }, '', urlParams);
+                    }
+                  }, 50);
+                } catch (error) {
+                  window.isHandlingHistoryNavigation = false;
+                  console.error('Error in marker click handler:', error);
+                }
+              });
+              
+              // Set initial visibility state based on middleware
+              if (!isMarkerVisible(markerId, location.type)) {
+                const el = marker.getElement();
+                if (el) {
+                  el.classList.add("marker-hidden");
+                }
+              }
+              marker.addTo(targetGroup);
+              markers.push(marker);
+              activeMarkers.add(markerId);
+              
+              // Make markers globally accessible for coordinate link handling
+              if (!window.markersGlobal) window.markersGlobal = [];
+              if (!window.markersGlobal.includes(marker)) {
+                window.markersGlobal.push(marker);
+              }
+            }
+          });
+        });
+      }
+      
       map.on('move', updateVisibleMarkers);
       map.on('moveend', updateVisibleMarkers);
       map.on('zoom', updateVisibleMarkers);
       map.on('zoomend', updateVisibleMarkers);
-
+      
       // Important: Initialize the sidebar BEFORE search and URL navigation
       updateProgress(90, 'Initializing interface...');
       const sidebarElement = document.querySelector('.right-sidebar') as HTMLElement;
@@ -653,7 +798,12 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       initializeSearch(locations, map, markers);
       
       // Handle URL navigation after sidebar and search are initialized
-      await handleUrlNavigation(map, sidebar, locations, new URLSearchParams(window.location.search));
+      try {
+        await handleUrlNavigation(map, sidebar, locations, new URLSearchParams(window.location.search));
+      } catch (error) {
+        console.error("Error during URL navigation, continuing with map initialization:", error);
+        // Don't exit map initialization if URL navigation fails
+      }
       
       // Make sure markers are created and displayed
       updateVisibleMarkers();
@@ -741,4 +891,123 @@ declare global {
     interface Window {
         _clusterRefreshTimeout?: number;
     }
+}
+
+// Helper function to get the specific properties for a marker
+function getMarkerSpecificProperties(location: Location & { type: string }, coordIndex?: number): any {
+  // If this isn't a multi-location or coordinate with properties, return the location as is
+  if (!location.coordinates || !Array.isArray(location.coordinates)) {
+    return location;
+  }
+  
+  // Special case: Handle direct coordinate pair (like Alca's Children Enclave)
+  if (typeof location.coordinates[0] === 'number' && location.coordinates.length === 2) {
+    return location;
+  }
+  
+  // If coordIndex is undefined or this isn't a multi-location, return the base location
+  if (coordIndex === undefined || !Array.isArray(location.coordinates[0])) {
+    // Special case: check if this is a location with CoordinateProperties objects
+    if (location.coordinates.length > 0 && typeof location.coordinates[0] === 'object' && 
+        !(location.coordinates[0] instanceof Array)) {
+      // Has CoordinateProperties - merge first item's properties with base location
+      const firstItem = location.coordinates[0] as any;
+      return {
+        ...location,
+        ...firstItem,
+        name: location.name, // Keep original name
+        coordinates: location.coordinates, // Keep all coordinates
+        type: location.type // Keep original type
+      };
+    }
+    return location;
+  }
+  
+  // Get the specific coordinate item
+  const coordItem = location.coordinates[coordIndex];
+  
+  // If it's just an array of numbers (regular coordinate), return the base location
+  if (Array.isArray(coordItem) && coordItem.length === 2 && 
+      typeof coordItem[0] === 'number' && typeof coordItem[1] === 'number') {
+    return location;
+  }
+  
+  // If it's a CoordinateProperties object, merge its properties with the base location
+  if (typeof coordItem === 'object' && !Array.isArray(coordItem)) {
+    return {
+      ...location,
+      ...coordItem,
+      // Keep the original name and coordinates array
+      name: location.name,
+      coordinates: location.coordinates,
+      type: location.type
+    };
+  }
+  
+  return location;
+}
+
+// Add this helper function to safely extract coordinates
+function extractSafeCoordinates(location: Location & { type: string }, coordIndex?: number): [number, number] | null {
+  try {
+    // Debug log
+    console.log(`Extracting coordinates for ${location.name}, index=${coordIndex}, coordinates type:`, 
+                Array.isArray(location.coordinates[0]) ? 'array' : typeof location.coordinates[0]);
+    
+    // Case 1: Single coordinate pair [x, y]
+    if (Array.isArray(location.coordinates) && location.coordinates.length === 2 && 
+        typeof location.coordinates[0] === 'number' && typeof location.coordinates[1] === 'number') {
+      console.log(`Simple coordinates: [${location.coordinates[0]}, ${location.coordinates[1]}]`);
+      return location.coordinates as [number, number];
+    }
+    
+    // Case 2: Array of coordinate pairs [[x1, y1], [x2, y2], ...]
+    if (Array.isArray(location.coordinates) && Array.isArray(location.coordinates[0])) {
+      const index = coordIndex !== undefined ? coordIndex : 0;
+      if (index < 0 || index >= location.coordinates.length) {
+        console.warn(`Invalid index ${index} for location ${location.name}`);
+        return null;
+      }
+      
+      const coords = location.coordinates[index];
+      if (Array.isArray(coords) && coords.length === 2 && 
+          typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+        console.log(`Array coordinates at index ${index}: [${coords[0]}, ${coords[1]}]`);
+        return coords as [number, number];
+      }
+    }
+    
+    // Case 3: Array of CoordinateProperties objects with nested coordinates - tuvalkane.yml format
+    if (Array.isArray(location.coordinates) && 
+        typeof location.coordinates[0] === 'object' && 
+        !Array.isArray(location.coordinates[0])) {
+      const index = coordIndex !== undefined ? coordIndex : 0;
+      if (index < 0 || index >= location.coordinates.length) {
+        console.warn(`Invalid index ${index} for location ${location.name}`);
+        return null;
+      }
+      
+      const coordObj = location.coordinates[index] as any;
+      
+      // Check if this object has a nested coordinates property
+      if (coordObj && coordObj.coordinates) {
+        // If nested coordinates is an array of numbers [x, y]
+        if (Array.isArray(coordObj.coordinates) && coordObj.coordinates.length === 2 &&
+            typeof coordObj.coordinates[0] === 'number' && typeof coordObj.coordinates[1] === 'number') {
+          console.log(`Complex nested coordinates at index ${index}: [${coordObj.coordinates[0]}, ${coordObj.coordinates[1]}]`);
+          return coordObj.coordinates as [number, number];
+        } else {
+          console.warn(`Invalid nested coordinates format at index ${index}:`, coordObj.coordinates);
+        }
+      } else {
+        console.warn(`Missing nested coordinates property at index ${index}`);
+      }
+    }
+    
+    console.warn(`Could not extract valid coordinates for ${location.name}:`, location.coordinates);
+    return null;
+  } catch (error) {
+    console.error(`Error extracting coordinates for ${location.name}:`, error);
+    return null;
+  }
 }

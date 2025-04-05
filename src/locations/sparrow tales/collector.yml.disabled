@@ -6,7 +6,7 @@ coordinates:
   - [3762, 3672]
   - [2139, 4527]
   - [2718, 3910]
-description: "Chance to spawn the Collector Sparrow Tale. Credits: ewanm89"
+description: "Chance to spawn the Collector Sparrow Tale."
 icon: "/tales/collector"
 iconSize: 1.5
 mediaUrl: "https://i.imgur.com/sfVm4bi.jpeg"

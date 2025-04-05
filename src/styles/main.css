@@ -2828,3 +2828,104 @@ background: rgba(255, 255, 255, 0.2);
     pointer-events: none;
   }
 }
+
+/* Styling for auto-detected coordinate links */
+.coordinate-link {
+  color: #4f90f2;
+  text-decoration: none;
+  border-bottom: 1px dotted #4f90f2;
+  transition: all 0.2s ease-in-out;
+}
+
+.coordinate-link:hover {
+  color: #3a6fbf;
+  border-bottom: 1px solid #3a6fbf;
+  text-decoration: none;
+  background-color: rgba(79, 144, 242, 0.1);
+}
+
+/* Add a small coordinate icon for clarity */
+.coordinate-link::after {
+  content: "📍";
+  font-size: 0.8em;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+/* Add styling for the current coordinate indicator */
+.current-coordinate {
+  color: #6bf442;
+  text-decoration: none;
+  border-bottom: 1px dotted #6bf442;
+  font-weight: 500;
+  position: relative;
+  padding-right: 16px;
+}
+
+/* Add a small icon to show this is the current position */
+.current-coordinate::after {
+  content: "📍"; 
+  font-size: 0.8em;
+  margin-left: 3px;
+  opacity: 0.8;
+  position: absolute;
+  right: 0;
+}
+
+/* Enhanced coordinate link styling */
+.coordinate-link {
+  color: #4f90f2;
+  text-decoration: none;
+  border-bottom: 1px dotted #4f90f2;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  padding-right: 16px;
+}
+
+.coordinate-link:hover {
+  color: #3a6fbf;
+  border-bottom: 1px solid #3a6fbf;
+  text-decoration: none;
+  background-color: rgba(79, 144, 242, 0.1);
+}
+
+/* Position the pin icon consistently */
+.coordinate-link::after {
+  content: "📍";
+  font-size: 0.8em;
+  margin-left: 3px;
+  opacity: 0.7;
+  position: absolute;
+  right: 0;
+}
+
+/* Complex location navigation */
+.complex-location-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  margin: 8px 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.complex-location-nav button {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.complex-location-nav button:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.complex-location-nav span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}

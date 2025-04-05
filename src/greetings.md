@@ -9,6 +9,12 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+0.9.6
+- Added Soulframe+ Links to locations that have acquirable motes
+- Added OOB entrypoints and explanations
+- Added functionality to markers. (Next update we'll use them nicely)
+- Added a bunch of ode chests, yoke idol statues and balloons
+
 0.9.5b
 - Batch marker changes
 - Added Ode chests on new areas

@@ -4,7 +4,7 @@ coordinates:
   - [2607, 4690]
   - [2857, 4646]
 
-description: "credits: Contestant"
+description: ""
 icon: "fa-solid fa-bomb"
 iconSize: 0.75
 iconColor: "#8000ff"

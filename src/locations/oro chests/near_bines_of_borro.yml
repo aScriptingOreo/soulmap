@@ -1,9 +1,0 @@
-# src/locations/loot/ode_chest.yml
-name: "[oro] Near the Bines of Borro"
-coordinates: [2989, 4163]
-description: "credits: Sharksashimi"
-icon: "/SF_chest"
-iconSize: 1.25
-iconColor: "#87ffc9"
-mediaUrl: "https://i.imgur.com/hJIDl8G.jpeg"
-

@@ -385,6 +385,35 @@
       document.head.appendChild(script);
     }
   </script>
+  
+  <!-- Internal link handler -->
+  <script>
+    document.addEventListener('click', function(e) {
+      // Find closest anchor element
+      const link = e.target.closest('a');
+      
+      if (link && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        try {
+          const url = new URL(link.href);
+          
+          // Check if it's an internal link (same host)
+          if (url.host === window.location.host) {
+            // Don't follow link normally
+            e.preventDefault();
+            
+            // Use our internal navigation handler
+            if (window.handleInternalLink) {
+              window.handleInternalLink(url);
+            }
+          }
+        } catch (err) {
+          // Invalid URL, let default handler work
+          console.log('Error handling link:', err);
+        }
+      }
+    });
+  </script>
+  
   <script type="module" src="./index.ts"></script>
   
   <!-- Ko-fi widget -->
