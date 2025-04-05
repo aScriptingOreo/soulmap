@@ -5,6 +5,8 @@ coordinates:
   - [2571, 3777]
   - [1827, 4226]
   - [2687, 5496]
+  - [2687,5496]
+  - [4130,5798]
 description: "These have random spawn chance. Thanks @Arco for helping us figure out a better name!"
 icon: "/SF_yokeidol"
 iconSize: 2.25

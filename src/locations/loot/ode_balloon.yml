@@ -13,6 +13,7 @@ coordinates:
   - [3092, 4288]
   - [2294, 3557]
   - [2295, 4644]
+  - [3271, 5077]
 description: "These Balloons are not guaranteed spawns. credits: aHappyOreo, Contestant"
 icon: "fa-solid fa-diamond"
 iconSize: 0.5
