@@ -1,0 +1,5 @@
+name: "[Dermak] Moving Tree Entrance (Two Player)"
+coordinates: [5363, 5430]
+description: "Requires two players to enter via pressing the pressure plates outside."
+icon: "/SF_entrance"
+iconSize: 1.25
