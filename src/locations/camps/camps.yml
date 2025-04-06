@@ -1,0 +1,15 @@
+name: "Synod Camp"
+coordinates:
+  - [2922, 4382]
+  - [2943, 4514]
+  - [3020, 3749]
+  - [3173, 3777]
+  - [2878, 3543]
+  - [1821, 2939]
+  - [2886, 4717]
+
+
+description: "There be loot here!"
+icon: "fa-solid fa-campground"
+iconSize: 1
+iconColor: "#da9c38"

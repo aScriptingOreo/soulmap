@@ -9,6 +9,10 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+0.9.6b
+- Hidden loot, ode chests and notes categories by default
+- Created new category for Camps, this category will have areas where enemies spawn, so it makes more sense than individual loot markers.
+
 0.9.6
 - Added Soulframe+ Links to locations that have acquirable motes
 - Added OOB entrypoints and explanations

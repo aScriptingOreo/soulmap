@@ -4,6 +4,7 @@ coordinates:
   - [2985, 3224]
   - [3804, 3676]
   - [3000, 4299]
+  - [2490, 4894]
 
 description: "These are possible exits for Dermark tileset dungeons."
 icon: "/SF_exit"

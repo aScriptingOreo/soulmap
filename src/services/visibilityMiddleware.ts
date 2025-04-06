@@ -5,6 +5,7 @@
  * Uses localforage for persistent storage
  */
 import localforage from 'localforage';
+import { getDefaultsConfig, isFirstLoad, markFirstLoadCompleted } from './defaultVisibilityService';
 
 // LocalForage store for visibility preferences
 const visibilityStore = localforage.createInstance({
@@ -33,14 +34,55 @@ let initializationPromise: Promise<void> | null = null;
 /**
  * Initialize the visibility middleware
  */
-export function initVisibilityMiddleware(): Promise<void> {
-  if (isInitialized) return Promise.resolve();
-  
-  if (!initializationPromise) {
-    initializationPromise = initializeStore();
+export async function initVisibilityMiddleware(): Promise<void> {
+  if (isInitialized) return;
+
+  try {
+    // First load cached preferences from localStorage
+    loadVisibilityState();
+
+    // If this is the first load, apply default visibility settings
+    if (isFirstLoad()) {
+      console.log('First load detected, applying default visibility settings');
+      
+      const defaults = getDefaultsConfig();
+      
+      // Apply default hidden categories
+      if (defaults.hiddenCategories && Array.isArray(defaults.hiddenCategories)) {
+        defaults.hiddenCategories.forEach(category => {
+          // Only hide if the user hasn't explicitly set visibility
+          if (!hiddenCategories.has(category)) {
+            console.log(`Hiding category by default: ${category}`);
+            hiddenCategories.add(category);
+          }
+        });
+      }
+      
+      // Apply default hidden markers
+      if (defaults.hiddenMarkers && Array.isArray(defaults.hiddenMarkers)) {
+        defaults.hiddenMarkers.forEach(marker => {
+          // Only hide if the user hasn't explicitly set visibility
+          if (!hiddenMarkers.has(marker)) {
+            console.log(`Hiding marker by default: ${marker}`);
+            hiddenMarkers.add(marker);
+          }
+        });
+      }
+      
+      // Save the updated visibility state
+      saveVisibilityState();
+      
+      // Mark first load as completed
+      markFirstLoadCompleted();
+    }
+
+    isInitialized = true;
+  } catch (error) {
+    console.error('Error initializing visibility middleware:', error);
+    hiddenMarkers = new Set();
+    hiddenCategories = new Set();
+    isInitialized = true;
   }
-  
-  return initializationPromise;
 }
 
 /**
@@ -224,4 +266,58 @@ export function getHiddenCount(): { markers: number, categories: number } {
     markers: hiddenMarkers.size,
     categories: hiddenCategories.size
   };
+}
+
+// Function to save visibility state to localStorage
+function saveVisibilityState() {
+  try {
+    localStorage.setItem(
+      'soulmap_hidden_markers',
+      JSON.stringify(Array.from(hiddenMarkers))
+    );
+    localStorage.setItem(
+      'soulmap_hidden_categories',
+      JSON.stringify(Array.from(hiddenCategories))
+    );
+  } catch (error) {
+    console.error('Error saving visibility state:', error);
+  }
+}
+
+// Function to load visibility state from localStorage
+function loadVisibilityState() {
+  try {
+    const markersJson = localStorage.getItem('soulmap_hidden_markers');
+    const categoriesJson = localStorage.getItem('soulmap_hidden_categories');
+
+    if (markersJson) {
+      hiddenMarkers = new Set(JSON.parse(markersJson));
+    }
+
+    if (categoriesJson) {
+      hiddenCategories = new Set(JSON.parse(categoriesJson));
+    }
+  } catch (error) {
+    console.error('Error loading visibility state:', error);
+    hiddenMarkers = new Set();
+    hiddenCategories = new Set();
+  }
+}
+
+// Make marker visible and update state
+export async function showMarker(markerId: string): Promise<void> {
+  if (hiddenMarkers.has(markerId)) {
+    hiddenMarkers.delete(markerId);
+    saveVisibilityState();
+  }
+  return setMarkerVisibility(markerId, true);
+}
+
+// Add a new helper function to force marker redraw
+export function forceMarkerRedraw(markerId: string): void {
+  // This will be called after visibility changes to ensure immediate visual update
+  const event = new CustomEvent('forceMarkerRedraw', { 
+    detail: { markerId }
+  });
+  document.dispatchEvent(event);
 }

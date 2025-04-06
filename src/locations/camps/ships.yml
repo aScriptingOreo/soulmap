@@ -1,0 +1,8 @@
+name: "Synod Ship"
+coordinates:
+  - [1714, 1153]
+
+description: "There be ship here!"
+icon: "fa-solid fa-ship"
+iconSize: 1
+iconColor: "#4943f9"

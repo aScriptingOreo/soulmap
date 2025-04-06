@@ -404,6 +404,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       // Store reference to the map globally
       mainMap = map;
 
+      // Initialize map event listeners
+      initializeMapEventListeners(map);
+
       // Set up map click and right-click handlers
       map.on('click', (e: L.LeafletMouseEvent) => {
           const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
@@ -822,6 +825,7 @@ export async function initializeMap(locations: (Location & { type: string })[], 
 
       // At the end of successful initialization
       mapInitialized = true;
+
       return map;
   } catch (error) {
       console.error('Error initializing map:', error);
@@ -877,6 +881,12 @@ export function updateMarkerVisibility(markerId: string, visible: boolean): void
                     fillOpacity: visible ? 0.2 : 0
                 });
             }
+        }
+        
+        // Force a redraw of the marker by slightly repositioning it
+        if (visible) {
+            const currentPos = marker.getLatLng();
+            marker.setLatLng(currentPos);
         }
     }
 }
@@ -1010,4 +1020,26 @@ function extractSafeCoordinates(location: Location & { type: string }, coordInde
     console.error(`Error extracting coordinates for ${location.name}:`, error);
     return null;
   }
+}
+
+// Add this to the initialization function - inside initializeMap()
+function initializeMapEventListeners(map: L.Map) {
+    // Listen for marker redraw requests
+    document.addEventListener('forceMarkerRedraw', (e: CustomEvent) => {
+        const { markerId } = e.detail;
+        const marker = markers.find(m => m.options.markerId === markerId);
+        if (marker) {
+            // Force a redraw by repositioning the marker at its current position
+            const currentPos = marker.getLatLng();
+            marker.setLatLng(currentPos);
+            
+            // Update uncertainty circle if it exists
+            if ((marker as any).uncertaintyCircle) {
+                // Redraw the circle by updating its position
+                const circle = (marker as any).uncertaintyCircle;
+                const currentCenter = circle.getLatLng();
+                circle.setLatLng(currentCenter);
+            }
+        }
+    });
 }

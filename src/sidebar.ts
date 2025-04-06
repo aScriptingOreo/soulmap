@@ -3,6 +3,7 @@ import type { Location } from "./types";
 import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
 import { getMap } from "./map"; // Import the helper function
+import { forceMarkerRedraw } from './services/visibilityMiddleware';
 
 function getIconUrl(iconPath: string): string {
   // Check if it's a full URL (starts with http or https)
@@ -1831,8 +1832,10 @@ export class Sidebar {
       const markerElement = marker.getElement();
       if (markerElement) {
         if (isVisible) {
-          // Instead of setting style.display, use classList to add a CSS class
+          this.visibleMarkers.delete(markerKey);
           markerElement.classList.add("marker-hidden");
+          toggleElement.textContent = "visibility_off";
+          toggleElement.classList.add("hidden");
           
           if ((marker as any).uncertaintyCircle) {
             const circleElement = (marker as any).uncertaintyCircle._path;
@@ -1845,13 +1848,11 @@ export class Sidebar {
               });
             }
           }
-          
-          this.visibleMarkers.delete(markerKey);
-          toggleElement.textContent = "visibility_off";
-          toggleElement.classList.add("hidden");
         } else {
-          // Use classList to remove the hidden class
+          this.visibleMarkers.add(markerKey);
           markerElement.classList.remove("marker-hidden");
+          toggleElement.textContent = "visibility";
+          toggleElement.classList.remove("hidden");
           
           if ((marker as any).uncertaintyCircle) {
             const circleElement = (marker as any).uncertaintyCircle._path;
@@ -1859,21 +1860,26 @@ export class Sidebar {
               circleElement.classList.remove("circle-hidden");
             } else {
               (marker as any).uncertaintyCircle.setStyle({
-                opacity: 0.6, 
+                opacity: 0.6,
                 fillOpacity: 0.2
               });
             }
           }
           
-          this.visibleMarkers.add(markerKey);
-          toggleElement.textContent = "visibility";
-          toggleElement.classList.remove("hidden");
+          // Force a redraw by repositioning the marker at its current position
+          const currentPos = marker.getLatLng();
+          marker.setLatLng(currentPos);
         }
       }
     }
 
     if (this.visibilityMiddleware) {
       await this.visibilityMiddleware.setMarkerVisibility(markerKey, !isVisible);
+      
+      // If toggling to visible, force a redraw via custom event for immediate visibility
+      if (!isVisible) {
+        forceMarkerRedraw(markerKey);
+      }
     }
 
     if (!this.visibilityMiddleware) {
@@ -1987,7 +1993,10 @@ export class Sidebar {
     }
 
     if (this.visibilityMiddleware) {
+      // Always pass the current visibility state to the middleware
       await this.visibilityMiddleware.setCategoryVisibility(category, !isVisible);
+      
+      // Also update all markers in this category
       for (const item of items) {
         if (Array.isArray(item.coordinates[0])) {
           for (let index = 0; index < (item.coordinates as [number, number][]).length; index++) {

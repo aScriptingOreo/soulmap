@@ -1,7 +1,7 @@
 import type { Location } from './types';
 import * as L from 'leaflet';
 import { getRelativeDirection } from './utils';
-import { setMarkerVisibility } from './services/visibilityMiddleware';
+import { setMarkerVisibility, showMarker, forceMarkerRedraw } from './services/visibilityMiddleware';
 import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker, getMap } from './map';
 import analytics from './analytics';
 
@@ -732,8 +732,33 @@ export async function initializeSearch(locationsData: (Location & { type: string
         }
     }
     
-    selectLocation(result.location, coordIndex);
-    closeSearch();
+    // Make sure the marker is visible before navigating
+    const markerKey = result.location.name;
+    // Define isMultiLocation before using it
+    const isMultiLocation = Array.isArray(result.location.coordinates[0]) || 
+                            (typeof result.location.coordinates[0] === 'object' && 
+                             (result.location.coordinates[0] as any).coordinates);
+    
+    if (isMultiLocation && coordIndex !== undefined) {
+      // For multi-location markers, ensure the specific point is visible
+      const pointMarkerKey = `${markerKey}-${coordIndex}`;
+      showMarker(pointMarkerKey).then(() => {
+        // Force a redraw to ensure immediate visibility
+        forceMarkerRedraw(pointMarkerKey);
+        // Continue with selection after ensuring visibility
+        selectLocation(result.location, coordIndex);
+        closeSearch();
+      });
+    } else {
+      // For regular markers, ensure the marker is visible
+      showMarker(markerKey).then(() => {
+        // Force a redraw to ensure immediate visibility
+        forceMarkerRedraw(markerKey);
+        // Continue with selection after ensuring visibility
+        selectLocation(result.location, coordIndex);
+        closeSearch();
+      });
+    }
   }
 }
 
