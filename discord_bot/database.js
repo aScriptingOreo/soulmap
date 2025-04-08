@@ -31,6 +31,16 @@ function initializeDatabase() {
       )
     `);
     
+    // Create leaderboard info table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leaderboard_info (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        message_id TEXT,
+        channel_id TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     console.log('Database initialized successfully');
     return true;
   } catch (error) {
@@ -99,11 +109,95 @@ function getRequestByMessageId(messageId) {
   }
 }
 
+function deleteRequestByMessageId(messageId) {
+  try {
+    const stmt = db.prepare('DELETE FROM location_requests WHERE message_id = ?');
+    const result = stmt.run(messageId);
+    console.log(`Deleted request with message ID ${messageId} (${result.changes} row affected)`);
+    return result.changes > 0;
+  } catch (error) {
+    console.error(`Error deleting request with message ID ${messageId}:`, error);
+    return false;
+  }
+}
+
+function getContributorLeaderboard() {
+  try {
+    // Get all implemented requests
+    const stmt = db.prepare(`
+      SELECT user_id, coordinates 
+      FROM location_requests 
+      WHERE status = 'implemented'
+    `);
+    
+    const requests = stmt.all();
+    
+    // Process requests to count coordinates per user
+    const userStats = {};
+    
+    for (const request of requests) {
+      const userId = request.user_id;
+      
+      // Parse coordinates from the string - handle comma-separated lists properly
+      const coordsString = request.coordinates.replace(/\s+/g, '');
+      const coordPairs = coordsString.match(/\[-?\d+,-?\d+\]/g) || [];
+      
+      // Add to user's count (each coordinate pair counts as one contribution)
+      if (!userStats[userId]) {
+        userStats[userId] = {
+          userId,
+          count: 0
+        };
+      }
+      userStats[userId].count += coordPairs.length;
+    }
+    
+    // Convert to array and sort by count in descending order
+    const leaderboard = Object.values(userStats)
+      .sort((a, b) => b.count - a.count);
+    
+    return leaderboard;
+  } catch (error) {
+    console.error('Error generating leaderboard data:', error);
+    return [];
+  }
+}
+
+function getLeaderboardInfo() {
+  try {
+    const stmt = db.prepare('SELECT * FROM leaderboard_info WHERE id = 1');
+    return stmt.get() || { message_id: null, channel_id: null };
+  } catch (error) {
+    console.error('Error getting leaderboard info:', error);
+    return { message_id: null, channel_id: null };
+  }
+}
+
+function setLeaderboardInfo(messageId, channelId) {
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO leaderboard_info (id, message_id, channel_id, updated_at)
+      VALUES (1, ?, ?, CURRENT_TIMESTAMP)
+    `);
+    
+    const result = stmt.run(messageId, channelId);
+    console.log(`Updated leaderboard info: messageId=${messageId}, channelId=${channelId}`);
+    return true;
+  } catch (error) {
+    console.error('Error setting leaderboard info:', error);
+    return false;
+  }
+}
+
 module.exports = {
   initializeDatabase,
   saveRequest,
   updateRequestStatus,
   getRequestsByStatus,
   getAllRequests,
-  getRequestByMessageId
+  getRequestByMessageId,
+  getContributorLeaderboard,
+  getLeaderboardInfo,
+  setLeaderboardInfo,
+  deleteRequestByMessageId
 };

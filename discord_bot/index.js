@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Events, REST, Routes, ApplicationCommandOptionType } = require('discord.js');
-const { initializeDatabase, saveRequest, updateRequestStatus, getRequestsByStatus, getAllRequests } = require('./database');
+const { initializeDatabase, saveRequest, updateRequestStatus, getRequestsByStatus, getAllRequests, getContributorLeaderboard, getLeaderboardInfo, setLeaderboardInfo, deleteRequestByMessageId } = require('./database');
 const fs = require('fs');
 const yaml = require('js-yaml');
 const path = require('path');
@@ -18,6 +18,9 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID;
+const LEADERBOARD_CHANNEL_ID = '1359095534358630440';
+
+let leaderboardMessageId = null; // Track the leaderboard message to update it
 
 // Function to get map version information
 function getMapVersionInfo() {
@@ -39,6 +42,151 @@ function getMapVersionInfo() {
   }
 }
 
+// Function to format coordinates and extract individual coordinate data
+function formatCoordinates(coordsString) {
+  // Remove all whitespace
+  coordsString = coordsString.replace(/\s+/g, '');
+  
+  // Match all coordinate pairs [x,y]
+  const coordPairs = coordsString.match(/\[-?\d+,-?\d+\]/g);
+  
+  if (!coordPairs) return { formatted: null, coordinates: [] };
+  
+  const coordinates = [];
+  
+  // Format each pair with proper spacing
+  const formatted = coordPairs.map(pair => {
+    // Extract x and y values
+    const [x, y] = pair.slice(1, -1).split(',').map(num => parseInt(num.trim()));
+    coordinates.push({ x, y });
+    return `- [${x}, ${y}]`;
+  }).join('\n');
+  
+  return { formatted, coordinates };
+}
+
+// Function to validate coordinates
+function validateCoordinates(coordsString) {
+  // Match one or more coordinate pairs separated by commas: [x,y], [x,y]
+  const coordRegex = /^(\[\s*-?\d+\s*,\s*-?\d+\s*\])(\s*,\s*\[\s*-?\d+\s*,\s*-?\d+\s*\])*$/;
+  return coordRegex.test(coordsString);
+}
+
+// Function to generate clickable map links for coordinates
+function generateMapLinks(coordinates) {
+  return coordinates.map(coord => {
+    return `[View [${coord.x}, ${coord.y}] on map](https://soulmap.avakot.org/?coord=${coord.x},${coord.y})`;
+  }).join('\n');
+}
+
+// Function to update the leaderboard
+async function updateLeaderboard() {
+  try {
+    // Get leaderboard data from database
+    const leaderboardData = getContributorLeaderboard();
+    
+    // Get version information
+    const versionInfo = getMapVersionInfo();
+    
+    // Create embed for the leaderboard
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 SoulMap Contributors Leaderboard 🏆')
+      .setColor('#FFD700') // Gold color
+      .setDescription('Top contributors based on implemented location coordinates')
+      .setTimestamp()
+      .setFooter({ 
+        text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion}` 
+      });
+    
+    // Format contributors list
+    if (leaderboardData.length === 0) {
+      embed.addFields({ name: 'No contributors yet', value: 'Be the first to contribute!' });
+    } else {
+      // Take top 10
+      const topContributors = leaderboardData.slice(0, 10);
+      
+      // Create leaderboard list
+      let leaderboardText = '';
+      for (let i = 0; i < topContributors.length; i++) {
+        try {
+          const contributor = topContributors[i];
+          
+          // Add medal for top 3
+          let medal = '';
+          if (i === 0) medal = '🥇 ';
+          else if (i === 1) medal = '🥈 ';
+          else if (i === 2) medal = '🥉 ';
+          else medal = `${i+1}. `;
+          
+          // Format using Discord mention
+          leaderboardText += `${medal}<@${contributor.userId}>: ${contributor.count} submission${contributor.count === 1 ? '' : 's'}\n`;
+        } catch (innerError) {
+          console.error('Error formatting contributor entry:', innerError);
+        }
+      }
+      
+      embed.addFields({ name: 'Top Contributors', value: leaderboardText || 'Error loading contributors' });
+    }
+    
+    // Get the leaderboard channel
+    const leaderboardChannel = client.channels.cache.get(LEADERBOARD_CHANNEL_ID);
+    if (!leaderboardChannel) {
+      console.error(`Could not find leaderboard channel with ID ${LEADERBOARD_CHANNEL_ID}`);
+      return;
+    }
+    
+    // Get stored leaderboard info
+    const leaderboardInfo = getLeaderboardInfo();
+    
+    try {
+      // First try to fetch the stored message if we have one
+      if (leaderboardInfo.message_id) {
+        try {
+          const leaderboardMessage = await leaderboardChannel.messages.fetch(leaderboardInfo.message_id);
+          await leaderboardMessage.edit({ embeds: [embed] });
+          console.log('Updated existing leaderboard message');
+          return;
+        } catch (messageError) {
+          console.log('Stored leaderboard message not found, creating new one');
+          // Continue to create a new message
+        }
+      }
+      
+      // If we get here, we need to create a new message
+      
+      // Optional: clear the channel first (uncomment if desired)
+      // const messages = await leaderboardChannel.messages.fetch({ limit: 10 });
+      // await leaderboardChannel.bulkDelete(messages);
+      
+      // Send new leaderboard message
+      const newMessage = await leaderboardChannel.send({ embeds: [embed] });
+      
+      // Store the new message ID
+      setLeaderboardInfo(newMessage.id, LEADERBOARD_CHANNEL_ID);
+      console.log('Created and stored new leaderboard message');
+      
+    } catch (channelError) {
+      console.error('Error updating leaderboard message:', channelError);
+    }
+  } catch (error) {
+    console.error('Error updating leaderboard:', error);
+  }
+}
+
+// Function to safely fetch a message, with database sync if message is missing
+async function safeMessageFetch(channel, messageId) {
+  try {
+    return await channel.messages.fetch(messageId);
+  } catch (error) {
+    if (error.code === 10008) { // Unknown Message error code
+      console.log(`Message ${messageId} not found in Discord, removing from database`);
+      deleteRequestByMessageId(messageId);
+      return null;
+    }
+    throw error; // Re-throw if it's a different error
+  }
+}
+
 // Ready event
 client.once(Events.ClientReady, async client => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -54,6 +202,15 @@ client.once(Events.ClientReady, async client => {
   
   // Initialize database
   initializeDatabase();
+  
+  // Initialize leaderboard
+  updateLeaderboard();
+  
+  // Sync database on startup (after a short delay to ensure everything is loaded)
+  setTimeout(() => syncDatabase(), 10000);
+  
+  // Schedule daily sync (24 hours)
+  setInterval(() => syncDatabase(), 24 * 60 * 60 * 1000);
   
   // Register slash commands
   try {
@@ -126,13 +283,24 @@ client.on(Events.InteractionCreate, async interaction => {
       const screenshot = interaction.options.getAttachment('screenshot');
       
       // Validate coordinates format
-      const coordRegex = /^\[\s*-?\d+\s*,\s*-?\d+\s*\]$/;
-      if (!coordRegex.test(coordinates)) {
+      if (!validateCoordinates(coordinates)) {
         return await interaction.reply({ 
-          content: 'Error: Coordinates must be in the format [X, Y]',
+          content: 'Error: Coordinates must be in the format [X, Y] or multiple coordinates like [X, Y], [X, Y]',
           ephemeral: true 
         });
       }
+
+      // Format coordinates for display and extract coordinate data
+      const { formatted: formattedCoords, coordinates: coordData } = formatCoordinates(coordinates);
+      if (!formattedCoords) {
+        return await interaction.reply({ 
+          content: 'Error: Could not parse the coordinates. Please check your input.',
+          ephemeral: true 
+        });
+      }
+      
+      // Generate map links
+      const mapLinks = generateMapLinks(coordData);
 
       // Acknowledge the interaction first to prevent timeout
       await interaction.deferReply({ ephemeral: true });
@@ -145,7 +313,8 @@ client.on(Events.InteractionCreate, async interaction => {
         .setTitle('New Location Request')
         .setColor('#0099ff')
         .addFields(
-          { name: 'Coordinates', value: coordinates },
+          { name: 'Coordinates', value: '```yml\n' + formattedCoords + '\n```' },
+          { name: 'Map Links', value: mapLinks },
           { name: 'Description', value: description }
         )
         .setFooter({ 
@@ -222,6 +391,36 @@ client.on(Events.InteractionCreate, async interaction => {
         requests = getAllRequests();
       } else {
         requests = getRequestsByStatus(status);
+      }
+      
+      // Filter out requests with deleted messages and clean up database
+      if (requests && requests.length > 0) {
+        const channel = client.channels.cache.get(CHANNEL_ID);
+        if (channel) {
+          const validRequests = [];
+          
+          // Process in batches to avoid rate limits
+          for (let i = 0; i < requests.length; i++) {
+            try {
+              const request = requests[i];
+              const message = await safeMessageFetch(channel, request.message_id);
+              
+              if (message) {
+                validRequests.push(request);
+              }
+              // If message is null, safeMessageFetch already deleted it from the database
+              
+              // Add a small delay every few requests to avoid rate limiting
+              if (i % 5 === 0 && i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            } catch (messageError) {
+              console.error(`Error processing request ${i}:`, messageError);
+            }
+          }
+          
+          requests = validRequests;
+        }
       }
       
       if (!requests || requests.length === 0) {
@@ -319,6 +518,9 @@ client.on(Events.InteractionCreate, async interaction => {
       // Update in database
       updateRequestStatus(interaction.message.id, 'implemented');
       
+      // Update the leaderboard
+      updateLeaderboard();
+      
       // Notify the user who requested it
       try {
         const requester = await client.users.fetch(userId);
@@ -368,9 +570,18 @@ client.on(Events.InteractionCreate, async interaction => {
       // Get version information
       const versionInfo = getMapVersionInfo();
       
-      // Get the original message
+      // Get the original message with database sync
       const channel = client.channels.cache.get(CHANNEL_ID);
-      const message = await channel.messages.fetch(messageId);
+      const message = await safeMessageFetch(channel, messageId);
+      
+      if (!message) {
+        // If message was deleted, inform the admin
+        await interaction.reply({ 
+          content: 'This request message was deleted. The database has been updated accordingly.', 
+          ephemeral: true 
+        });
+        return;
+      }
       
       // Update the embed to show it's dismissed
       const embed = EmbedBuilder.from(message.embeds[0])
@@ -413,6 +624,47 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.reply({ content: 'An error occurred while processing your submission.', ephemeral: true });
   }
 });
+
+// Add a function to sync on a schedule if needed
+async function syncDatabase() {
+  try {
+    console.log('Starting database sync...');
+    
+    // Get all requests
+    const allRequests = getAllRequests();
+    const channel = client.channels.cache.get(CHANNEL_ID);
+    
+    if (!channel) {
+      console.error('Cannot sync database: Request channel not found');
+      return;
+    }
+    
+    let deletedCount = 0;
+    
+    // Process in batches to avoid rate limits
+    for (let i = 0; i < allRequests.length; i++) {
+      try {
+        const request = allRequests[i];
+        const message = await safeMessageFetch(channel, request.message_id);
+        
+        if (!message) {
+          deletedCount++;
+        }
+        
+        // Add a small delay every few requests to avoid rate limiting
+        if (i % 5 === 0 && i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(`Error processing request during sync:`, error);
+      }
+    }
+    
+    console.log(`Database sync complete. Removed ${deletedCount} orphaned entries.`);
+  } catch (error) {
+    console.error('Error syncing database:', error);
+  }
+}
 
 // Login with token
 client.login(TOKEN).catch(error => {
