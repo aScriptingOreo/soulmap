@@ -1,0 +1,12 @@
+{
+  "watch": [
+    "*.js",
+    "package.json"
+  ],
+  "ignore": [
+    "data/",
+    "node_modules/"
+  ],
+  "verbose": true,
+  "exec": "node index.js"
+}

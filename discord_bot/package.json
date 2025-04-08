@@ -1,0 +1,18 @@
+{
+  "name": "soulmap-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for SoulMap location requests",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon --config nodemon.json"
+  },
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.0.3",
+    "better-sqlite3": "^8.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
