@@ -1,5 +1,8 @@
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Events, REST, Routes, ApplicationCommandOptionType } = require('discord.js');
 const { initializeDatabase, saveRequest, updateRequestStatus, getRequestsByStatus, getAllRequests } = require('./database');
+const fs = require('fs');
+const yaml = require('js-yaml');
+const path = require('path');
 
 // Create a new client instance
 const client = new Client({
@@ -16,9 +19,38 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID;
 
+// Function to get map version information
+function getMapVersionInfo() {
+  try {
+    const versionFilePath = path.join(__dirname, 'src', 'mapversion.yml');
+    if (fs.existsSync(versionFilePath)) {
+      const versionData = yaml.load(fs.readFileSync(versionFilePath, 'utf8'));
+      return {
+        mapVersion: versionData.version || 'unknown',
+        gameVersion: versionData.game_version || 'unknown'
+      };
+    } else {
+      console.warn(`Map version file not found at ${versionFilePath}`);
+      return { mapVersion: 'unknown', gameVersion: 'unknown' };
+    }
+  } catch (error) {
+    console.error('Error reading map version file:', error);
+    return { mapVersion: 'unknown', gameVersion: 'unknown' };
+  }
+}
+
 // Ready event
 client.once(Events.ClientReady, async client => {
   console.log(`Logged in as ${client.user.tag}!`);
+  
+  // Verify required environment variables
+  if (!ADMIN_ROLE_ID) {
+    console.warn('WARNING: ADMIN_ROLE_ID environment variable is not set. Admin permissions will not work correctly.');
+  }
+  
+  // Test reading version info
+  const versionInfo = getMapVersionInfo();
+  console.log(`Map version: ${versionInfo.mapVersion}, Game version: ${versionInfo.gameVersion}`);
   
   // Initialize database
   initializeDatabase();
@@ -105,6 +137,9 @@ client.on(Events.InteractionCreate, async interaction => {
       // Acknowledge the interaction first to prevent timeout
       await interaction.deferReply({ ephemeral: true });
 
+      // Get version information
+      const versionInfo = getMapVersionInfo();
+      
       // Create an embed for the request
       const embed = new EmbedBuilder()
         .setTitle('New Location Request')
@@ -113,7 +148,10 @@ client.on(Events.InteractionCreate, async interaction => {
           { name: 'Coordinates', value: coordinates },
           { name: 'Description', value: description }
         )
-        .setFooter({ text: `Requested by ${interaction.user.tag} (${interaction.user.id})`, iconURL: interaction.user.displayAvatarURL() })
+        .setFooter({ 
+          text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
+          iconURL: interaction.user.displayAvatarURL() 
+        })
         .setTimestamp();
       
       // Add screenshot if provided
@@ -191,12 +229,18 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
       
+      // Get version information
+      const versionInfo = getMapVersionInfo();
+      
       // Create embed with request information
       const embed = new EmbedBuilder()
         .setTitle(`Location Requests (${status})`)
         .setColor('#0099ff')
         .setDescription(`Found ${requests.length} requests`)
-        .setTimestamp();
+        .setTimestamp()
+        .setFooter({ 
+          text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Showing ${requests.length} of ${requests.length} requests` 
+        });
         
       // Add up to 10 requests to the embed
       const displayRequests = requests.slice(0, 10);
@@ -230,20 +274,36 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
     // Check if user has admin role
     const member = await interaction.guild.members.fetch(interaction.user.id);
+    
+    if (!ADMIN_ROLE_ID) {
+      console.error('ADMIN_ROLE_ID is not configured. Cannot verify admin permissions.');
+      await interaction.reply({ content: 'Error: Admin role is not configured on the server. Please contact the administrator.', ephemeral: true });
+      return;
+    }
+    
     const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
     
     if (!hasAdminRole) {
-      await interaction.reply({ content: 'You do not have permission to use these buttons.', ephemeral: true });
+      console.log(`User ${interaction.user.tag} (${interaction.user.id}) attempted to use admin button without permission`);
+      await interaction.reply({ content: 'You do not have permission to use these buttons. This action requires admin role.', ephemeral: true });
       return;
     }
+    
+    console.log(`Admin ${interaction.user.tag} (${interaction.user.id}) used button: ${interaction.customId}`);
     
     const [action, userId] = interaction.customId.split('_');
     
     if (action === 'approve') {
+      // Get version information
+      const versionInfo = getMapVersionInfo();
+      
       // Update the embed to show it's implemented
       const embed = EmbedBuilder.from(interaction.message.embeds[0])
         .setColor('#00FF00')
-        .setTitle('Location Request (Implemented)');
+        .setTitle('Location Request (Implemented)')
+        .setFooter({ 
+          text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Implemented by ${interaction.user.tag}` 
+        });
       
       // Disable buttons
       const row = new ActionRowBuilder();
@@ -288,6 +348,11 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   } catch (error) {
     console.error('Error handling button interaction:', error);
+    try {
+      await interaction.reply({ content: 'An error occurred while processing this action.', ephemeral: true });
+    } catch (replyError) {
+      console.error('Could not send error response:', replyError);
+    }
   }
 });
 
@@ -300,6 +365,9 @@ client.on(Events.InteractionCreate, async interaction => {
       const [, userId, messageId] = interaction.customId.split('_');
       const reason = interaction.fields.getTextInputValue('dismissReason') || 'No reason provided';
       
+      // Get version information
+      const versionInfo = getMapVersionInfo();
+      
       // Get the original message
       const channel = client.channels.cache.get(CHANNEL_ID);
       const message = await channel.messages.fetch(messageId);
@@ -308,7 +376,10 @@ client.on(Events.InteractionCreate, async interaction => {
       const embed = EmbedBuilder.from(message.embeds[0])
         .setColor('#FF0000')
         .setTitle('Location Request (Dismissed)')
-        .addFields({ name: 'Dismissal Reason', value: reason });
+        .addFields({ name: 'Dismissal Reason', value: reason })
+        .setFooter({ 
+          text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Dismissed by ${interaction.user.tag}` 
+        });
       
       // Disable buttons
       const row = new ActionRowBuilder();

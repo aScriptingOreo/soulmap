@@ -39,5 +39,6 @@ services:
       - ./discord_bot/data:/app/data
       - ./discord_bot/index.js:/app/index.js
       - ./discord_bot/package.json:/app/package.json
-      - ./discord_bot/database.json:/app/database.json
+      - ./discord_bot/database.js:/app/database.js
+      - ./src/mapversion.yml:/app/src/mapversion.yml
     restart: always

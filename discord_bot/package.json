@@ -10,7 +10,8 @@
   "dependencies": {
     "discord.js": "^14.11.0",
     "dotenv": "^16.0.3",
-    "better-sqlite3": "^8.3.0"
+    "better-sqlite3": "^8.3.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
