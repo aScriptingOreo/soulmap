@@ -30,6 +30,7 @@ services:
       context: ./discord_bot/
       dockerfile: Dockerfile
     container_name: soulmapbot
+    command: npm run dev
     environment:
       - DISCORD_TOKEN=${discord_bot_token}
       - CHANNEL_ID=1359034600969601234 

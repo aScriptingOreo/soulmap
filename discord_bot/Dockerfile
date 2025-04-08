@@ -1,4 +1,4 @@
-FROM node:16-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -20,4 +20,4 @@ RUN mkdir -p /app/data
 VOLUME /app/data
 
 # Start command that respects NODE_ENV
-CMD [ "node", "dev" ]
+CMD [ "npm", "run", "dev" ]
