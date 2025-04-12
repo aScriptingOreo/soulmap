@@ -1,0 +1,24 @@
+name: "World Tree"
+coordinates: 
+  - [1977, 2873]
+  - [2690, 3911]
+  - [2884, 4448]
+  - [4622, 5677]
+  - [5172, 4637]
+  - [4433, 3513]
+  - [3279, 2135]
+  - [2278, 1045]
+  - [4003, 2775]
+  - [4294, 1584]
+  - [1738, 2593]
+  - [5569, 3445]
+  - [5733, 6019]
+  - [3636, 4853]
+  - [2431, 6229]
+  - [5093, 2348]
+description: "This unlocks the map region"
+icon: "/SF_world_tree"
+iconColor: "#00FF00"
+mediaUrl: "https://i.imgur.com/1GgafcZ.png"
+iconSize: 2
+lore: "It is bad luck indeed to harm one of Alca’s own World Trees. They are widely considered to have been planted by the Fey in the era before humankind… Though there is much speculation as to why."

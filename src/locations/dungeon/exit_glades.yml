@@ -2,8 +2,10 @@ name: "Glades Exit"
 coordinates:
   - [2209, 4361]
   - [3088, 4141]
+  - [2608, 3027]
+  - [3234, 2180]
 
-description: "These are possible exits for Glades tileset dungeons. credits: Contestant"
-icon: "fa-solid fa-person-running"
-iconSize: 0.75
+description: "These are possible exits for Glades tileset dungeons."
+icon: "/SF_exit"
+iconSize: 1.25
 iconColor: "#bfe234"

@@ -92,7 +92,7 @@ export class GridLoader {
                         [(row + 1) * this.TILE_SIZE, (col + 1) * this.TILE_SIZE]
                     ];
 
-                    const imgPath = `map/${tileIndex}.png`;
+                    const imgPath = `pr9map/${tileIndex}.png`;
                     
                     try {
                         const blobUrl = await this.loadTileWithRetry(imgPath, contentHash);

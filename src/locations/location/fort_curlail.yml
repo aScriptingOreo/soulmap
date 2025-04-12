@@ -1,5 +1,6 @@
 name: "Fort Curlail"
 coordinates: [2969, 3289]
-description: "Good for brass scrap farming :)"
+description: "Upon collecting all motes, you will be able to choose between: [Shirenorn](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSUU-DMBSF_8t95hfwps6YxUwTMXuhi6n0MhtLS0pxEsJ_95YBG8QsG7zBLefjnnNaw4_EQ-R48g1hXJ_enrGCEGoG71WODEIGD0Y7axSDgMELz7ohd7g3VmLBoIEmWEL4WKHjUs0FrR1mI8Yu6BkOCwjrW92ES-MIQArUTqYSrad5LVE6JR17nR8MKjIOWen4p8J2bVI1NJoX4qL9zzi32-jE_7iBN3M47rIxvpUAnqwp83uaxNRXZKzrn1eY8lK5LVelry_eXZXE9BbMCGGKuNb_ue6i9ehLWtTG6pH9moiqzPQpyYrOX63wf4W7IkEtpN6393rI6bJohSPVNNFePO7PA47z9sOhqoYKIFepScoCxZZCnRlmsdaPvznXYmME4VOuCmz-APv4x0-JBAAA&row=Shirenorn&view=Items_Detail&appName=SoulframePlus-612090499) or [Verose](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSwW6DMBBE_2XPfAG3tqmqqEorNREXHFUuLJFVYyPbNEWIf--aAAmoihK4wZp57My4hh-Bx63jyTeEcX1-e8UKQqgZ7KoCGYQMnrRyRksGAYM3nndD7vCgjUDLoIEmWEL4XKHjQs4FrR3mI8Y-6BkOLYT1vW7CpXEEIFJUTmQCjad5LVE6JR17nR8MKjIOeen4l8R2bVI1NJoX4qL9Lzj32-jE_7iBD3087bLRvpUAXowui0eaxNTXVhvXP68w46V0EZelry_e35TE9BbMCGGKuNX_pe6q9QiNtjjyXhNOlrk6x1jR-btJ_S_hwSaoUqEO7aUeQrouWuFINY2zF4_L84DTvP1w6Kmh9MlSppPSYhpRojOTtGv1_FtwlW50SviMS4vNHxLRaJyGBAAA&row=Verose&view=Items_Detail&appName=SoulframePlus-612090499) motes."
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"

@@ -1,0 +1,6 @@
+name: "Orlick's Initial Location"
+coordinates: [2324, 3173]
+description: "Clear the tower, climb up, speak to Orlick then head to [2303, 2956]"
+icon: "fa-solid fa-feather"
+iconSize: 1
+iconColor: "#FF72FF"

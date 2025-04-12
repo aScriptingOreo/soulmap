@@ -1,6 +1,0 @@
-name: "Tuvalkane Start"
-coordinates: [3602, 3525]
-description: "Pick up the fallen helmet in the center of the quarry and carry it to Tuvalkane End"
-icon: "fa-solid fa-hammer"
-iconSize: 1.25
-iconColor: "#FF72FF"

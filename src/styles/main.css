@@ -121,6 +121,93 @@ body {
   background-color: #ccc; /* Light gray on hover */
 }
 
+/* Privacy Policy Popup Styles */
+#privacy-policy-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2100; /* Higher than other popups */
+}
+
+#privacy-policy-content {
+  position: relative;
+  max-width: 800px;
+  max-height: 80vh;
+  background-color: #333; /* Dark background matching the app theme */
+  color: #fff; /* White text */
+  padding: 30px;
+  border-radius: 10px;
+  overflow-y: auto;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#privacy-policy-text h1 {
+  color: #eee;
+  border-bottom: 2px solid #444;
+  padding-bottom: 10px;
+  margin-top: 0;
+}
+
+#privacy-policy-text h2, #privacy-policy-text h3 {
+  color: #eee;
+}
+
+#privacy-policy-text a {
+  color: #6bbeff;
+  text-decoration: none;
+}
+
+#privacy-policy-text a:hover {
+  text-decoration: underline;
+}
+
+#privacy-policy-text code {
+  background-color: #444;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+#privacy-policy-content button {
+  padding: 10px 20px;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+  transition: background-color 0.2s;
+}
+
+#privacy-policy-content button:hover {
+  background-color: #666;
+}
+
+/* Map error message */
+.map-error-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  max-width: 80%;
+}
+
+.error-message {
+  color: #ff5252;
+  margin: 10px 0 20px;
+  padding: 10px;
+  background: rgba(255, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+/* Rest of existing CSS */
 .right-sidebar {
   display: flex;
   flex-direction: column;
@@ -198,11 +285,18 @@ body {
 }
 
 .coordinates-display {
-  margin-top: 10px;
-  padding: 5px 10px;
+  margin: 8px 0;
+  padding: 6px 10px;
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   font-size: 14px;
+  display: inline-block;
+  font-family: monospace;
+  letter-spacing: 1px;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  width: fit-content;
+  align-self: center;
 }
 
 .location-title {
@@ -228,15 +322,29 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 2100;
-  padding: 40px;
+  padding: 20px; /* Reduced from 40px to give more space to the content */
 }
 
 .modal-content {
   position: relative;
-  max-width: 90%;
-  max-height: 90%;
+  max-width: 95%; /* Increased from 90% */
+  max-height: 95%; /* Increased from 90% */
   border-radius: 10px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content iframe {
+  width: 100%;
+  max-width: 100%;
+  max-height: 95vh; /* Increased from 90vh */
+  min-height: 400px;
+  height: auto;
+  aspect-ratio: 16/9;
+  border-radius: 10px;
+  margin-bottom: 10px; /* Reduced from 15px */
+  background-color: black;
 }
 
 #modal-image {
@@ -273,20 +381,42 @@ close-button:hover {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20px;
+  padding: 15px; /* Reduced from 20px */
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
   color: white;
+  pointer-events: none; /* Make the overlay click-through */
 }
 
 .modal-title {
   font-size: 24px;
-  margin: 0 0 10px 0;
+  margin: 0 0 5px 0; /* Reduced bottom margin from 10px to 5px */
+  pointer-events: none; /* Ensure text doesn't block clicks */
 }
 
 .modal-description {
   font-size: 16px;
   margin: 0;
   opacity: 0.9;
+  pointer-events: none; /* Ensure text doesn't block clicks */
+}
+
+/* YouTube thumbnail styling */
+#sidebar-image.youtube-thumbnail {
+  cursor: pointer;
+  position: relative;
+}
+
+#sidebar-image.youtube-thumbnail::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 48"><path fill="red" d="M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z"></path><path fill="white" d="M45 24L27 14v20"></path></svg>') center center no-repeat;
+  background-size: 68px 48px;
+  z-index: 5;
+  border-radius: 8px;
 }
 
 .version-box {
@@ -301,6 +431,12 @@ close-button:hover {
   z-index: 1000;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   font-family: "Roboto", sans-serif;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.version-box:hover {
+  background: rgba(61, 61, 61, 0.95);
 }
 
 /* Location drawer - always expanded */
@@ -394,15 +530,28 @@ close-button:hover {
   width: 300px;
   z-index: 1600;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, width, top;
+  will-change: transform, width, top, opacity, visibility;
 }
 
-/* Only modify search container when expanded */
-.search-container.expanded {
-  width: 600px;
-  top: 40%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+/* Hide search icon on desktop by default */
+.search-container .fa-magnifying-glass {
+  display: none;
+}
+
+/* Hide search container when sidebar is open (not collapsed) */
+.right-sidebar:not(.collapsed) ~ .search-container {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+/* Show search container when sidebar is collapsed */
+.right-sidebar.collapsed ~ .search-container {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
 }
 
 /* When sidebar is not collapsed (open), reduce search bar width */
@@ -1669,7 +1818,7 @@ mark {
 }
 
 .sidebar-tab:hover {
-  background: rgba(255, 255, 255, 0.2);
+background: rgba(255, 255, 255, 0.2);
 }
 
 .sidebar-tab.active {
@@ -1692,113 +1841,27 @@ mark {
   flex-direction: column;
 }
 
-/* Drops interface styling */
-.drops-content {
-  display: none;
-  padding: 16px;
-}
-
-.drops-content.active {
-  display: block;
-}
-
-.drops-category {
-  margin-bottom: 24px;
-}
-
-.drops-category-header {
-  font-size: 18px;
-  font-weight: bold;
-  margin-bottom: 12px;
-  color: #fff;
-}
-
-.drop-item {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.drop-header {
+/* Update sidebar tab styles to support external link */
+.sidebar-tab.external-link {
   display: flex;
   align-items: center;
-  padding: 12px;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: white;
   cursor: pointer;
   transition: background-color 0.2s;
+  text-decoration: none; /* Add this for link styling */
 }
 
-.drop-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 12px;
+.sidebar-tab.external-link:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.drop-icon img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.drop-icon i {
-  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.7));
-}
-
-.drop-title {
-  flex: 1;
-  font-weight: 500;
-}
-
-.drop-details {
-  display: none;
-  padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.drop-item.active .drop-details {
-  display: block;
-}
-
-.drop-item.active .fa-chevron-down {
-  transform: rotate(180deg);
-}
-
-.drop-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin: 12px 0;
-}
-
-.drop-sources {
-  margin-top: 12px;
-}
-
-.sources-title {
-  font-weight: 500;
-  margin-bottom: 8px;
-}
-
-.sources-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.source-link {
-  color: #4caf50;
-  text-decoration: none;
-  padding: 4px 8px;
-  background: rgba(76, 175, 80, 0.1);
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.source-link:hover {
-  background: rgba(76, 175, 80, 0.2);
+.sidebar-tab.external-link .material-icons {
+  font-size: 20px;
 }
 
 /* Updated sidebar structure */
@@ -2165,206 +2228,704 @@ mark {
   transform: rotate(180deg);
 }
 
-/* Drops styling */
-.drops-category {
-  margin-bottom: 16px;
-}
-
-.drops-category-header {
-  display: flex;
-  justify-content: space-between;
+/* Styling for location icons in sidebar */
+.location-icon {
+  display: inline-flex;
   align-items: center;
-  padding: 12px;
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  justify-content: center;
+  margin-right: 8px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
-.category-title {
+.location-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  padding: 6px 8px;
 }
 
-.item-count {
+.default-location-icon {
+  font-size: 20px;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+}
+/* Styling for location icon in the main location info display - UPDATED */
+.location-info-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.location-icon-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+  width: 48px;
+  height: 48px;
+}
+
+.location-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 5px 0;
+  width: 100%;
+  text-align: center;
+  word-wrap: break-word;
+}
+
+.location-icon-image {
+  max-width: 100%;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+.default-location-icon,
+.fa-icon-container {
+  font-size: 28px;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Keep the existing sidebar list item styling */
+.location-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.location-item .location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+/* Styling for location icon in the main location info display */
+.location-info-container {
+  display: flex;
+  align-items: center;
+}
+
+.location-info-container .location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.location-info-container .default-location-icon {
+  font-size: 28px;
+}
+
+/* Styling for temporary marker */
+.temp-marker-icon {
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.4));
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+  animation: marker-bounce 0.5s ease-out;
+  transform-origin: bottom center;
+}
+
+@keyframes marker-bounce {
+  0% { transform: translateY(-15px) scale(0.8); opacity: 0; }
+  70% { transform: translateY(5px) scale(1.05); }
+  100% { transform: translateY(0) scale(1); opacity: 0.9; }
+}
+
+/* Protection against right-clicks on icons */
+.protected-icon,
+.temp-marker-icon,
+.custom-location-icon,
+.location-icon-image,
+.leaflet-marker-icon img {
+  pointer-events: auto;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Add global right-click protection for icons */
+.leaflet-marker-pane,
+.location-icon-container,
+.location-icon {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Last updated text styling */
+.last-updated {
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.9em;
+  margin: 5px 0 10px;
+  text-align: center;
+  font-style: italic;
 }
 
-.drops-items {
-  margin-top: 8px;
-  transition: max-height 0.3s ease;
-}
-
-.drops-items.collapsed {
-  display: none;
-}
-
-.drop-item {
-  background: rgba(255, 255, 255, 0.05);
+/* Offline mode indicator */
+.offline-indicator {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background-color: #ff4a4a;
+  color: white;
+  padding: 8px 12px;
   border-radius: 4px;
-  margin-bottom: 8px;
+  display: none; /* Hidden by default */
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  z-index: 2500; /* Above most elements */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease;
+}
+
+.offline-indicator .material-icons {
+  font-size: 18px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced marker cluster styling */
+.marker-cluster {
+  background-color: rgba(181, 226, 140, 0.6) !important;
+  background-clip: padding-box !important;
+  border-radius: 20px !important;
+  transition: transform 0.2s ease !important;
+}
+
+.marker-cluster:hover {
+  transform: scale(1.1) !important;
+  z-index: 1010 !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6) !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin-left: 5px !important;
+  margin-top: 5px !important;
+  text-align: center !important;
+  border-radius: 15px !important;
+  font-size: 12px !important;
+  color: #fff !important;
+  font-weight: bold !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Specific category styling */
+.cluster-icon-dungeons {
+  background-color: rgba(165, 42, 42, 0.6) !important;
+}
+.cluster-icon-dungeons div {
+  background-color: rgba(165, 42, 42, 0.9) !important;
+}
+
+.cluster-icon-poi {
+  background-color: rgba(0, 128, 128, 0.6) !important;
+}
+.cluster-icon-poi div {
+  background-color: rgba(0, 128, 128, 0.9) !important;
+}
+
+.cluster-icon-resources {
+  background-color: rgba(34, 139, 34, 0.6) !important;
+}
+.cluster-icon-resources div {
+  background-color: rgba(34, 139, 34, 0.9) !important;
+}
+
+/* Force visibility for markers that need to be visible */
+.forcibly-visible-marker {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+/* Custom Marker Cluster Styles */
+.marker-cluster {
+  background-color: rgba(181, 226, 140, 0.6);
+  background-clip: padding-box;
+  border-radius: 20px;
+  transition: transform 0.2s ease;
+}
+
+.marker-cluster:hover {
+  transform: scale(1.1);
+  z-index: 1010 !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6);
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  margin-top: 5px;
+  text-align: center;
+  border-radius: 15px;
+  font-size: 12px;
+  color: #fff;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Specific category styling */
+.cluster-icon-dungeons {
+  background-color: rgba(165, 42, 42, 0.6) !important;
+}
+.cluster-icon-dungeons div {
+  background-color: rgba(165, 42, 42, 0.9) !important;
+}
+
+.cluster-icon-poi {
+  background-color: rgba(0, 128, 128, 0.6) !important;
+}
+.cluster-icon-poi div {
+  background-color: rgba(0, 128, 128, 0.9) !important;
+}
+
+.cluster-icon-resources {
+  background-color: rgba(34, 139, 34, 0.6) !important;
+}
+.cluster-icon-resources div {
+  background-color: rgba(34, 139, 34, 0.9) !important;
+}
+
+/* Force marker visibility - these styles are causing the issue */
+.leaflet-marker-icon {
+  /* Remove the !important flags that prevent toggling */
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+/* Add a new class for hidden markers that takes precedence */
+.marker-hidden {
+  display: none !important;
+}
+
+/* Make uncertainty circles properly toggleable */
+.circle-hidden {
+  opacity: 0 !important;
+  fill-opacity: 0 !important;
+}
+
+/* Make cluster icons visible */
+.marker-cluster {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 0.8 !important;
+  z-index: 1000 !important;
+  background-color: rgba(181, 226, 140, 0.6) !important;
+  background-clip: padding-box !important;
+  border-radius: 20px !important;
+}
+
+.marker-cluster div {
+  background-color: rgba(110, 204, 57, 0.6) !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin-left: 5px !important;
+  margin-top: 5px !important;
+  text-align: center !important;
+  border-radius: 15px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Uncertainty circle styling */
+.leaflet-interactive {
+  pointer-events: visibleStroke;
+}
+
+/* Make uncertainty circles look better */
+.uncertainty-circle {
+  stroke-dasharray: 5, 5;
+  animation: dash 10s linear infinite;
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+/* Ensure uncertainty circles stay visible even when markers are clustered */
+.leaflet-overlay-pane path {
+  pointer-events: none;
+  z-index: 600;
+}
+
+/* Spoiler button and content styling */
+.spoiler-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #edb753;
+  cursor: pointer;
+  margin-left: 10px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+.spoiler-button:hover {
+  background-color: rgba(237, 183, 83, 0.2);
+  transform: scale(1.1);
+}
+
+.spoiler-button.active {
+  background-color: rgba(237, 183, 83, 0.3);
+}
+
+.spoiler-button i {
+  font-size: 16px;
+}
+
+.spoiler-content {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: rgba(237, 183, 83, 0.1);
+  border-left: 3px solid #edb753;
+  border-radius: 4px;
+  font-style: italic;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Lore section styling */
+.lore-section {
+  margin: 10px 0;
+  border-radius: 4px;
+  background-color: rgba(51, 51, 51, 0.5);
   overflow: hidden;
 }
 
-.fa-chevron-down {
-  transition: transform 0.3s ease;
+.lore-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: rgba(51, 51, 51, 0.8);
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
-.fa-chevron-down.rotated {
+.lore-header:hover {
+  background-color: rgba(51, 51, 51, 1);
+}
+
+.lore-toggle i {
+  transition: transform 0.3s ease;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.lore-toggle .fa-rotate-180 {
   transform: rotate(180deg);
 }
 
-.drop-details {
-  display: none;
-  padding: 16px;
+.lore-content {
+  padding: 10px 15px;
+  font-style: italic;
+  line-height: 1.5;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  animation: fadeIn 0.3s ease;
 }
 
-.drop-item.active .drop-details {
-  display: block;
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Rarity badge styling */
-.rarity-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.9em;
+/* Video button styling */
+.video-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 15px;
+  margin: 10px 0;
+  background-color: #ff0000; /* YouTube red */
   color: white;
-}
-
-/* Source link styling */
-.source-link {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.9em;
-  text-decoration: none;
-  border: 1px solid currentColor;
-  background: rgba(255, 255, 255, 0.05);
-  transition: background-color 0.2s, transform 0.2s;
-  margin: 4px;
-}
-
-.source-link.clickable {
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s, transform 0.1s;
+  width: fit-content;
 }
 
-.source-link.clickable:hover {
-  background: rgba(255, 255, 255, 0.1);
+.video-button:hover {
+  background-color: #cc0000; /* Darker red on hover */
   transform: translateY(-1px);
 }
 
-.source-link:not(.clickable) {
+.video-button:active {
+  transform: translateY(1px);
+}
+
+.video-button i {
+  font-size: 16px;
+}
+
+/* Responsive search container and version box */
+@media (max-width: 768px), (max-aspect-ratio: 1/1) {
+  /* Hide search container when specified */
+  .search-container.hidden-mobile {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+  }
+  
+  /* Hide version box entirely on mobile */
+  .version-box {
+    display: none;
+  }
+  
+  /* Make sidebar take more screen space on mobile */
+  .right-sidebar:not(.collapsed) {
+    width: 85%;
+  }
+  
+  /* Keep sidebar toggle button in a fixed position */
+  .sidebar-toggle {
+    position: fixed;
+    right: 0 !important; /* Position flush against edge of screen */
+    transform: none !important; /* Disable transform animations */
+    transition: opacity 0.3s ease !important; /* Keep only opacity transition */
+  }
+  
+  .sidebar-toggle.collapsed {
+    transform: none !important; /* Override collapsed transform */
+  }
+  
+  /* Style for toggle button when sidebar is open or closed */
+  .sidebar-toggle:not(.collapsed) .material-icons {
+    transform: rotate(180deg); /* Rotate icon when sidebar is open */
+  }
+  
+  /* Mobile search icon and container styles */
+  .search-container {
+    position: fixed;
+    top: 20px;
+    left: 65px; /* Increased from 20px to 65px to add padding from left edge */
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(51, 51, 51, 0.95);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    z-index: 1600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Show and style icon on mobile */
+  .search-container .fa-magnifying-glass {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 18px;
+    z-index: 1;
+    pointer-events: auto; /* Make the icon clickable */
+  }
+  
+  /* Hide input field initially on mobile */
+  .search-container #location-search {
+    opacity: 0; 
+    width: 100%;
+    height: 100%;
+    padding: 0 15px 0 40px;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    transition: opacity 0.3s ease, background-color 0.3s ease;
+  }
+  
+  /* Expanded state for mobile */
+  .search-container.expanded {
+    width: calc(100% - 40px);
+    height: 40px;
+    top: 20px;
+    left: 20px; /* Keep original left position when expanded */
+    border-radius: 20px;
+    background: rgba(51, 51, 51, 0.95);
+  }
+  
+  .search-container.expanded #location-search {
+    opacity: 1;
+    background: rgba(51, 51, 51, 0.95);
+    padding-left: 40px;
+  }
+  
+  .search-container.expanded .fa-magnifying-glass {
+    left: 14px; /* Move icon to left when expanded */
+    transform: none;
+  }
+  
+  /* Adjust results position for mobile */
+  .search-container .search-results {
+    top: 45px;
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+  
+  .search-container.expanded .search-results {
+    width: 100%;
+    left: 0;
+    transform: none;
+  }
+  
+  /* Even on mobile, hide when sidebar is open */
+  .right-sidebar:not(.collapsed) ~ .search-container {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/* Styling for auto-detected coordinate links */
+.coordinate-link {
+  color: #4f90f2;
+  text-decoration: none;
+  border-bottom: 1px dotted #4f90f2;
+  transition: all 0.2s ease-in-out;
+}
+
+.coordinate-link:hover {
+  color: #3a6fbf;
+  border-bottom: 1px solid #3a6fbf;
+  text-decoration: none;
+  background-color: rgba(79, 144, 242, 0.1);
+}
+
+/* Add a small coordinate icon for clarity */
+.coordinate-link::after {
+  content: "📍";
+  font-size: 0.8em;
+  margin-left: 2px;
   opacity: 0.7;
-  cursor: default;
 }
 
-/* Drop info grid */
-.drop-info-grid {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 12px;
-  margin: 12px 0;
-  align-items: center;
-}
-
-.drop-result {
-  border-left: 3px solid #4CAF50;
-}
-
-.result-type {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 4px 0;
-}
-
-.rarity-badge {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.8em;
-  color: white;
-}
-
-.type-label {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.9em;
-}
-
-.result-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.source-tag {
-  font-size: 0.8em;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.search-result:hover .source-tag {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-/* Adjust spacing for drop results */
-.drop-result .search-result-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.drop-result .result-description {
-  margin-top: 0;
-}
-
-.child-result {
-  padding: 8px 16px 8px 32px;
-  background: rgba(255, 255, 255, 0.02);
-  min-height: 28px;
+/* Add styling for the current coordinate indicator */
+.current-coordinate {
+  color: #6bf442;
+  text-decoration: none;
+  border-bottom: 1px dotted #6bf442;
+  font-weight: 500;
   position: relative;
+  padding-right: 16px;
+}
+
+/* Add a small icon to show this is the current position */
+.current-coordinate::after {
+  content: "📍"; 
+  font-size: 0.8em;
+  margin-left: 3px;
+  opacity: 0.8;
+  position: absolute;
+  right: 0;
+}
+
+/* Enhanced coordinate link styling */
+.coordinate-link {
+  color: #4f90f2;
+  text-decoration: none;
+  border-bottom: 1px dotted #4f90f2;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  padding-right: 16px;
+}
+
+.coordinate-link:hover {
+  color: #3a6fbf;
+  border-bottom: 1px solid #3a6fbf;
+  text-decoration: none;
+  background-color: rgba(79, 144, 242, 0.1);
+}
+
+/* Position the pin icon consistently */
+.coordinate-link::after {
+  content: "📍";
+  font-size: 0.8em;
+  margin-left: 3px;
+  opacity: 0.7;
+  position: absolute;
+  right: 0;
+}
+
+/* Complex location navigation */
+.complex-location-nav {
   display: flex;
   align-items: center;
-}
-.location-index {
-  color: rgba(255, 255, 255, 0.5);
-  min-width: 24px;
-}
-
-.direction-tag {
-  font-size: 0.85em;
-  color: rgba(255, 255, 255, 0.6);
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  margin-left: auto; /* Push to the right */
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  margin: 8px 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
 }
 
-.parent-result {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+.complex-location-nav button {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-.parent-result .location-type {
-  color: #4CAF50;
+.complex-location-nav button:hover {
+  background: rgba(0, 0, 0, 0.5);
 }
 
-.search-result.parent-result {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.location-ref {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9em;
-}
-
-.direction-text {
-  color: rgba(255, 255, 255, 0.7);
+.complex-location-nav span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
 }

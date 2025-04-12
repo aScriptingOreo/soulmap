@@ -1,5 +1,6 @@
 name: "Curlail"
 coordinates: [2997, 3550]
-description: ""
+description: "Upon collecting all motes, you will be able to choose between: [Corn-Crossed](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6VSQW6DMBD8y57pB7i1UFVRlVZqqlwgqlxYIivGRrZpihB_75oACaiKErjZs8ywM-MafjgeN5YlB_Cj-nx7xQp8qGP4rAqMwY8hUNJqJWLwYnhjeQcyi3ulOZoYGmi8JQpfIVrGxVyhlcV8pLHzeg2LBvz6Xjf-0jg84ClKyzOO2qk5Lql0TBo7ngMGFhmHvLTsW2C7NrEaguaFuGj_C537bXTkf9zAhzqedlkr14oHL1qVxRMhEfW1Udr25xAzVgq7ZaJ09UW7m5KYvoIZIUwlbvV_ybtqPVBaPgRaGYPpKIGaRqLM5TnMiubvOnU_hkeToEy53LdPe4jqOinEEWsaak8eV-gETnj74dBWQx2QsUwlJa2-pVxn5mlW8vm3YDJdq5TkMyYMNn9auKdVjAQAAA==&row=Corn-Crossed&view=Items_Detail&appName=SoulframePlus-612090499) or [Yareful](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WS3WqDQBCF32WufQLv2lpKKGmhKYGioWx1DEvXXdmfpiK-e2eNmiglJHqns57POedsDT8cDxvL0m8I4_r09owVhFAn8F6VmECYwIOSViuRQJDACyu6IbO4V5qjSaCBJlhC-IzQMi7mglYWixFjF_QMiwbC-lY34dI4AuAZSstzjtrTvJYonZKOvc4PBhUZh8JZ9iWwXZtUDY3mhbho_zPO7TY68T9u4E0djruslW8lgCetXHlPk5j62iht--cIc-aE3TLhfH3x7qokprdgRghTxLX-z3UXrX8wjbkTI_M18YQr5CnHis5fdeb_CXcmRZlxuW9v9ZDSZVGEI9U0z148bs8DjvP2w6GohuInT7lKncFsS5HOjNKs5ONvyWS2VhnhcyYMNn_TKEUnhwQAAA==&row=Yareful&view=Items_Detail&appName=SoulframePlus-612090499) motes."
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"

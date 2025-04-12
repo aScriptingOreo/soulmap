@@ -5,7 +5,7 @@ coordinates:
   - [3080, 4356]
 
 description: "Chance to spawn the Vadagar Stag"
-icon: "fa-solid fa-crown"
-iconSize: 1.25
+icon: "/tales/stag"
+iconSize: 2
 iconColor: "#f0d57f"
 radius: 75

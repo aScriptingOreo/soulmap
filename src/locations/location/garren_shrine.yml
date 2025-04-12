@@ -1,5 +1,6 @@
 name: "Garren Shrine"
 coordinates: [2606, 3659]
-description: ""
+description: "Upon collecting all motes, you will be able to choose between: [Biscaker](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSwW6DMBBE_2XPfAG3plRVVKWVmigXiCoXlsiKsZFtmiLEv3dNgACqogRusGYeOzOu4IfjeWtZfAI_rK5vb1iCD1UEuzLHCPwInpW0WokIvAjeWdYOmcWj0hxNBDXU3hLCV4CWcTEXtLaYjRgHr2NYNOBXj7rxl8bhAU9QWp5y1I7mtERplXTsdG7Qq8g4ZIVl3wKbtUlV02heiIv2H3Aet9GK_3EDn-p82WWjXCsevGpV5CuahNTXVmnbPQeYskLYPROFqy883JXE9BbMCGGKuNf_UHfT-oqbmJ0INnRfEVAUmbwGWdL5h07cT-HJxCgTLo_Nte5jui0KcKSaBtqJx_U5wGXefNg3VVP-ZCpVcWEw2VOmM7M0a_nymzOZbFRC-JQJg_UfUJOpt4gEAAA=&row=Biscaker&view=Items_Detail&appName=SoulframePlus-612090499) or [Berine](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSwW6DMBBE_2XPfAG3plRVVKWVmioXiCoXL5FVYyNjN0WIf--aAAmoihK4wZp57My4hh-Bx61l6TeEcX1-e8EKQqgT-KgKTCBM4FEra7RMIEjgleXdkFk8aCOwTKCBJlhC-IzQMiHngtYW8xFjH_QMiyWE9b1uwqVxBCA4KisygcbTvJYonZKOvc4PBhUZh9xZ9iWxXZtUDY3mhbho_wvO_TY68T9u4F0fT7tstG8lgGejXbGiSUx9bbWx_XOEGXPS7ph0vr54f1MS01swI4Qp4lb_l7qr1ldohMKR95pw0uXqHGNF52-G-1_CQ5mi4kId2ks9hHRdFOFINY2zF4_L84DTvP1w6Kmh9MlSplNXIt9RojOTLNfq6bdgim80J3zGZInNHxRibCSGBAAA&row=Berine&view=Items_Detail&appName=SoulframePlus-612090499) motes."
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"

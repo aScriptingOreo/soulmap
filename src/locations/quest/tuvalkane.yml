@@ -1,0 +1,11 @@
+name: "Tuvalkane"
+coordinates: 
+  - coordinates: [3602, 3525]
+    description: "Pick up the fallen helmet in the center of the quarry and carry to [3540, 3825]"
+  
+  - coordinates: [3540, 3825]
+    description: "Drop the fallen helmet here to unlock Tuvalkane"
+description: "_"
+icon: "/SF_exclam"
+iconSize: 2.5
+iconColor: "#FF72FF"

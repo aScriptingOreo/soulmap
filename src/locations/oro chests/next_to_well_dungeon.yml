@@ -1,0 +1,8 @@
+# src/locations/loot/ode_chest.yml
+name: "[oro] North of Fort Curlail"
+coordinates: [2642, 4066]
+description: "credits: ElderlyDreamer"
+icon: "/SF_chest"
+iconSize: 1.25
+iconColor: "#87ffc9"
+mediaUrl: "https://i.imgur.com/7U4DvGQ.png"

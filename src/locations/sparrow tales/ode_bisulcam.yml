@@ -1,0 +1,10 @@
+# src/locations/loot/ode_chest.yml
+name: "Ode'n Bisulcam"
+coordinates:
+  - [2607, 4690]
+
+description: ""
+icon: "fa-solid fa-bomb"
+iconSize: 0.75
+iconColor: "#8000ff"
+mediaUrl: "https://i.imgur.com/k5aqBLO.png"

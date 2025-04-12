@@ -40,8 +40,8 @@ export class MarkerModal {
             <input type="color" id="iconColor" name="iconColor" value="#FFFFFF">
           </div>
           <div class="form-group">
-            <label for="imgUrl">Image URL (Optional)</label>
-            <input type="url" id="imgUrl" name="imgUrl">
+            <label for="mediaUrl">Image URL (Optional)</label>
+            <input type="url" id="mediaUrl" name="mediaUrl">
           </div>
           <div class="form-actions">
             <button type="submit">Save</button>
@@ -66,7 +66,7 @@ export class MarkerModal {
                 icon: formData.get('icon') as string || 'fa-solid fa-thumbtack',
                 iconSize: Number(formData.get('iconSize')) || 1,
                 iconColor: formData.get('iconColor') as string || '#FFFFFF',
-                imgUrl: formData.get('imgUrl') as string || undefined
+                mediaUrl: formData.get('mediaUrl') as string || undefined
             };
             this.onSubmit(markerData as Location); // Cast as Location since we know required fields are present
         }

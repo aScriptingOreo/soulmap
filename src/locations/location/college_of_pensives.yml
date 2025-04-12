@@ -1,5 +1,6 @@
 name: "College of Pensives"
 coordinates: [2322, 3156]
-description: "This is where you speak with Orlick for the first quest"
+description: "This is where you speak with Orlick for the first quest. Upon collecting all motes, you will be able to choose between: [Crae](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSwW6DMBBE_2XPfAG3NlRVVKWVmioXiCoXL5FVYyNjN0WIf--aAAmoihK4wZp57My4hh-Bx61l6TeEcX1-e8EKQqgT-KgKTCBMYKWVNVomECTwyvJuyCwetBFYJtBAEywhfEZomZBzQWuL-YixD3qGxRLC-l434dI4AhAclRWZQONpXkuUTknHXucHg4qMQ-4s-5LYrk2qhkbzQly0_wXnfhud-B838K6Pp1022rcSwLPRrnikSUx9bbWx_XOEGXPS7ph0vr54f1MS01swI4Qp4lb_l7qr1leG4ch5TTDpcnUOsaLzN8P9D-GhTFFxoQ7tlR4iui6KcKSahtmLx9V5wGnefji01FD2ZCjTqSuR7yjPmTmWa_X0WzDFN5oTPmOyxOYPAQ6cwYQEAAA=&row=Crae&view=Items_Detail&appName=SoulframePlus-612090499) or [Ward-Water](https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca?platform=desktop#vss=H4sIAAAAAAAAA6WSUU-DMBSF_8t9xj_Am4oxi5kmzmwPsJhKL0tjaUlbnITw371lwMZilg3e4Jbzcc85reFH4H7lWPoNYVwf316wghDqBD6qAhMIE3jUyhktEwgSeGV5N2QOd9oItAk00ARzCJ8ROibkVNDCYT5ibIOe4dBCWN_qJpwbRwCCo3IiE2g8zWuJ0inp2Ov8YFCRcchLx74ktmuTqqHRtBBn7X_Cud1GJ_7HDbzr_WGXpfatBPBsdFk80CSmvlbauP45woyV0q2ZLH198faqJM5vwYQQzhHX-j_VXbS-YYbfbWhqRv5rQsoyV8coKzp_M9z_Fu5tiooLtWsv9hDUZVGEI9V5pL14XKAHHObth0NXDTVAtjKdlhb5mlKdmKZdqKffgim-1JzwGZMWmz9ewWweigQAAA==&row=Ward-Water&view=Items_Detail&appName=SoulframePlus-612090499) motes."
 icon: "/SF_location_marker"
-iconSize: 2.25
+iconSize: 2
+iconColor: "#bb8530"

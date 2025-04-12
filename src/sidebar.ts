@@ -1,20 +1,48 @@
 import * as L from "leaflet";
-import type { Location, ItemDrop } from "./types";
-import { generateLocationHash, getRelativeDirection } from "./utils";
+import type { Location } from "./types";
+import { generateLocationHash, getRelativeDirection, formatLastUpdated } from "./utils";
 import { CustomMarkerService } from "./services/customMarkers";
-import { loadDrops, findDropLocations } from "./drops/dropsLoader"; // Add this import
+import { getMap } from "./map"; // Import the helper function
+import { forceMarkerRedraw } from './services/visibilityMiddleware';
+
+function getIconUrl(iconPath: string): string {
+  // Check if it's a full URL (starts with http or https)
+  if (/^(https?:\/\/)/.test(iconPath)) {
+    return iconPath;
+  }
+
+  // Ensure we have a consistent base URL for all icons
+  // Make sure the path starts with a slash
+  const normalizedPath = iconPath.startsWith('/') ? iconPath : `/${iconPath}`;
+
+  // Remove any .svg extension if it's there - we'll add it consistently below
+  const pathWithoutExtension = normalizedPath.replace(/\.svg$/, '');
+
+  // Add cache busting parameter
+  const cacheBuster = new Date().getMonth(); // Simple cache buster that changes monthly
+
+  // Return the full path with extension and optional cache buster
+  return `${pathWithoutExtension}.svg?v=${cacheBuster}`;
+}
 
 export interface SidebarOptions {
   element: HTMLElement;
   locations: (Location & { type: string })[];
-  map: L.Map;
+  map?: L.Map; // Map is now optional
   markers: L.Marker[];
+  visibilityMiddleware?: {
+    isMarkerVisible: (markerId: string, category?: string) => boolean;
+    setMarkerVisibility: (markerId: string, visible: boolean) => Promise<void>;
+    setCategoryVisibility: (category: string, visible: boolean) => Promise<void>;
+    getHiddenMarkers: () => Set<string>;
+    getHiddenCategories: () => Set<string>;
+  };
 }
 
 export class Sidebar {
   private element: HTMLElement;
   private locations: (Location & { type: string })[];
-  private map: L.Map;
+  private map: L.Map | null; // Map can be null
   private markers: L.Marker[];
   private titleEl!: HTMLElement;
   private descEl!: HTMLElement;
@@ -32,16 +60,44 @@ export class Sidebar {
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
   private customMarkerService: CustomMarkerService;
-  private hasCustomCategory: boolean = false; // Add this flag
-  private dropsContent!: HTMLElement; // Add this property
-  private locationContent!: HTMLElement; // Add this property
+  private hasCustomCategory: boolean = false;
+  private locationContent!: HTMLElement;
+  private visibilityMiddleware: SidebarOptions['visibilityMiddleware'];
+  private currentMediaIndex: number = 0;
+  private mediaUrls: string[] = [];
 
   constructor(options: SidebarOptions) {
     this.element = options.element;
     this.locations = options.locations;
-    this.map = options.map;
+    this.map = options.map || null; // Handle potentially missing map
     this.markers = options.markers;
     this.customMarkerService = new CustomMarkerService();
+    
+    // Ensure middleware is defined with fallback functions
+    this.visibilityMiddleware = options.visibilityMiddleware || {
+        isMarkerVisible: () => true,
+        setMarkerVisibility: async () => {},
+        setCategoryVisibility: async () => {},
+        getHiddenMarkers: () => new Set<string>(),
+        getHiddenCategories: () => new Set<string>()
+    };
+
+    // Initialize visibility state from middleware if available
+    const hiddenMarkers = this.visibilityMiddleware?.getHiddenMarkers() || new Set<string>();
+    this.visibleMarkers = new Set(
+        this.locations.flatMap(loc => {
+            if (Array.isArray(loc.coordinates[0])) {
+                const multiCoords = loc.coordinates as [number, number][];
+                return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
+            }
+            return [loc.name];
+        }).filter(id => !hiddenMarkers.has(id))
+    );
+
+    const hiddenCategories = this.visibilityMiddleware?.getHiddenCategories() || new Set<string>();
+    this.visibleCategories = new Set(
+        this.locations.map(loc => loc.type).filter(cat => !hiddenCategories.has(cat))
+    );
 
     // Create and add toggle button immediately
     this.createToggleButton();
@@ -53,71 +109,96 @@ export class Sidebar {
       );
       if (customCategory) {
         customCategory.remove();
-        this.hasCustomCategory = false; // Update flag when removing category
+        this.hasCustomCategory = false;
       }
     });
+    
+    // Start initialization right away
+    this.initialize();
   }
 
   private createToggleButton(): void {
     this.toggleButton = document.createElement("button");
     this.toggleButton.id = "sidebar-toggle";
-    // Start with both sidebar and button collapsed
     this.toggleButton.className = "sidebar-toggle collapsed";
     this.element.classList.add("collapsed");
-
     const icon = document.createElement("span");
     icon.className = "material-icons";
     icon.textContent = "chevron_left";
     this.toggleButton.appendChild(icon);
-
     document.body.appendChild(this.toggleButton);
 
-    // Initialize toggle functionality
     this.toggleButton.addEventListener("click", async (e) => {
       e.stopPropagation();
       await this.ensureInitialized();
-
       const isCollapsed = this.element.classList.contains("collapsed");
       if (isCollapsed) {
-        // Opening sidebar
         this.element.classList.remove("collapsed");
         this.toggleButton.classList.remove("collapsed");
+        // Hide search bar on small screens when sidebar is open
+        if (this.isSmallScreenOrVertical()) {
+          const searchContainer = document.querySelector('.search-container');
+          if (searchContainer) {
+            searchContainer.classList.add('hidden-mobile');
+          }
+        }
       } else {
-        // Closing sidebar
         this.element.classList.add("collapsed");
         this.toggleButton.classList.add("collapsed");
-        // Clear URL parameters
         window.history.replaceState({}, "", window.location.pathname);
-
-        // Remove selected state from markers
         document
           .querySelectorAll(".custom-location-icon.selected")
           .forEach((el) => {
             el.classList.remove("selected");
           });
+        // Show search bar again on small screens when sidebar is closed
+        if (this.isSmallScreenOrVertical()) {
+          const searchContainer = document.querySelector('.search-container');
+          if (searchContainer) {
+            searchContainer.classList.remove('hidden-mobile');
+          }
+        }
       }
     });
 
-    // Add keyboard shortcut
-    document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.key === "b") {
-        e.preventDefault();
-        this.toggleButton.click();
-      }
-    });
-
-    // Make button visible immediately with correct initial state
+    // Add resize listener to handle orientation changes
+    window.addEventListener('resize', this.handleResize.bind(this));
     requestAnimationFrame(() => {
       this.toggleButton.classList.add("loaded");
       this.element.classList.add("loaded");
+      // Initial check for search visibility based on sidebar state
+      if (this.isSmallScreenOrVertical() && !this.element.classList.contains('collapsed')) {
+        const searchContainer = document.querySelector('.search-container');
+        if (searchContainer) {
+          searchContainer.classList.add('hidden-mobile');
+        }
+      }
     });
   }
 
-  // Update showSidebar method to ensure consistent state
+  // Helper method to check if we're on a small screen or in vertical orientation
+  private isSmallScreenOrVertical(): boolean {
+    return window.innerWidth < 768 || (window.innerWidth / window.innerHeight < 1);
+  }
+
+  // Handle window resize events
+  private handleResize(): void {
+    const isSmall = this.isSmallScreenOrVertical();
+    const sidebarOpen = !this.element.classList.contains('collapsed');
+    // Toggle search visibility
+    const searchContainer = document.querySelector('.search-container');
+    if (searchContainer) {
+      if (isSmall && sidebarOpen) {
+        searchContainer.classList.add('hidden-mobile');
+      } else {
+        searchContainer.classList.remove('hidden-mobile');
+      }
+    }
+  }
+
   private showSidebar(): void {
     this.element.classList.remove("collapsed");
     this.toggleButton.classList.remove("collapsed");
-    // Add loaded class if not already present
     if (!this.element.classList.contains("loaded")) {
       this.element.classList.add("loaded");
     }
@@ -125,81 +206,165 @@ export class Sidebar {
 
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
-
     if (!this.initializationPromise) {
       this.initializationPromise = this.initialize();
     }
-
     return this.initializationPromise;
   }
 
   private async initialize(): Promise<void> {
-    this.initializeElements();
-    this.createTabInterface(); // Add this
-    await this.loadVisibilityState();
-    await this.initializeComponentsAsync();
-    await this.createDropsInterface(); // Add this
-    this.initialized = true;
+    // Initialize elements ASAP
+    try {
+      // Add CSS styles for media navigation
+      const styleEl = document.createElement('style');
+      styleEl.textContent = `
+        .media-navigation {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-top: 10px;
+          padding: 5px;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 5px;
+        }
+        
+        .sidebar-media-nav {
+          margin: 5px 0;
+        }
+        
+        .nav-button {
+          background: rgba(0, 0, 0, 0.5);
+          color: white;
+          border: none;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+        
+        .nav-button:hover {
+          background: rgba(0, 0, 0, 0.8);
+        }
+        
+        .media-counter {
+          color: white;
+          font-size: 14px;
+        }
+        
+        #image-modal .media-navigation {
+          position: absolute;
+          bottom: 10px;
+          left: 0;
+          right: 0;
+          width: 200px;
+          margin: 0 auto;
+          background: rgba(0, 0, 0, 0.6);
+        }
+      `;
+      document.head.appendChild(styleEl);
+      
+      this.initializeElements();
+      this.createTabInterface();
+      await this.loadVisibilityState();
+      await this.initializeComponentsAsync();
+      this.initialized = true;
 
-    // Always show loaded state
-    requestAnimationFrame(() => {
-      this.element.classList.add("loaded");
-      this.toggleButton.classList.add("loaded");
-    });
-  }
-
-  // Helper method to find closest location
-  private findClosestLocation(
-    coords: [number, number]
-  ): (Location & { type: string }) | undefined {
-    let closest = this.locations[0];
-    let minDist = Infinity;
-
-    this.locations.forEach((location) => {
-      const locCoords = Array.isArray(location.coordinates[0])
-        ? location.coordinates[0]
-        : (location.coordinates as [number, number]);
-
-      const dist = Math.hypot(
-        coords[0] - locCoords[0],
-        coords[1] - locCoords[1]
-      );
-      if (dist < minDist) {
-        minDist = dist;
-        closest = location;
-      }
-    });
-
-    return closest;
+      requestAnimationFrame(() => {
+        this.element.classList.add("loaded");
+        this.toggleButton.classList.add("loaded");
+      });
+    } catch (error) {
+      console.error("Failed to initialize sidebar:", error);
+    }
   }
 
   private async loadVisibilityState(): Promise<void> {
-    // Default: make everything visible
-    this.visibleMarkers = new Set(this.locations.map((l) => l.name));
-    this.visibleCategories = new Set(this.locations.map((l) => l.type));
+    if (this.visibilityMiddleware) {
+      const hiddenMarkers = this.visibilityMiddleware.getHiddenMarkers();
+      const hiddenCategories = this.visibilityMiddleware.getHiddenCategories();
+
+      this.visibleMarkers = new Set(
+        this.locations.flatMap(loc => {
+          if (Array.isArray(loc.coordinates[0])) {
+            const multiCoords = loc.coordinates as [number, number][];
+            return multiCoords.map((_, idx) => `${loc.name}-${idx}`);
+          }
+          return [loc.name];
+        }).filter(id => !hiddenMarkers.has(id))
+      );
+
+      this.visibleCategories = new Set(
+        this.locations.map(loc => loc.type).filter(cat => !hiddenCategories.has(cat))
+      );
+    } else {
+      try {
+        const markersJson = localStorage.getItem("soulmap_visible_markers");
+        const categoriesJson = localStorage.getItem("soulmap_visible_categories");
+
+        const initialVisibleMarkers = new Set(this.locations.map((l) => l.name));
+        if (markersJson) {
+          const savedMarkers = new Set(JSON.parse(markersJson));
+          this.visibleMarkers = savedMarkers.size > 0 ? savedMarkers : initialVisibleMarkers;
+        } else {
+          this.visibleMarkers = initialVisibleMarkers;
+        }
+
+        const initialVisibleCategories = new Set(this.locations.map((l) => l.type));
+        if (categoriesJson) {
+          const savedCategories = new Set(JSON.parse(categoriesJson));
+          this.visibleCategories = savedCategories.size > 0 ? savedCategories : initialVisibleCategories;
+        } else {
+          this.visibleCategories = initialVisibleCategories;
+        }
+
+        this.saveVisibilityState();
+      } catch (error) {
+        console.error("Error loading visibility state:", error);
+        this.visibleMarkers = new Set(this.locations.map((l) => l.name));
+        this.visibleCategories = new Set(this.locations.map((l) => l.type));
+      }
+    }
+  }
+
+  private saveVisibilityState(): void {
+    if (this.visibilityMiddleware) {
+      return;
+    } else {
+      try {
+        localStorage.setItem(
+          "soulmap_visible_markers",
+          JSON.stringify(Array.from(this.visibleMarkers))
+        );
+        localStorage.setItem(
+          "soulmap_visible_categories",
+          JSON.stringify(Array.from(this.visibleCategories))
+        );
+      } catch (error) {
+        console.error("Error saving visibility state:", error);
+      }
+    }
   }
 
   private async initializeComponentsAsync(): Promise<void> {
-    // Create the locations list container
     const locationsList = document.createElement("div");
     locationsList.className = "locations-list drawer-content";
 
-    // Create the categories container
     const categoriesContainer = document.createElement("div");
     categoriesContainer.className = "categories";
     locationsList.appendChild(categoriesContainer);
 
-    // Group locations by type
     const groupedLocations = this.locations.reduce((acc, location) => {
       if (!acc[location.type]) acc[location.type] = [];
       acc[location.type].push(location);
       return acc;
     }, {} as Record<string, (Location & { type: string })[]>);
 
-    // Initialize handlers that don't depend on DOM creation
     this.initializeImageHandlers();
 
-    // Create location drawer elements asynchronously in chunks
     const chunkSize = 10;
     for (
       let i = 0;
@@ -217,7 +382,6 @@ export class Sidebar {
       });
     }
 
-    // Create drawer container with header
     const drawerHeader = document.createElement("div");
     drawerHeader.className = "drawer-header";
     drawerHeader.id = "drawer-toggle";
@@ -227,115 +391,701 @@ export class Sidebar {
     drawerContainer.className = "location-drawer";
     drawerContainer.appendChild(drawerHeader);
     drawerContainer.appendChild(locationsList);
-
-    // Add drawer to sidebar
     this.element.appendChild(drawerContainer);
-
-    // Store reference to location drawer
     this.locationDrawer = drawerContainer;
   }
 
-  // Update this method to ensure initialization before updating content
-  async updateContent(
-    location: (Location & { type: string }) | null,
-    x: number,
-    y: number
-  ) {
-    await this.ensureInitialized();
-
-    if (!location) {
-      // Handle coordinate-only display
-      this.titleEl.textContent = "Current Coordinate";
-      this.descEl.textContent = "No location marker at this position";
-      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
-      this.imgEl.style.display = "none";
-      this.imgEl.src = "";
-
-      // Update URL with raw coordinates
-      const urlParams = `?coord=${Math.round(x)},${Math.round(y)}`;
-      window.history.replaceState({}, "", urlParams);
-    } else {
-      // Handle location display
-      let locationTitle = location.name;
-
-      // Check if this is part of a multi-location marker
-      if (Array.isArray(location.coordinates[0])) {
-        const coords = location.coordinates as [number, number][];
-        const index = coords.findIndex(
-          (coord) => coord[0] === x && coord[1] === y
-        );
-        if (index !== -1) {
-          locationTitle = `${location.name} #${index + 1}`;
+  private getCoordinateSpecificProperties(location: Location & { type: string }, coordIndex?: number): Location & { type: string } {
+    // If no coordinates or invalid coordinates, return the original location
+    if (!location.coordinates || !Array.isArray(location.coordinates)) {
+      return location;
+    }
+  
+    // Default coordIndex to 0 if undefined
+    const index = coordIndex !== undefined ? coordIndex : 0;
+    
+    // Handle the case of a simple coordinate pair [x, y]
+    if (location.coordinates.length === 2 && typeof location.coordinates[0] === 'number' && typeof location.coordinates[1] === 'number') {
+      return location;
+    }
+    
+    // Check if we have complex coordinate objects with nested properties
+    if (location.coordinates.length > 0 && typeof location.coordinates[0] === 'object') {
+      // Check if this is a complex structure like in tuvalkane.yml where each item has a 'coordinates' property
+      const firstItem = location.coordinates[0] as any;
+      
+      // Handle the case where each item in coordinates array has its own coordinates and properties
+      if (firstItem.coordinates && Array.isArray(firstItem.coordinates)) {
+        console.log(`Complex coordinates - accessing index ${index} of ${location.coordinates.length} items`);
+        
+        // If we have a valid index, use that specific item's properties
+        if (index >= 0 && index < location.coordinates.length) {
+          const coordItem = location.coordinates[index] as any;
+          
+          // Extract the actual coordinates from the nested structure
+          const nestedCoords = coordItem.coordinates;
+          if (Array.isArray(nestedCoords) && nestedCoords.length === 2 &&
+              typeof nestedCoords[0] === 'number' && typeof nestedCoords[1] === 'number') {
+            
+            // Create a merged object with both location and point-specific properties
+            return {
+              ...location,
+              ...coordItem,
+              // Keep the original name and type
+              name: location.name,
+              type: location.type,
+              // Store the exact coordinates for this point - CRITICAL FIX
+              _exactCoordinates: nestedCoords
+            };
+          }
         }
       }
+    }
+    
+    // For standard multi-coordinates like [[x1,y1], [x2,y2]] or fallback cases
+    return location;
+  }
+  
+  // Add tracking for current location in complex coordinates
+  private currentComplexCoordinateInfo: {
+    locationName: string;
+    currentIndex: number;
+    totalPoints: number;
+  } | null = null;
 
+  private parseMarkdownLinks(text: string): string {
+    if (!text) return '';
+    
+    // First handle standard Markdown links: [text](url)
+    const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let processedText = text.replace(linkPattern, (match, linkText, url) => {
+      // Handle both absolute and relative URLs
+      let fullUrl = url;
+      
+      // If it's a relative URL (starts with /)
+      if (url.startsWith('/')) {
+        fullUrl = `${window.location.origin}${url}`;
+      } 
+      // If it's a query parameter only URL (starts with ?)
+      else if (url.startsWith('?')) {
+        fullUrl = `${window.location.origin}${window.location.pathname}${url}`;
+      }
+      // If it doesn't have a protocol, add the current origin
+      else if (!url.includes('://')) {
+        fullUrl = `${window.location.origin}/${url}`;
+      }
+      
+      // Create HTML link that uses our internal navigation
+      return `<a href="${fullUrl}" class="internal-link">${linkText}</a>`;
+    });
+    
+    // Then look for coordinate patterns like [x, y] that aren't already links
+    // Patterns to match: [x, y], [x,y], (x, y), (x,y), x, y
+    const coordPatterns = [
+      /\[(\d+)\s*,\s*(\d+)\]/g,  // [x, y] or [x,y]
+      /\((\d+)\s*,\s*(\d+)\)/g,  // (x, y) or (x,y)
+      /(\d{4})\s*,\s*(\d{4})/g   // x, y (4+ digits to avoid false positives)
+    ];
+    
+    // Process each pattern
+    coordPatterns.forEach(pattern => {
+      processedText = processedText.replace(pattern, (match, x, y) => {
+        // Skip if this is already wrapped in an <a> tag
+        if (this.isInsideLink(match, processedText)) return match;
+        
+        const numX = parseInt(x, 10);
+        const numY = parseInt(y, 10);
+        
+        if (isNaN(numX) || isNaN(numY)) return match;
+        
+        // Check if there's a marker near these coordinates - with improved context handling
+        const isCurrentLocation = numX === this.lastVisitedCoordinate?.[0] && 
+                              numY === this.lastVisitedCoordinate?.[1];
+        
+        if (isCurrentLocation) {
+          // This coordinate is the current location - style it differently
+          return `<span class="current-coordinate" title="Current coordinates">${match}</span>`;
+        }
+        
+        // For all other coordinates, create a link that will navigate there
+        const url = `?coord=${numX},${numY}`;
+        return `<a href="${url}" class="coordinate-link" title="Go to coordinates [${numX}, ${numY}]" data-x="${numX}" data-y="${numY}">${match}</a>`;
+      });
+    });
+    
+    return processedText;
+  }
+  
+  // Helper to check if a text match is already inside an HTML link
+  private isInsideLink(match: string, fullText: string): boolean {
+    const matchIndex = fullText.indexOf(match);
+    if (matchIndex === -1) return false;
+    
+    // Look for an opening <a tag before the match
+    const textBeforeMatch = fullText.substring(0, matchIndex);
+    const lastOpeningTag = textBeforeMatch.lastIndexOf('<a');
+    if (lastOpeningTag === -1) return false;
+    
+    // Check if there's a closing </a> between the opening tag and the match
+    const textBetweenTagAndMatch = textBeforeMatch.substring(lastOpeningTag);
+    return !textBetweenTagAndMatch.includes('</a>');
+  }
+  
+  // Find a marker near the given coordinates (within ±5px)
+  private findNearbyMarker(coords: [number, number]): L.Marker | null {
+    // Use the stored markers or get them from the global map
+    const markersToCheck = this.markers.length ? this.markers : (window.markersGlobal || []);
+    
+    return markersToCheck.find(marker => {
+      const pos = marker.getLatLng();
+      // Calculate distance - use ±5 pixel tolerance
+      return Math.abs(pos.lng - coords[0]) <= 5 && Math.abs(pos.lat - coords[1]) <= 5;
+    }) || null;
+  }
+  
+  // Generate a location hash from tooltip content (handles multi-locations with #number suffix)
+  private generateLocationHashFromTooltip(tooltipContent: string): string {
+    // Extract base name (remove any '#X' suffix for multi-locations)
+    const baseName = tooltipContent.split('#')[0].trim();
+    
+    // Use existing hash generator function if available, or basic sanitization
+    if (window.generateLocationHash) {
+      return window.generateLocationHash(baseName);
+    }
+    
+    // Basic fallback implementation
+    return baseName.toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-+/g, '-');
+  }
+
+  public async updateContent(
+    location: (Location & { type: string }) | null,
+    x: number,
+    y: number,
+    coordIndex?: number,
+    nearestLocation?: (Location & { type: string }) | null
+  ) {
+    await this.ensureInitialized();
+    
+    // Reset media state
+    this.mediaUrls = [];
+    this.currentMediaIndex = 0;
+    
+    // Clear any existing complex location navigation controls first
+    const existingNav = this.element.querySelector('.complex-location-nav');
+    if (existingNav) {
+      existingNav.remove();
+    }
+    
+    // Reset complex coordinates tracking
+    this.currentComplexCoordinateInfo = null;
+    
+    // IMPORTANT FIX: For complex locations, use exact coordinates from the location object
+    let displayX = x;
+    let displayY = y;
+    
+    // If this is a complex location with extracted _exactCoordinates, use those
+    if (location && '_exactCoordinates' in location && Array.isArray(location._exactCoordinates) && 
+        location._exactCoordinates.length === 2) {
+      console.log(`Using exact coordinates from location object: [${location._exactCoordinates[0]}, ${location._exactCoordinates[1]}]`);
+      displayX = location._exactCoordinates[0];
+      displayY = location._exactCoordinates[1];
+    } else {
+      // Ensure x and y are valid numbers
+      displayX = typeof x === 'number' && !isNaN(x) ? Math.round(x) : 0;
+      displayY = typeof y === 'number' && !isNaN(y) ? Math.round(y) : 0;
+    }
+    
+    // Store the current coordinate for context in link processing
+    this.lastVisitedCoordinate = [displayX, displayY];
+    
+    if (!location) {
+      // For empty location, keep the same order
+      this.titleEl.textContent = "Current Coordinate";
+      this.coordEl.textContent = `[${displayX}, ${displayY}]`;
+      this.descEl.textContent = "No location marker at this position";
+      this.imgEl.style.display = "none";
+      this.imgEl.src = "";
+      this.imgEl.classList.remove('youtube-thumbnail');
+      
+      // Remove any existing icon
+      const existingIcon = this.element.querySelector(".location-icon-container");
+      if (existingIcon) {
+        existingIcon.remove();
+      }
+      
+      // Add temporary marker icon
+      const iconContainer = document.createElement("div");
+      iconContainer.className = "location-icon-container";
+      
+      const tempIcon = document.createElement("img");
+      tempIcon.src = "./assets/SF_pointer.svg";
+      tempIcon.alt = "";
+      tempIcon.className = "location-icon-image";
+      tempIcon.style.width = "32px";
+      tempIcon.style.height = "32px";
+      iconContainer.appendChild(tempIcon);
+      
+      const locationInfoContainer = this.element.querySelector(".location-info-container");
+      if (locationInfoContainer) {
+        locationInfoContainer.insertBefore(iconContainer, locationInfoContainer.firstChild);
+      }
+      
+      // Remove any last updated element
+      const lastUpdatedEl = this.element.querySelector(".last-updated");
+      if (lastUpdatedEl) {
+        lastUpdatedEl.remove();
+      }
+  
+      // Show relative location if nearest location is provided
+      if (nearestLocation) {
+        let relativeLocationEl = this.element.querySelector(".relative-location");
+        if (!relativeLocationEl) {
+          relativeLocationEl = document.createElement("div");
+          relativeLocationEl.className = "relative-location";
+          // Insert after coordinates element
+          this.coordEl.after(relativeLocationEl);
+        }
+        
+        const nearestCoords = Array.isArray(nearestLocation.coordinates[0])
+          ? nearestLocation.coordinates[0] as [number, number]
+          : nearestLocation.coordinates as [number, number];
+        const direction = getRelativeDirection(
+          [x, y],
+          nearestCoords
+        );
+        relativeLocationEl.textContent = `${direction} of ${nearestLocation.name}`;
+      } else {
+        this.element.querySelector(".relative-location")?.remove();
+      }
+    } else {
+      // Track if we're dealing with a complex coordinate structure
+      const isComplexLocation = location.coordinates?.length > 0 && 
+                               typeof location.coordinates[0] === 'object' &&
+                               (location.coordinates[0] as any).coordinates;
+      
+      // Get coordinate-specific properties if available
+      const locationWithProps = this.getCoordinateSpecificProperties(location, coordIndex);
+      
+      // Log details for debugging
+      console.log(`updateContent for ${location.name}, coordIndex=${coordIndex}, isComplex=${isComplexLocation}`);
+      console.log(`Coordinates display: [${displayX}, ${displayY}]`);
+      if (locationWithProps.actualCoordinates) {
+        console.log(`Actual coordinates from nested object:`, locationWithProps.actualCoordinates);
+      }
+      
+      let locationTitle = locationWithProps.name;
+      
+      // If it's a complex multi-location, add point number to the title
+      if (isComplexLocation) {
+        const totalPoints = location.coordinates.length;
+        const pointIndex = coordIndex !== undefined ? coordIndex : 0;
+        
+        // Update the tracking of complex coordinates
+        this.currentComplexCoordinateInfo = {
+          locationName: location.name,
+          currentIndex: pointIndex,
+          totalPoints: totalPoints
+        };
+        
+        locationTitle += ` #${pointIndex + 1}`;
+        console.log(`Showing complex location: ${locationTitle} (point ${pointIndex + 1} of ${totalPoints})`);
+      } else {
+        this.currentComplexCoordinateInfo = null;
+      }
+    
+      // 1. Icon (already first)
+      const locationInfoContainer = this.element.querySelector(
+        ".location-info-container"
+      );
+    
+      const existingIcon = locationInfoContainer?.querySelector(".location-icon-container");
+      if (existingIcon) {
+        existingIcon.remove();
+      }
+    
+      if (locationWithProps.icon || locationWithProps.iconColor) {
+        const iconContainer = document.createElement("div");
+        iconContainer.className = "location-icon-container";
+        // Add cursor style and title to indicate it's clickable
+        iconContainer.style.cursor = "pointer";
+        iconContainer.title = "Click to center map on this location";
+    
+        // Icon code... (unchanged)
+        if (locationWithProps.icon) {
+          const isFontAwesome = locationWithProps.icon.startsWith("fa-") || locationWithProps.icon.includes("fa-");
+          const size = locationWithProps.iconSize || 1;
+    
+          if (isFontAwesome) {
+            const faIcon = document.createElement("i");
+            faIcon.className = locationWithProps.icon;
+            faIcon.style.fontSize = `${32 * size}px`;
+            if (locationWithProps.iconColor) {
+              faIcon.style.color = locationWithProps.iconColor;
+            }
+            faIcon.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.7)";
+            iconContainer.appendChild(faIcon);
+          } else {
+            const standardSize = 32 * size;
+            const iconImg = document.createElement("img");
+            iconImg.src = getIconUrl(locationWithProps.icon);
+            iconImg.alt = "";
+            iconImg.className = "location-icon-image";
+            iconImg.style.width = `${standardSize}px`;
+            iconImg.style.height = `${standardSize}px`;
+            if (locationWithProps.iconColor) {
+              iconImg.style.filter = `drop-shadow(0 0 2px ${locationWithProps.iconColor})`;
+            }
+            iconContainer.appendChild(iconImg);
+          }
+        } else if (locationWithProps.iconColor) {
+          const defaultIcon = document.createElement("span");
+          defaultIcon.className = "material-icons default-location-icon";
+          defaultIcon.textContent = "location_on";
+          defaultIcon.style.color = locationWithProps.iconColor;
+          iconContainer.appendChild(defaultIcon);
+        }
+    
+        if (locationInfoContainer) {
+          locationInfoContainer.insertBefore(
+            iconContainer,
+            locationInfoContainer.firstChild
+          );
+          
+          // Add click handler to focus the map on this location
+          iconContainer.addEventListener("click", () => {
+            // Store the coordinates we want to navigate to
+            const coords: [number, number] = locationWithProps._exactCoordinates || [displayX, displayY];
+            
+            // Get map instance
+            const map = this.map || getMap();
+            if (map) {
+              // Animate to the location
+              map.flyTo([coords[1], coords[0]], map.getZoom(), {
+                duration: 1.2,
+                easeLinearity: 0.25
+              });
+              
+              // Highlight the marker
+              const marker = this.markers.find((m) => {
+                const pos = m.getLatLng();
+                return pos.lat === coords[1] && pos.lng === coords[0];
+              });
+              
+              if (marker) {
+                // Add selected state
+                document.querySelectorAll(".custom-location-icon.selected").forEach((el) => {
+                  el.classList.remove("selected");
+                });
+                marker.getElement()?.classList.add("selected");
+              }
+            }
+          });
+        }
+      }
+    
+      // 2. Title - Now with spoilers button if applicable
       this.titleEl.textContent = locationTitle;
-
-      // Add relative location info if not a location marker type
-      if (location.type !== "location") {
+      
+      // Add navigation controls for complex locations
+      if (this.currentComplexCoordinateInfo && this.currentComplexCoordinateInfo.totalPoints > 1) {
+        this.addComplexLocationNavigation(location, coordIndex || 0);
+      }
+      
+      // Add spoilers button if spoiler content exists
+      if (locationWithProps.spoilers) {
+        // Remove any existing spoiler button first
+        const existingSpoilerBtn = this.element.querySelector('.spoiler-button');
+        if (existingSpoilerBtn) {
+          existingSpoilerBtn.remove();
+        }
+    
+        // Create spoiler button
+        const spoilerBtn = document.createElement('button');
+        spoilerBtn.className = 'spoiler-button';
+        spoilerBtn.innerHTML = '<i class="fa-solid fa-scroll"></i>';
+        spoilerBtn.title = 'Show spoilers';
+        
+        // Position it after the title
+        this.titleEl.parentNode?.insertBefore(spoilerBtn, this.titleEl.nextSibling);
+        
+        // Create hidden spoiler content container
+        let spoilerContent = this.element.querySelector('.spoiler-content') as HTMLElement;
+        if (!spoilerContent) {
+          spoilerContent = document.createElement('div');
+          spoilerContent.className = 'spoiler-content';
+          this.descEl.parentNode?.insertBefore(spoilerContent, this.descEl.nextSibling);
+        }
+        spoilerContent.innerHTML = locationWithProps.spoilers;
+        spoilerContent.style.display = 'none';
+        
+        // Add click handler for spoiler toggle
+        spoilerBtn.addEventListener('click', () => {
+          const isVisible = spoilerContent.style.display !== 'none';
+          spoilerContent.style.display = isVisible ? 'none' : 'block';
+          spoilerBtn.title = isVisible ? 'Show spoilers' : 'Hide spoilers';
+          spoilerBtn.classList.toggle('active', !isVisible);
+        });
+      } else {
+        // Remove spoiler button and content if they exist
+        const existingSpoilerBtn = this.element.querySelector('.spoiler-button');
+        const existingSpoilerContent = this.element.querySelector('.spoiler-content');
+        if (existingSpoilerBtn) existingSpoilerBtn.remove();
+        if (existingSpoilerContent) existingSpoilerContent.remove();
+      }
+    
+      // 3. Coordinates - use the carefully processed display coordinates
+      this.coordEl.textContent = `[${displayX}, ${displayY}]`;
+    
+      // Handle relative location (this is part of coordinates context)
+      if (locationWithProps.type !== "location") {
         const nearestLocation = this.locations
           .filter((loc) => loc.type === "location")
           .reduce((nearest, loc) => {
-            const locCoords = loc.coordinates as [number, number]; // Location markers are single point
+            const locCoords = loc.coordinates as [number, number];
             const currentDist = Math.hypot(x - locCoords[0], y - locCoords[1]);
-
             const nearestCoords = nearest.coordinates as [number, number];
             const nearestDist = Math.hypot(
               x - nearestCoords[0],
               y - nearestCoords[1]
             );
-
+    
             return currentDist < nearestDist ? loc : nearest;
           });
-
-        // Create or update relative location element
-        let relativeLocationEl =
-          this.element.querySelector(".relative-location");
+    
+        let relativeLocationEl = this.element.querySelector(".relative-location");
         if (!relativeLocationEl) {
           relativeLocationEl = document.createElement("div");
           relativeLocationEl.className = "relative-location";
-          this.titleEl.after(relativeLocationEl);
+          // Insert after coordinates element
+          this.coordEl.after(relativeLocationEl);
         }
+        
         const direction = getRelativeDirection(
           nearestLocation.coordinates as [number, number],
           [x, y]
         );
         relativeLocationEl.textContent = `${direction} of ${nearestLocation.name}`;
       } else {
-        // Remove relative location element if it exists
         this.element.querySelector(".relative-location")?.remove();
       }
-
-      // Show main description and image for both parent and child items
-      this.descEl.textContent =
-        location.description || "No description available";
-      this.coordEl.textContent = `[${Math.round(x)}, ${Math.round(y)}]`;
-
-      if (location.imgUrl) {
-        this.imgEl.src = location.imgUrl;
-        this.imgEl.style.display = "block";
+    
+      // 4. Description - Now with Markdown link support
+      if (locationWithProps.description) {
+        // Parse and render any Markdown links in the description
+        const parsedDescription = this.parseMarkdownLinks(locationWithProps.description);
+        this.descEl.innerHTML = parsedDescription; // Use innerHTML instead of textContent
+        
+        // Add click handlers to all links
+        this.setupLinkHandlers();
+      } else {
+        this.descEl.textContent = "No description available";
+      }
+    
+      // 5. Lore section - new implementation
+      const existingLoreSection = this.element.querySelector('.lore-section');
+      if (existingLoreSection) {
+        existingLoreSection.remove();
+      }
+    
+      if (locationWithProps.lore) {
+        const loreSection = document.createElement('div');
+        loreSection.className = 'lore-section';
+        
+        const loreHeader = document.createElement('div');
+        loreHeader.className = 'lore-header';
+        
+        const loreTitle = document.createElement('span');
+        loreTitle.textContent = 'Game Lore';
+        
+        const loreToggle = document.createElement('span');
+        loreToggle.className = 'lore-toggle';
+        loreToggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+        
+        loreHeader.appendChild(loreTitle);
+        loreHeader.appendChild(loreToggle);
+        
+        const loreContent = document.createElement('div');
+        loreContent.className = 'lore-content';
+        loreContent.style.display = 'none'; // Initially hidden
+        loreContent.innerHTML = locationWithProps.lore;
+        
+        loreSection.appendChild(loreHeader);
+        loreSection.appendChild(loreContent);
+        
+        // Insert after description
+        this.descEl.after(loreSection);
+        
+        // Add click handler for toggling
+        loreHeader.addEventListener('click', () => {
+          const isVisible = loreContent.style.display !== 'none';
+          loreContent.style.display = isVisible ? 'none' : 'block';
+          loreToggle.querySelector('i')?.classList.toggle('fa-rotate-180', !isVisible);
+        });
+      }
+    
+      // 6. Last updated information
+      let lastUpdatedEl = this.element.querySelector(".last-updated");
+      if (!lastUpdatedEl) {
+        lastUpdatedEl = document.createElement("div");
+        lastUpdatedEl.className = "last-updated";
+        // Insert after description element
+        this.descEl.after(lastUpdatedEl);
+      }
+      if (locationWithProps.lastModified) {
+        lastUpdatedEl.textContent = formatLastUpdated(locationWithProps.lastModified);
+        lastUpdatedEl.style.display = "block";
+      } else {
+        lastUpdatedEl.style.display = "none";
+      }
+    
+      // 7. Media (image or YouTube video)
+      if (locationWithProps.mediaUrl) {
+        // Handle both single URL and array of URLs
+        if (Array.isArray(locationWithProps.mediaUrl)) {
+          this.mediaUrls = locationWithProps.mediaUrl;
+          if (this.mediaUrls.length > 0) {
+            this.updateMediaDisplay(this.mediaUrls[0]);
+          } else {
+            this.imgEl.style.display = "none";
+            this.imgEl.src = "";
+          }
+        } else {
+          // Single media URL
+          this.mediaUrls = [locationWithProps.mediaUrl];
+          this.updateMediaDisplay(locationWithProps.mediaUrl);
+        }
       } else {
         this.imgEl.style.display = "none";
         this.imgEl.src = "";
+        this.imgEl.classList.remove('youtube-thumbnail');
+        
+        // Remove any existing video button
+        const existingBtn = this.element.querySelector('.video-button');
+        if (existingBtn) {
+          existingBtn.remove();
+        }
+        
+        // Remove any existing navigation
+        const existingNav = this.element.querySelector('.media-navigation');
+        if (existingNav) {
+          existingNav.remove();
+        }
       }
     }
-
-    // Show sidebar when updating content
+  
+    // Update URL parameters - only if not triggered by URL change or complex navigation
+    if ((location || (x !== undefined && y !== undefined)) && 
+        !window.isHandlingHistoryNavigation && 
+        !window.complexNavigationInProgress) {
+      if (location) {
+        // Check if this is a multi-location and determine which index is being shown
+        const isMultiLocation = Array.isArray(location.coordinates[0]) || 
+                               (typeof location.coordinates[0] === 'object' && 
+                                (location.coordinates[0] as any).coordinates);
+        
+        if (isMultiLocation && coordIndex !== undefined) {
+          // Convert from 0-based (internal) to 1-based (URL)
+          const urlParams = `?loc=${generateLocationHash(location.name)}&index=${coordIndex + 1}`;
+          window.history.replaceState({}, "", urlParams);
+        } else {
+          const urlParams = `?loc=${generateLocationHash(location.name)}`;
+          window.history.replaceState({}, "", urlParams);
+        }
+      } else {
+        const urlParams = `?coord=${Math.round(displayX)},${Math.round(displayY)}`;
+        window.history.replaceState({}, "", urlParams);
+      }
+    }
+  
     this.showSidebar();
   }
 
-  // Initialize image modal handlers
   private initializeImageHandlers() {
     const closeModal = () => {
       this.imageModal.style.display = "none";
+      
+      // Clean up properly when closing the modal
+      const iframe = this.imageModal.querySelector('iframe');
+      if (iframe) {
+        iframe.src = '';
+        iframe.remove();
+      }
+      
+      // Reset image visibility for next use
+      this.modalImage.style.display = 'block';
+      this.modalImage.src = '';
+      
+      // Reset current media index when closing modal
+      this.currentMediaIndex = 0;
+    };
+    
+    // Handle media navigation in the modal
+    const setupModalNavigation = () => {
+      // Remove any existing navigation controls
+      const existingNavigation = this.imageModal.querySelectorAll('.media-navigation');
+      existingNavigation.forEach(nav => nav.remove());
+      
+      // Only add navigation if we have multiple media items
+      if (this.mediaUrls.length <= 1) return;
+      
+      // Create navigation container
+      const navigationContainer = document.createElement('div');
+      navigationContainer.className = 'media-navigation';
+      
+      // Previous button
+      const prevButton = document.createElement('button');
+      prevButton.className = 'nav-button prev';
+      prevButton.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+      prevButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.navigateMedia(-1, true);
+      });
+      
+      // Next button
+      const nextButton = document.createElement('button');
+      nextButton.className = 'nav-button next';
+      nextButton.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+      nextButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.navigateMedia(1, true);
+      });
+      
+      // Media counter
+      const counter = document.createElement('div');
+      counter.className = 'media-counter';
+      counter.textContent = `${this.currentMediaIndex + 1}/${this.mediaUrls.length}`;
+      
+      navigationContainer.appendChild(prevButton);
+      navigationContainer.appendChild(counter);
+      navigationContainer.appendChild(nextButton);
+      
+      const modalContent = this.imageModal.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.appendChild(navigationContainer);
+      }
     };
 
     this.imgEl.addEventListener("click", () => {
-      if (this.imgEl.src) {
-        this.modalImage.src = this.imgEl.src;
-        this.modalTitle.textContent = this.titleEl.textContent || "";
-        this.modalDescription.textContent = this.descEl.textContent || "";
-        this.imageModal.style.display = "flex";
+      if (this.mediaUrls.length > 0) {
+        this.openMediaModal(this.mediaUrls[this.currentMediaIndex]);
+        setupModalNavigation();
+      }
+    });
+
+    // Add keyboard navigation for the modal
+    document.addEventListener('keydown', (e) => {
+      if (this.imageModal.style.display === 'flex') {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          this.navigateMedia(-1, true);
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          this.navigateMedia(1, true);
+        } else if (e.key === 'Escape') {
+          closeModal();
+        }
       }
     });
 
@@ -343,44 +1093,182 @@ export class Sidebar {
     this.imageModal.addEventListener("click", (e) => {
       if (e.target === this.imageModal) closeModal();
     });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeModal();
-    });
   }
-
-  // Initialize location drawer
-  private initializeLocationDrawer() {
-    const categoriesContainer = this.element.querySelector(
-      ".categories"
-    ) as HTMLElement;
-
-    // Group locations by type
-    const groupedLocations = this.locations.reduce((acc, location) => {
-      if (!acc[location.type]) {
-        acc[location.type] = [];
+  
+  // New method to navigate between media items
+  private navigateMedia(direction: number, isModal: boolean = false): void {
+    if (this.mediaUrls.length <= 1) return;
+    
+    // Calculate new index with wrapping
+    this.currentMediaIndex = (this.currentMediaIndex + direction + this.mediaUrls.length) % this.mediaUrls.length;
+    
+    const currentMedia = this.mediaUrls[this.currentMediaIndex];
+    
+    if (isModal) {
+      // Update modal content
+      this.openMediaModal(currentMedia, false);
+      
+      // Update counter
+      const counter = this.imageModal.querySelector('.media-counter');
+      if (counter) {
+        counter.textContent = `${this.currentMediaIndex + 1}/${this.mediaUrls.length}`;
       }
-      acc[location.type].push(location);
-      return acc;
-    }, {} as { [key: string]: (Location & { type: string })[] });
-
-    // Always create custom category first, regardless of whether there are custom markers
-    this.createCategorySection(
-      "custom",
-      groupedLocations["custom"] || [],
-      categoriesContainer
-    );
-    delete groupedLocations["custom"]; // Remove custom from grouped locations
-
-    // Create other category sections
-    Object.entries(groupedLocations).forEach(([category, items]) => {
-      this.createCategorySection(category, items, categoriesContainer);
+    } else {
+      // Update sidebar content
+      this.updateMediaDisplay(currentMedia);
+    }
+  }
+  
+  // New method to open media in modal
+  private openMediaModal(mediaUrl: string, resetIndex: boolean = true): void {
+    if (resetIndex) {
+      this.currentMediaIndex = this.mediaUrls.indexOf(mediaUrl);
+      if (this.currentMediaIndex === -1) this.currentMediaIndex = 0;
+    }
+    
+    // Check if the URL is a YouTube link
+    const youtubeId = this.getYoutubeVideoId(mediaUrl);
+    
+    if (youtubeId) {
+      // It's a YouTube video - embed it
+      const iframe = document.createElement('iframe');
+      iframe.width = '100%';
+      iframe.height = '500px';
+      iframe.src = `https://www.youtube.com/embed/${youtubeId}`;
+      iframe.title = "YouTube video player";
+      iframe.frameBorder = "0";
+      iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+      iframe.allowFullscreen = true;
+      
+      // Hide the image element
+      this.modalImage.style.display = 'none';
+      
+      // Find the modal content container and append iframe
+      const modalContent = this.imageModal.querySelector('.modal-content');
+      if (modalContent) {
+        // Remove any existing iframe
+        const existingIframe = modalContent.querySelector('iframe');
+        if (existingIframe) {
+          existingIframe.remove();
+        }
+        
+        modalContent.insertBefore(iframe, this.modalImage);
+      }
+    } else {
+      // It's a regular image
+      this.modalImage.src = mediaUrl;
+      this.modalImage.style.display = 'block';
+      
+      // Remove any existing iframe
+      const modalContent = this.imageModal.querySelector('.modal-content');
+      if (modalContent) {
+        const existingIframe = modalContent.querySelector('iframe');
+        if (existingIframe) {
+          existingIframe.remove();
+        }
+      }
+    }
+    
+    this.modalTitle.textContent = this.titleEl.textContent || "";
+    this.modalDescription.textContent = this.descEl.textContent || "";
+    this.imageModal.style.display = "flex";
+  }
+  
+  // Helper method to update the sidebar media display
+  private updateMediaDisplay(mediaUrl: string): void {
+    // Check if it's a YouTube video
+    const youtubeId = this.getYoutubeVideoId(mediaUrl);
+    
+    if (youtubeId) {
+      // For YouTube videos, show a button
+      this.imgEl.style.display = "none"; // Hide the image element
+      
+      // Remove any existing video button first
+      const existingBtn = this.element.querySelector('.video-button');
+      if (existingBtn) {
+        existingBtn.remove();
+      }
+      
+      // Create a button to open the video
+      const videoBtn = document.createElement('button');
+      videoBtn.className = 'video-button';
+      videoBtn.innerHTML = '<i class="fa-brands fa-youtube"></i> Open Video';
+      videoBtn.title = 'Click to watch video';
+      
+      // Insert the button after the description
+      const insertAfter = this.descEl.nextSibling;
+      this.descEl.parentNode?.insertBefore(videoBtn, insertAfter);
+      
+      // Add click handler to open the video modal
+      videoBtn.addEventListener('click', () => {
+        this.openMediaModal(mediaUrl);
+      });
+      
+    } else {
+      // For regular images, use the existing image element
+      this.imgEl.src = mediaUrl;
+      this.imgEl.style.display = "block";
+      this.imgEl.classList.remove('youtube-thumbnail');
+      this.imgEl.style.cursor = "pointer"; // Add pointer cursor for better UX
+      
+      // Remove any existing video button
+      const existingBtn = this.element.querySelector('.video-button');
+      if (existingBtn) {
+        existingBtn.remove();
+      }
+    }
+    
+    // Add navigation controls if we have multiple media
+    this.updateMediaNavigation();
+  }
+  
+  // Add media navigation controls to the sidebar
+  private updateMediaNavigation(): void {
+    // Remove any existing navigation controls
+    const existingNavigation = this.element.querySelectorAll('.media-navigation');
+    existingNavigation.forEach(nav => nav.remove());
+    
+    // Only add navigation if we have multiple media items
+    if (this.mediaUrls.length <= 1) return;
+    
+    // Create navigation container
+    const navigationContainer = document.createElement('div');
+    navigationContainer.className = 'media-navigation sidebar-media-nav';
+    
+    // Previous button
+    const prevButton = document.createElement('button');
+    prevButton.className = 'nav-button prev';
+    prevButton.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+    prevButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.navigateMedia(-1);
     });
-
-    // Remove the empty category event listener since we want to keep the category
-    window.removeEventListener("customMarkersEmpty", () => {});
+    
+    // Next button
+    const nextButton = document.createElement('button');
+    nextButton.className = 'nav-button next';
+    nextButton.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+    nextButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.navigateMedia(1);
+    });
+    
+    // Media counter
+    const counter = document.createElement('div');
+    counter.className = 'media-counter';
+    counter.textContent = `${this.currentMediaIndex + 1}/${this.mediaUrls.length}`;
+    
+    navigationContainer.appendChild(prevButton);
+    navigationContainer.appendChild(counter);
+    navigationContainer.appendChild(nextButton);
+    
+    // Insert after the image or video button
+    const locationImage = this.element.querySelector('.location-image');
+    if (locationImage) {
+      locationImage.appendChild(navigationContainer);
+    }
   }
 
-  // Create category section
   private createCategorySection(
     category: string,
     items: (Location & { type: string })[],
@@ -399,7 +1287,12 @@ export class Sidebar {
 
     const visibilityToggle = document.createElement("span");
     visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleCategories.has(category);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
 
     const chevronIcon = document.createElement("i");
     chevronIcon.className = "fa-solid fa-chevron-down";
@@ -411,7 +1304,6 @@ export class Sidebar {
     const categoryContent = document.createElement("div");
     categoryContent.className = "category-content";
 
-    // Special handling for custom category
     if (category === "custom") {
       if (items.length === 0) {
         const emptyMessage = document.createElement("div");
@@ -428,7 +1320,6 @@ export class Sidebar {
       items.forEach((item) => this.createLocationItem(item, categoryContent));
     }
 
-    // Add category visibility toggle
     visibilityToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleCategoryVisibility(category, items, visibilityToggle);
@@ -444,7 +1335,6 @@ export class Sidebar {
     container.appendChild(categoryDiv);
   }
 
-  // Create location item
   private createLocationItem(
     item: Location & { type: string },
     container: HTMLElement
@@ -467,9 +1357,8 @@ export class Sidebar {
       deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
       deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.customMarkerService.deleteMarker((item as CustomMarker).id); // Add this.
+        this.customMarkerService.deleteMarker((item as CustomMarker).id);
         container.removeChild(itemDiv);
-        // Remove marker from map
         const coords = item.coordinates as [number, number];
         const marker = this.markers.find((m) => {
           const pos = m.getLatLng();
@@ -484,7 +1373,7 @@ export class Sidebar {
         e.stopPropagation();
         const yaml = this.customMarkerService.exportMarkerAsYaml(
           (item as CustomMarker).id
-        ); // Add this.
+        );
         const blob = new Blob([yaml], { type: "text/yaml" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -502,7 +1391,6 @@ export class Sidebar {
     }
   }
 
-  // Create multi-location item
   private createMultiLocationItem(
     item: Location & { type: string },
     container: HTMLElement
@@ -514,73 +1402,44 @@ export class Sidebar {
     const headerDiv = document.createElement("div");
     headerDiv.className = "category-header";
 
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = item.name;
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "location-icon";
 
-    const visibilityToggle = document.createElement("span");
-    visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    if (item.icon) {
+      const isFontAwesome =
+        item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const size = item.iconSize || 1;
 
-    const chevronIcon = document.createElement("i");
-    chevronIcon.className = "fa-solid fa-chevron-down";
-
-    headerDiv.appendChild(nameSpan); // Fix: was using titleSpan instead of nameSpan
-    headerDiv.appendChild(visibilityToggle);
-    headerDiv.appendChild(chevronIcon);
-
-    const dropdownContent = document.createElement("div");
-    dropdownContent.className = "category-content";
-
-    (item.coordinates as [number, number][]).forEach((coords, index) => {
-      const locationOption = document.createElement("div");
-      locationOption.className = "location-item";
-
-      const coordSpan = document.createElement("span");
-      coordSpan.className = "location-name";
-      coordSpan.textContent = `#${index + 1}`;
-
-      const coordToggle = document.createElement("span");
-      coordToggle.className = "material-icons visibilityz-toggle";
-      coordToggle.textContent = "visibility";
-
-      locationOption.appendChild(coordSpan);
-      locationOption.appendChild(coordToggle);
-
-      coordSpan.addEventListener("click", () => {
-        this.handleLocationClick(coords, item);
-      });
-
-      coordToggle.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const markerKey = `${item.name}-${index}`;
-        this.toggleMarkerVisibility(markerKey, coordToggle, coords);
-      });
-
-      dropdownContent.appendChild(locationOption);
-    });
-
-    visibilityToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.toggleMultiMarkerVisibility(item, visibilityToggle);
-    });
-
-    headerDiv.addEventListener("click", () => {
-      dropdownContent.classList.toggle("open");
-      chevronIcon.classList.toggle("fa-chevron-up");
-    });
-
-    parentDiv.appendChild(headerDiv);
-    parentDiv.appendChild(dropdownContent);
-    container.appendChild(parentDiv);
-  }
-
-  // Create single location item
-  private createSingleLocationItem(
-    item: Location & { type: string },
-    container: HTMLElement
-  ): HTMLElement {
-    const itemDiv = document.createElement("div");
-    itemDiv.className = "location-item";
+      if (isFontAwesome) {
+        const faIcon = document.createElement("i");
+        faIcon.className = item.icon;
+        faIcon.style.fontSize = `${20 * size}px`;
+        if (item.iconColor) {
+          faIcon.style.color = item.iconColor;
+        }
+        faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
+        iconContainer.appendChild(faIcon);
+      } else {
+        const standardSize = 20 * size;
+        const iconImg = document.createElement("img");
+        iconImg.src = getIconUrl(item.icon);
+        iconImg.alt = "";
+        iconImg.style.width = `${standardSize}px`;
+        iconImg.style.height = `${standardSize}px`;
+        if (item.iconColor) {
+          iconImg.style.filter = `drop-shadow(0 0 1px ${item.iconColor})`;
+        }
+        iconContainer.appendChild(iconImg);
+      }
+    } else {
+      const defaultIcon = document.createElement("span");
+      defaultIcon.className = "material-icons default-location-icon";
+      defaultIcon.textContent = "location_on";
+      if (item.iconColor) {
+        defaultIcon.style.color = item.iconColor;
+      }
+      iconContainer.appendChild(defaultIcon);
+    }
 
     const nameSpan = document.createElement("span");
     nameSpan.className = "location-name";
@@ -588,8 +1447,189 @@ export class Sidebar {
 
     const visibilityToggle = document.createElement("span");
     visibilityToggle.className = "material-icons visibility-toggle";
-    visibilityToggle.textContent = "visibility";
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleMarkers.has(item.name);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
 
+    const chevronIcon = document.createElement("i");
+    chevronIcon.className = "fa-solid fa-chevron-down";
+
+    headerDiv.appendChild(iconContainer);
+    headerDiv.appendChild(nameSpan);
+    headerDiv.appendChild(visibilityToggle);
+    headerDiv.appendChild(chevronIcon);
+
+    const dropdownContent = document.createElement("div");
+    dropdownContent.className = "category-content";
+
+    // Handle the case where we have complex coordinate structure
+    const isComplexCoordinates = item.coordinates?.length > 0 && 
+                             typeof item.coordinates[0] === 'object' &&
+                             (item.coordinates[0] as any).coordinates;
+                             
+    console.log(`Creating multi-location item: ${item.name}, isComplex: ${isComplexCoordinates}, coordinates:`, 
+              isComplexCoordinates ? 'Complex object structure' : 'Standard array structure');
+    
+    // Iterate through coordinates regardless of format
+    if (isComplexCoordinates) {
+      // For complex structures like tuvalkane.yml
+      item.coordinates.forEach((coordItem: any, index: number) => {
+        // Extract coordinates from the nested object
+        const coords = coordItem.coordinates;
+        
+        // Create a location option for this coordinate
+        const locationOption = document.createElement("div");
+        locationOption.className = "location-item";
+
+        const coordSpan = document.createElement("span");
+        coordSpan.className = "location-name";
+        coordSpan.textContent = `#${index + 1}`;
+        
+        // Show the description if available
+        if (coordItem.description) {
+          coordSpan.title = coordItem.description;
+        }
+
+        // Create visibility toggle
+        const coordToggle = document.createElement("span");
+        coordToggle.className = "material-icons visibility-toggle";
+        
+        // Set initial visibility icon based on actual visibility state
+        const markerId = `${item.name}-${index}`;
+        const isMarkerVisible = this.visibleMarkers.has(markerId);
+        coordToggle.textContent = isMarkerVisible ? "visibility" : "visibility_off";
+        if (!isMarkerVisible) {
+          coordToggle.classList.add("hidden");
+        }
+
+        locationOption.appendChild(coordSpan);
+        locationOption.appendChild(coordToggle);
+
+        coordSpan.addEventListener("click", () => {
+          // Pass the index to handleLocationClick, which will extract the nested coordinates
+          this.handleLocationClick(coords, item, index);
+        });
+
+        coordToggle.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const markerKey = `${item.name}-${index}`;
+          this.toggleMarkerVisibility(markerKey, coordToggle, coords);
+        });
+
+        dropdownContent.appendChild(locationOption);
+      });
+    } else {
+      // Standard coordinate array handling
+      (item.coordinates as [number, number][]).forEach((coords, index) => {
+        // ...existing code for standard coordinates...
+        const locationOption = document.createElement("div");
+        locationOption.className = "location-item";
+
+        const coordSpan = document.createElement("span");
+        coordSpan.className = "location-name";
+        coordSpan.textContent = `#${index + 1}`;
+
+        const coordToggle = document.createElement("span");
+        coordToggle.className = "material-icons visibility-toggle";
+        // Set initial visibility icon based on actual visibility state
+        const markerId = `${item.name}-${index}`;
+        const isMarkerVisible = this.visibleMarkers.has(markerId);
+        coordToggle.textContent = isMarkerVisible ? "visibility" : "visibility_off";
+        if (!isMarkerVisible) {
+          coordToggle.classList.add("hidden");
+        }
+
+        locationOption.appendChild(coordSpan);
+        locationOption.appendChild(coordToggle);
+
+        coordSpan.addEventListener("click", () => {
+          // Pass the index to handleLocationClick
+          this.handleLocationClick(coords, item, index);
+        });
+
+        coordToggle.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const markerKey = `${item.name}-${index}`;
+          this.toggleMarkerVisibility(markerKey, coordToggle, coords);
+        });
+
+        dropdownContent.appendChild(locationOption);
+      });
+    }
+
+    headerDiv.appendChild(iconContainer);
+    headerDiv.appendChild(nameSpan);
+    headerDiv.appendChild(visibilityToggle);
+    headerDiv.appendChild(chevronIcon);
+
+    parentDiv.appendChild(headerDiv);
+    parentDiv.appendChild(dropdownContent);
+    container.appendChild(parentDiv);
+  }
+
+  private createSingleLocationItem(
+    item: Location & { type: string },
+    container: HTMLElement
+  ): HTMLElement {
+    const itemDiv = document.createElement("div");
+    itemDiv.className = "location-item";
+
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "location-icon";
+
+    if (item.icon) {
+      const isFontAwesome =
+        item.icon.startsWith("fa-") || item.icon.includes("fa-");
+      const size = item.iconSize || 1;
+
+      if (isFontAwesome) {
+        const faIcon = document.createElement("i");
+        faIcon.className = item.icon;
+        faIcon.style.fontSize = `${20 * size}px`;
+        if (item.iconColor) {
+          faIcon.style.color = item.iconColor;
+        }
+        faIcon.style.textShadow = "1px 1px 2px rgba(0, 0, 0, 0.5)";
+        iconContainer.appendChild(faIcon);
+      } else {
+        const standardSize = 20 * size;
+        const iconImg = document.createElement("img");
+        iconImg.src = getIconUrl(item.icon);
+        iconImg.alt = "";
+        iconImg.style.width = `${standardSize}px`;
+        iconImg.style.height = `${standardSize}px`;
+        if (item.iconColor) {
+          iconImg.style.filter = `drop-shadow(0 0 1px ${item.iconColor})`;
+        }
+        iconContainer.appendChild(iconImg);
+      }
+    } else {
+      const defaultIcon = document.createElement("span");
+      defaultIcon.className = "material-icons default-location-icon";
+      defaultIcon.textContent = "location_on";
+      if (item.iconColor) {
+        defaultIcon.style.color = item.iconColor;
+      }
+      iconContainer.appendChild(defaultIcon);
+    }
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "location-name";
+    nameSpan.textContent = item.name;
+
+    const visibilityToggle = document.createElement("span");
+    visibilityToggle.className = "material-icons visibility-toggle";
+    // Set initial visibility icon based on actual visibility state
+    const isVisible = this.visibleMarkers.has(item.name);
+    visibilityToggle.textContent = isVisible ? "visibility" : "visibility_off";
+    if (!isVisible) {
+      visibilityToggle.classList.add("hidden");
+    }
+
+    itemDiv.appendChild(iconContainer);
     itemDiv.appendChild(nameSpan);
     itemDiv.appendChild(visibilityToggle);
 
@@ -607,84 +1647,142 @@ export class Sidebar {
     return itemDiv;
   }
 
-  // Handle location click
+  // Add the missing YouTube video ID extraction method
+  private getYoutubeVideoId(url: string): string | null {
+    if (!url) return null;
+    
+    // Match YouTube URL patterns
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/,
+      /youtube\.com\/watch.*?[?&]v=([^&]+)/,
+      /youtube\.com\/shorts\/([^&?/]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    return null;
+  }
+
   private handleLocationClick(
     coords: [number, number],
-    item: Location & { type: string }
+    item: Location & { type: string },
+    index?: number // Add index parameter
   ) {
-    const currentCenter = this.map.getCenter();
-    const distance = this.map.distance(
-      [currentCenter.lat, currentCenter.lng],
-      [coords[1], coords[0]]
-    );
+    // Get map - try from instance, then fallback to global helper
+    const map = this.map || getMap();
+    
+    // Add additional guard against re-entrancy
+    if (window.clickNavigationInProgress) {
+      console.log("Click navigation already in progress, skipping");
+      return;
+    }
+    
+    window.clickNavigationInProgress = true;
+    
+    try {
+      // Check if we're already at this location to prevent unnecessary navigation
+      if (window.lastNavigatedLocation === item.name && 
+          window.lastNavigatedIndex === index) {
+        console.log("Already at this location, skipping navigation");
+        return;
+      }
+      
+      // Log information about what we're navigating to
+      const isComplexStructure = typeof item.coordinates[0] === 'object' && 
+                               (item.coordinates[0] as any).coordinates;
+                               
+      console.log(`Navigating to ${item.name}${index !== undefined ? ` point #${index + 1}` : ''} at [${coords[0]}, ${coords[1]}]`, 
+                  isComplexStructure ? "Complex coordinate structure" : "Standard coordinates");
+      
+      // Store this navigation to prevent loops
+      window.lastNavigatedLocation = item.name;
+      window.lastNavigatedIndex = index;
 
-    const targetZoom = this.calculateOptimalZoom(distance);
-    const duration = this.calculateAnimationDuration(distance);
-
-    // Disable marker animations during flyTo
-    this.map.once("movestart", () => {
-      document
-        .querySelector(".leaflet-marker-pane")
-        ?.classList.add("leaflet-zoom-hide");
-    });
-
-    this.map.once("moveend", () => {
-      document
-        .querySelector(".leaflet-marker-pane")
-        ?.classList.remove("leaflet-zoom-hide");
-    });
-
-    this.map.flyTo([coords[1], coords[0]], targetZoom, {
-      duration: duration,
-      easeLinearity: 0.25,
-      noMoveStart: true,
-      animate: true,
-      keepPixelPosition: true,
-      updateDragInertia: false,
-      inertiaDeceleration: 3000,
-      inertiaMaxSpeed: 3000,
-      animateZoom: true,
-    });
-
-    const marker = this.markers.find((m) => {
-      const pos = m.getLatLng();
-      return pos.lat === coords[1] && pos.lng === coords[0];
-    });
-
-    if (marker) {
-      document
-        .querySelectorAll(".custom-location-icon.selected")
-        .forEach((el) => {
-          el.classList.remove("selected");
-        });
-      marker.getElement()?.classList.add("selected");
-
-      // Delay the marker click event until the animation is complete
-      const animationDuration = this.calculateAnimationDuration(distance);
+      // Get coordinate-specific properties if available
+      const locationWithProps = this.getCoordinateSpecificProperties(item, index);
+      
+      // Update sidebar content before map animation to avoid UI jumps
+      // IMPORTANT: Pass the exact coordinates we extracted
+      this.updateContent(locationWithProps, coords[0], coords[1], index);
+    
+      document.querySelectorAll(".custom-location-icon.selected").forEach((el) => {
+        el.classList.remove("selected");
+      });
+    
+      // Now start the map animation
+      const currentCenter = map.getCenter();
+      const distance = map.distance(
+        [currentCenter.lat, currentCenter.lng],
+        [coords[1], coords[0]]
+      );
+    
+      const targetZoom = this.calculateOptimalZoom(distance);
+      const duration = this.calculateAnimationDuration(distance);
+    
+      map.once("movestart", () => {
+        document
+          .querySelector(".leaflet-marker-pane")
+          ?.classList.add("leaflet-zoom-hide");
+      });
+    
+      map.once("moveend", () => {
+        document
+          .querySelector(".leaflet-marker-pane")
+          ?.classList.remove("leaflet-zoom-hide");
+      });
+    
+      map.flyTo([coords[1], coords[0]], targetZoom, {
+        duration: duration,
+        easeLinearity: 0.25,
+        noMoveStart: true,
+        animate: true,
+        keepPixelPosition: true,
+        updateDragInertia: false,
+        inertiaDeceleration: 3000,
+        inertiaMaxSpeed: 3000,
+        animateZoom: true,
+      });
+    
+      const marker = this.markers.find((m) => {
+        const pos = m.getLatLng();
+        return pos.lat === coords[1] && pos.lng === coords[0];
+      });
+    
+      if (marker) {
+        marker.getElement()?.classList.add("selected");
+    
+        // Update URL only if not already handling navigation
+        if (!window.isHandlingHistoryNavigation) {
+          const locationHash = generateLocationHash(item.name);
+          
+          // For multi-coordinates (including complex structures), always include index
+          const isMultiCoordinate = Array.isArray(item.coordinates[0]) || 
+                                  (typeof item.coordinates[0] === 'object' && 
+                                   (item.coordinates[0] as any).coordinates);
+          
+          // Convert from 0-based (internal) to 1-based (URL)
+          const urlParams = (isMultiCoordinate && index !== undefined) ? 
+            `?loc=${locationHash}&index=${index + 1}` : 
+            `?loc=${locationHash}`;
+          
+          console.log(`Sidebar updating URL to: ${urlParams}`);
+          window.history.replaceState({}, "", urlParams);
+        }
+      }
+    } finally {
+      // Reset navigation lock flag after a short delay
       setTimeout(() => {
-        marker.fire("click");
-      }, animationDuration * 1000);
-
-      // Get marker index for multi-location items
-      const markerContent = marker.getTooltip()?.getContent() as string;
-      const markerIndex = markerContent.includes("#")
-        ? parseInt(markerContent.split("#")[1]) - 1
-        : undefined;
-
-      // Update URL with location hash and index if applicable
-      const locationHash = generateLocationHash(item.name);
-      const urlParams =
-        markerIndex !== undefined
-          ? `?loc=${locationHash}&index=${markerIndex}`
-          : `?loc=${locationHash}`;
-
-      window.history.replaceState({}, "", urlParams);
+        window.clickNavigationInProgress = false;
+      }, 50);
     }
   }
 
-  // Add these improved helper methods to the Sidebar class
   private calculateOptimalZoom(distance: number): number {
-    // Adjust zoom based on distance to target
     if (distance > 10000) return -2;
     if (distance > 5000) return -1;
     if (distance > 2000) return 0;
@@ -693,22 +1791,20 @@ export class Sidebar {
   }
 
   private calculateAnimationDuration(distance: number): number {
-    // Base duration in seconds
     const baseDuration = 1.2;
-    // Additional duration based on distance and zoom difference
     const distanceFactor = Math.min(distance / 5000, 1);
-    const currentZoom = this.map.getZoom();
+    const currentZoom = this.map?.getZoom() || 0;
     const targetZoom = this.calculateOptimalZoom(distance);
     const zoomDiff = Math.abs(currentZoom - targetZoom);
-    const zoomFactor = Math.min(zoomDiff / 3, 1); // Normalize zoom difference
+    const zoomFactor = Math.min(zoomDiff / 3, 1);
 
-    // Combine distance and zoom factors
     return baseDuration + distanceFactor * 1.5 + zoomFactor * 0.8;
   }
 
   private async toggleMarkerVisibility(
     locationName: string,
-    toggleElement: HTMLElement
+    toggleElement: HTMLElement,
+    coords?: [number, number]
   ): Promise<void> {
     const markerElement = toggleElement.closest(".location-item");
     const index = markerElement
@@ -723,13 +1819,10 @@ export class Sidebar {
     const markerKey =
       index !== undefined ? `${locationName}-${index}` : locationName;
     const isVisible = this.visibleMarkers.has(markerKey);
-
-    // Find the specific marker
     const marker = this.markers.find((m) => {
       const pos = m.getLatLng();
       const markerContent = m.getTooltip()?.getContent();
       if (index !== undefined) {
-        // For multi-location items, match both position and index
         return markerContent?.includes(`${locationName} #${index + 1}`);
       }
       return markerContent === locationName;
@@ -739,35 +1832,59 @@ export class Sidebar {
       const markerElement = marker.getElement();
       if (markerElement) {
         if (isVisible) {
-          // Hide marker
-          markerElement.style.display = "none";
-          if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0,
-              fillOpacity: 0,
-            });
-          }
           this.visibleMarkers.delete(markerKey);
+          markerElement.classList.add("marker-hidden");
           toggleElement.textContent = "visibility_off";
           toggleElement.classList.add("hidden");
-        } else {
-          // Show marker
-          markerElement.style.display = "";
+          
           if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0.6,
-              fillOpacity: 0.2,
-            });
+            const circleElement = (marker as any).uncertaintyCircle._path;
+            if (circleElement) {
+              circleElement.classList.add("circle-hidden");
+            } else {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0,
+                fillOpacity: 0
+              });
+            }
           }
+        } else {
           this.visibleMarkers.add(markerKey);
+          markerElement.classList.remove("marker-hidden");
           toggleElement.textContent = "visibility";
           toggleElement.classList.remove("hidden");
+          
+          if ((marker as any).uncertaintyCircle) {
+            const circleElement = (marker as any).uncertaintyCircle._path;
+            if (circleElement) {
+              circleElement.classList.remove("circle-hidden");
+            } else {
+              (marker as any).uncertaintyCircle.setStyle({
+                opacity: 0.6,
+                fillOpacity: 0.2
+              });
+            }
+          }
+          
+          // Force a redraw by repositioning the marker at its current position
+          const currentPos = marker.getLatLng();
+          marker.setLatLng(currentPos);
         }
       }
     }
 
-    // Update category visibility state
-    this.updateCategoryVisibility(toggleElement);
+    if (this.visibilityMiddleware) {
+      await this.visibilityMiddleware.setMarkerVisibility(markerKey, !isVisible);
+      
+      // If toggling to visible, force a redraw via custom event for immediate visibility
+      if (!isVisible) {
+        forceMarkerRedraw(markerKey);
+      }
+    }
+
+    if (!this.visibilityMiddleware) {
+      this.saveVisibilityState();
+    }
   }
 
   private async toggleCategoryVisibility(
@@ -778,12 +1895,10 @@ export class Sidebar {
     const isVisible = this.visibleCategories.has(category);
 
     if (isVisible) {
-      // Hide category and all its items
       this.visibleCategories.delete(category);
       toggle.textContent = "visibility_off";
       toggle.classList.add("hidden");
 
-      // Update all visibility toggles in this category
       const categoryElement = toggle.closest(".category");
       const allToggles =
         categoryElement?.querySelectorAll(".visibility-toggle");
@@ -792,7 +1907,6 @@ export class Sidebar {
         t.classList.add("hidden");
       });
 
-      // Remove all markers in this category from visible set
       items.forEach((item) => {
         this.visibleMarkers.delete(item.name);
         if (Array.isArray(item.coordinates[0])) {
@@ -801,7 +1915,6 @@ export class Sidebar {
           });
         }
 
-        // Update markers visibility
         this.markers.forEach((marker) => {
           const markerName = marker
             .getTooltip()
@@ -811,18 +1924,27 @@ export class Sidebar {
           if (markerName === item.name) {
             const element = marker.getElement();
             if (element) {
-              element.style.display = "none";
+              element.classList.add("marker-hidden");
+              if ((marker as any).uncertaintyCircle) {
+                const circleElement = (marker as any).uncertaintyCircle._path;
+                if (circleElement) {
+                  circleElement.classList.add("circle-hidden");
+                } else {
+                  (marker as any).uncertaintyCircle.setStyle({
+                    opacity: 0,
+                    fillOpacity: 0
+                  });
+                }
+              }
             }
           }
         });
       });
     } else {
-      // Show category and all its items
       this.visibleCategories.add(category);
       toggle.textContent = "visibility";
       toggle.classList.remove("hidden");
 
-      // Update all visibility toggles in this category
       const categoryElement = toggle.closest(".category");
       const allToggles =
         categoryElement?.querySelectorAll(".visibility-toggle");
@@ -831,7 +1953,6 @@ export class Sidebar {
         t.classList.remove("hidden");
       });
 
-      // Add all markers in this category to visible set
       items.forEach((item) => {
         this.visibleMarkers.add(item.name);
         if (Array.isArray(item.coordinates[0])) {
@@ -840,7 +1961,6 @@ export class Sidebar {
           });
         }
 
-        // Update markers visibility
         this.markers.forEach((marker) => {
           const markerName = marker
             .getTooltip()
@@ -850,11 +1970,46 @@ export class Sidebar {
           if (markerName === item.name) {
             const element = marker.getElement();
             if (element) {
-              element.style.display = "";
+              element.classList.remove("marker-hidden");
+
+              if ((marker as any).uncertaintyCircle) {
+                const circleElement = (marker as any).uncertaintyCircle._path;
+                if (circleElement) {
+                  circleElement.classList.remove("circle-hidden");
+                } else {
+                  (marker as any).uncertaintyCircle.setStyle({
+                    opacity: 0.6, 
+                    fillOpacity: 0.2
+                  });
+                }
+              }
+              
+              // Force marker to redraw by refreshing its position
+              marker.setLatLng(marker.getLatLng());
             }
           }
         });
       });
+    }
+
+    if (this.visibilityMiddleware) {
+      // Always pass the current visibility state to the middleware
+      await this.visibilityMiddleware.setCategoryVisibility(category, !isVisible);
+      
+      // Also update all markers in this category
+      for (const item of items) {
+        if (Array.isArray(item.coordinates[0])) {
+          for (let index = 0; index < (item.coordinates as [number, number][]).length; index++) {
+            await this.visibilityMiddleware.setMarkerVisibility(`${item.name}-${index}`, !isVisible);
+          }
+        } else {
+          await this.visibilityMiddleware.setMarkerVisibility(item.name, !isVisible);
+        }
+      }
+    }
+
+    if (!this.visibilityMiddleware) {
+      this.saveVisibilityState();
     }
   }
 
@@ -866,12 +2021,10 @@ export class Sidebar {
     const coordinates = item.coordinates as [number, number][];
 
     if (isVisible) {
-      // Hide main item and all child markers
       this.visibleMarkers.delete(item.name);
       toggle.textContent = "visibility_off";
       toggle.classList.add("hidden");
 
-      // Update child toggles
       const itemElement = toggle.closest("[data-name]");
       const childToggles = itemElement?.querySelectorAll(
         ".location-item .visibility-toggle"
@@ -881,12 +2034,10 @@ export class Sidebar {
         t.classList.add("hidden");
       });
 
-      // Remove individual coordinate markers from visible set
       coordinates.forEach((_, index) => {
         this.visibleMarkers.delete(`${item.name}-${index}`);
       });
 
-      // Update marker visibility
       this.markers.forEach((marker) => {
         const markerName = marker
           .getTooltip()
@@ -896,24 +2047,27 @@ export class Sidebar {
         if (markerName === item.name) {
           const element = marker.getElement();
           if (element) {
-            element.style.display = "none";
-          }
-          // Hide uncertainty circle if it exists
-          if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0,
-              fillOpacity: 0,
-            });
+            element.classList.add("marker-hidden");
+            
+            if ((marker as any).uncertaintyCircle) {
+              const circleElement = (marker as any).uncertaintyCircle._path;
+              if (circleElement) {
+                circleElement.classList.add("circle-hidden");
+              } else {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0,
+                  fillOpacity: 0
+                });
+              }
+            }
           }
         }
       });
     } else {
-      // Show main item and all child markers
       this.visibleMarkers.add(item.name);
       toggle.textContent = "visibility";
       toggle.classList.remove("hidden");
 
-      // Update child toggles
       const itemElement = toggle.closest("[data-name]");
       const childToggles = itemElement?.querySelectorAll(
         ".location-item .visibility-toggle"
@@ -923,12 +2077,10 @@ export class Sidebar {
         t.classList.remove("hidden");
       });
 
-      // Add individual coordinate markers to visible set
       coordinates.forEach((_, index) => {
         this.visibleMarkers.add(`${item.name}-${index}`);
       });
 
-      // Update marker visibility
       this.markers.forEach((marker) => {
         const markerName = marker
           .getTooltip()
@@ -938,17 +2090,35 @@ export class Sidebar {
         if (markerName === item.name) {
           const element = marker.getElement();
           if (element) {
-            element.style.display = "";
-          }
-          // Show uncertainty circle if it exists
-          if ((marker as any).uncertaintyCircle) {
-            (marker as any).uncertaintyCircle.setStyle({
-              opacity: 0.6,
-              fillOpacity: 0.2,
-            });
+            element.classList.remove("marker-hidden");
+
+            if ((marker as any).uncertaintyCircle) {
+              const circleElement = (marker as any).uncertaintyCircle._path;
+              if (circleElement) {
+                circleElement.classList.remove("circle-hidden");
+              } else {
+                (marker as any).uncertaintyCircle.setStyle({
+                  opacity: 0.6, 
+                  fillOpacity: 0.2
+                });
+              }
+            }
+            
+            // Force marker to redraw by refreshing its position
+            marker.setLatLng(marker.getLatLng());
           }
         }
       });
+    }
+
+    if (this.visibilityMiddleware) {
+      for (let index = 0; index < coordinates.length; index++) {
+        await this.visibilityMiddleware.setMarkerVisibility(`${item.name}-${index}`, !isVisible);
+      }
+    }
+
+    if (!this.visibilityMiddleware) {
+      this.saveVisibilityState();
     }
   }
 
@@ -956,11 +2126,8 @@ export class Sidebar {
     marker: Location & { type: string }
   ): Promise<void> {
     await this.ensureInitialized();
-
-    // Add to locations array
     this.locations.push(marker);
 
-    // Find custom category (it should always exist)
     const customCategory = this.element.querySelector(
       '[data-category="custom"]'
     );
@@ -971,54 +2138,50 @@ export class Sidebar {
           categoryContent.innerHTML = "";
         }
         this.createLocationItem(marker, categoryContent);
+        this.visibleMarkers.add(marker.name);
+        this.visibleCategories.add("custom");
       }
     }
-
-    // Make marker visible by default
-    this.visibleMarkers.add(marker.name);
-    this.visibleCategories.add("custom");
   }
 
   private initializeElements(): void {
-    // Get references to DOM elements
     this.titleEl = this.element.querySelector(".location-title") as HTMLElement;
-    this.descEl = this.element.querySelector(
-      ".location-description"
-    ) as HTMLElement;
-    this.coordEl = this.element.querySelector(
-      ".coordinates-display"
-    ) as HTMLElement;
-    this.imgEl = this.element.querySelector(
-      "#sidebar-image"
-    ) as HTMLImageElement;
+    this.descEl = this.element.querySelector(".location-description") as HTMLElement;
+    this.coordEl = this.element.querySelector(".coordinates-display") as HTMLElement;
+    this.imgEl = this.element.querySelector("#sidebar-image") as HTMLImageElement;
     this.imageModal = document.querySelector("#image-modal") as HTMLElement;
-    this.modalImage = document.querySelector(
-      "#modal-image"
-    ) as HTMLImageElement;
+    this.modalImage = document.querySelector("#modal-image") as HTMLImageElement;
     this.modalTitle = document.querySelector(".modal-title") as HTMLElement;
-    this.modalDescription = document.querySelector(
-      ".modal-description"
-    ) as HTMLElement;
+    this.modalDescription = document.querySelector(".modal-description") as HTMLElement;
     this.closeButton = document.querySelector(".close-button") as HTMLElement;
-    this.locationDrawer = this.element.querySelector(
-      ".location-drawer"
-    ) as HTMLElement;
+    this.locationDrawer = this.element.querySelector(".location-drawer") as HTMLElement;
+    
+    // Add CSS for internal links
+    const linkStyles = document.createElement('style');
+    linkStyles.textContent = `
+      .internal-link {
+        color: #2196f3; /* Lighter blue color for links */
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      
+      .internal-link:hover {
+        color: #0d8bf2;
+        text-decoration: underline;
+      }
+    `;
+    document.head.appendChild(linkStyles);
   }
 
   private updateCategoryVisibility(toggleElement: HTMLElement): void {
     const categoryElement = toggleElement.closest(".category");
     if (!categoryElement) return;
-
     const category = categoryElement.getAttribute("data-category");
     if (!category) return;
-
-    // Check if all items in category are hidden
     const itemToggles = categoryElement.querySelectorAll(".visibility-toggle");
     const allHidden = Array.from(itemToggles).every((t) =>
       t.classList.contains("hidden")
     );
-
-    // Update category visibility toggle
     const categoryToggle = categoryElement.querySelector(
       ".category-header .visibility-toggle"
     );
@@ -1036,252 +2199,218 @@ export class Sidebar {
   }
 
   private createTabInterface(): void {
-    // Create tabs container
+    // Find the tab system container
+    const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
+    if (!tabSystem) return;
+    
+    // Check if tabs already exist and clear them to prevent duplicates
+    const existingTabs = tabSystem.querySelector(".sidebar-tabs");
+    if (existingTabs) {
+      existingTabs.remove();
+    }
+
+    // Create fresh tab elements
     const tabsContainer = document.createElement("div");
     tabsContainer.className = "sidebar-tabs";
 
-    // Create location tab
     const locationTab = document.createElement("button");
     locationTab.className = "sidebar-tab active";
-    locationTab.innerHTML =
-      '<span class="material-icons">place</span>Location Info';
+    locationTab.innerHTML = '<span class="material-icons">place</span>Location Info';
 
-    // Create drops tab
-    const dropsTab = document.createElement("button");
-    dropsTab.className = "sidebar-tab";
-    dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Drops';
+    const dropsTab = document.createElement("a");
+    dropsTab.className = "sidebar-tab external-link";
+    dropsTab.href = "https://www.appsheet.com/start/38410899-f3a8-4362-9312-921cd89718ca";
+    dropsTab.target = "_blank";
+    dropsTab.rel = "noopener noreferrer";
+    dropsTab.innerHTML = '<span class="material-icons">inventory_2</span>Items';
 
-    // Get existing content containers
-    const locationContent = this.element.querySelector(
-      ".sidebar-content.location-info"
-    ) as HTMLElement;
-    const dropsContent = document.createElement("div");
-    dropsContent.className = "sidebar-content drops-content";
-
-    // Add event listeners for tabs
-    tabsContainer.addEventListener("click", (e) => {
-      const target = e.target as HTMLElement;
-      const tab = target.closest(".sidebar-tab");
-      if (!tab) return;
-
-      // Update tab states
-      tabsContainer
-        .querySelectorAll(".sidebar-tab")
-        .forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-
-      // Update content visibility
-      const isDrops = tab === dropsTab;
-      locationContent.classList.toggle("active", !isDrops);
-      dropsContent.classList.toggle("active", isDrops);
-    });
-
-    // Assemble tabs section
     tabsContainer.appendChild(locationTab);
     tabsContainer.appendChild(dropsTab);
 
-    // Find the tab system container
-    const tabSystem = this.element.querySelector(".tab-system") as HTMLElement;
+    // Find the location content element
+    const locationContent = this.element.querySelector(
+      ".sidebar-content.location-info"
+    ) as HTMLElement;
 
-    // Insert tabs and drops content
+    // Insert the tabs container
     tabSystem.insertBefore(tabsContainer, tabSystem.firstChild);
-    tabSystem.appendChild(dropsContent);
 
-    // Store references
-    this.dropsContent = dropsContent;
+    // Store reference to location content
     this.locationContent = locationContent;
   }
 
-  private async toggleDropLocations(item: ItemDrop): Promise<void> {
-    // Reset all markers to visible first
-    this.resetMarkersVisibility();
-
-    // Get locations that can drop this item
-    const dropLocations = findDropLocations(item, this.locations);
-    const dropLocationNames = new Set(dropLocations.map((l) => l.name));
-
-    // Hide markers that don't drop this item
-    this.markers.forEach((marker) => {
-      const markerElement = marker.getElement();
-      if (!markerElement) return;
-
-      const markerLocation = markerElement.getAttribute("data-location");
-      if (markerLocation && !dropLocationNames.has(markerLocation)) {
-        markerElement.style.display = "none";
-        if ((marker as any).uncertaintyCircle) {
-          (marker as any).uncertaintyCircle.setStyle({
-            opacity: 0,
-            fillOpacity: 0,
-          });
-        }
-      }
-    });
+  // Add navigation controls for complex locations with multiple points
+  private addComplexLocationNavigation(location: Location & { type: string }, currentIndex: number): void {
+    // Remove any existing navigation
+    const existingNav = this.element.querySelector('.complex-location-nav');
+    if (existingNav) {
+      existingNav.remove();
+    }
+    
+    const info = this.currentComplexCoordinateInfo;
+    if (!info) return;
+    
+    // Create navigation container
+    const navContainer = document.createElement('div');
+    navContainer.className = 'complex-location-nav';
+    navContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px;
+      margin: 8px 0;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    `;
+    
+    // Previous button
+    if (currentIndex > 0) {
+      const prevBtn = document.createElement('button');
+      prevBtn.innerHTML = '◀ Previous';
+      prevBtn.style.cssText = `
+        background: rgba(0, 0, 0, 0.3);
+        border: none;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+      `;
+      prevBtn.addEventListener('click', () => {
+        this.navigateToComplexPoint(location, currentIndex - 1);
+      });
+      navContainer.appendChild(prevBtn);
+    }
+    
+    // Point indicator
+    const indicator = document.createElement('span');
+    indicator.textContent = `Point ${currentIndex + 1} of ${info.totalPoints}`;
+    indicator.style.cssText = `
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.8);
+    `;
+    navContainer.appendChild(indicator);
+    
+    // Next button
+    if (currentIndex < info.totalPoints - 1) {
+      const nextBtn = document.createElement('button');
+      nextBtn.innerHTML = 'Next ▶';
+      nextBtn.style.cssText = `
+        background: rgba(0, 0, 0, 0.3);
+        border: none;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+      `;
+      nextBtn.addEventListener('click', () => {
+        this.navigateToComplexPoint(location, currentIndex + 1);
+      });
+      navContainer.appendChild(nextBtn);
+    }
+    
+    // Insert after the title
+    this.titleEl.parentNode?.insertBefore(navContainer, this.titleEl.nextSibling);
   }
 
-  private resetMarkersVisibility(): void {
-    this.markers.forEach((marker) => {
-      const markerElement = marker.getElement();
-      if (!markerElement) return;
-
-      markerElement.style.display = "";
-      if ((marker as any).uncertaintyCircle) {
-        (marker as any).uncertaintyCircle.setStyle({
-          opacity: 0.6,
-          fillOpacity: 0.2,
-        });
+  // Navigate between points in a complex location
+  private navigateToComplexPoint(location: Location & { type: string }, index: number): void {
+    console.log(`Navigating to complex point index ${index} for ${location.name}`);
+  
+    if (!location.coordinates || index < 0 || index >= location.coordinates.length) {
+      console.warn(`Invalid index ${index} for location ${location.name}`);
+      return;
+    }
+    
+    // Extract coordinates based on location format
+    let coords: [number, number] | null = null;
+    
+    // Check for complex coordinate structure with nested coordinates property
+    if (typeof location.coordinates[0] === 'object' && !Array.isArray(location.coordinates[0])) {
+      const coordItem = location.coordinates[index] as any;
+      
+      if (coordItem && coordItem.coordinates && Array.isArray(coordItem.coordinates) && 
+          coordItem.coordinates.length === 2) {
+        coords = coordItem.coordinates as [number, number];
+        console.log(`Extracted nested coordinates: [${coords[0]}, ${coords[1]}]`);
       }
-    });
-  }
-
-  private getRarityColor(rarity: string): string {
-    const rarityLower = rarity.toLowerCase();
-    switch (rarityLower) {
-      case "common":
-        return "#9e9e9e";
-      case "uncommon":
-        return "#4CAF50";
-      case "rare":
-        return "#2196F3";
-      case "quest":
-        return "#9C27B0";
-      default:
-        return "#f44336";
+    }
+    // Check for array of coordinate pairs
+    else if (Array.isArray(location.coordinates[0])) {
+      coords = location.coordinates[index] as [number, number];
+      console.log(`Extracted array coordinates: [${coords[0]}, ${coords[1]}]`);
+    }
+    
+    // Validate coordinates before proceeding
+    if (!coords || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
+      console.error(`Failed to extract valid coordinates for ${location.name} at index ${index}`);
+      return;
+    }
+    
+    // Set a navigation lock flag to prevent recursive navigation
+    window.complexNavigationInProgress = true;
+    
+    try {
+      this.handleLocationClick(coords, location, index);
+    } finally {
+      // Clear the flag after a short delay
+      setTimeout(() => {
+        window.complexNavigationInProgress = false;
+      }, 50);
     }
   }
 
-  private getLinkColor(source: string): string {
-    const matchingLocation = this.locations.find(
-      (loc) => loc.name.toLowerCase() === source.toLowerCase()
-    );
-    return (
-      matchingLocation?.iconColor || (matchingLocation ? "#4CAF50" : "#9e9e9e")
-    );
-  }
-
-  private async createDropsInterface(): Promise<void> {
-    const drops = await loadDrops();
-    
-    Object.entries(drops).forEach(([category, items]) => {
-      const categoryContainer = document.createElement('div');
-      categoryContainer.className = 'drops-category';
-      
-      const categoryHeader = document.createElement('div');
-      categoryHeader.className = 'drops-category-header';
-      
-      categoryHeader.innerHTML = `
-        <div class="category-title">
-          <span>${category}</span>
-          <span class="item-count">(${items.length})</span>
-        </div>
-        <i class="fa-solid fa-chevron-down"></i>
-      `;
-      
-      const itemsList = document.createElement('div');
-      itemsList.className = 'drops-items collapsed';
-      
-      items.forEach(item => {
-        const itemElement = document.createElement('div');
-        itemElement.className = 'drop-item';
+  // Separated link handling into its own method for better organization
+  private setupLinkHandlers(): void {
+    // Add click handlers to internal links
+    const internalLinks = this.descEl.querySelectorAll('.internal-link');
+    internalLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const href = (link as HTMLAnchorElement).href;
+        const url = new URL(href);
         
-        const headerElement = document.createElement('div');
-        headerElement.className = 'drop-header';
-  
-        // Create icon element based on icon type
-        let iconHtml = '';
-        if (item.icon) {
-          if (item.icon.startsWith('fa-')) {
-            const size = item.iconSize || 1;
-            iconHtml = `<i class="${item.icon}" style="font-size: ${24 * size}px; color: ${item.iconColor || '#FFFFFF'}; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);"></i>`;
-          } else {
-            const size = item.iconSize || 1;
-            iconHtml = `<img src="${item.icon}.svg" style="width: ${24 * size}px; height: ${24 * size}px;" alt="">`;
-          }
+        // Bypass the history navigation flag to ensure links always work
+        window.isHandlingHistoryNavigation = false;
+        
+        // Check if this is an internal link (same origin or relative URL)
+        const isSameOrigin = url.origin === window.location.origin;
+        if (isSameOrigin && window.handleInternalLink) {
+          window.handleInternalLink(url);
         } else {
-          // Default icon if none specified
-          iconHtml = `<i class="fa-solid fa-box" style="color: ${item.iconColor || '#FFFFFF'}"></i>`;
+          // For external links, use normal navigation
+          window.open(href, '_blank', 'noopener,noreferrer');
         }
-  
-        headerElement.innerHTML = `
-          <div class="drop-icon">
-            ${iconHtml}
-          </div>
-          <div class="drop-title">${item.name}</div>
-          <i class="fa-solid fa-chevron-down"></i>
-        `;
-  
-        const detailsElement = document.createElement('div');
-        detailsElement.className = 'drop-details';
-        detailsElement.innerHTML = `
-          <div class="drop-description">${item.description}</div>
-          <div class="drop-info-grid">
-            <div class="drop-type">Type: ${item.type}</div>
-            <div class="drop-rarity">
-              <span class="rarity-badge" style="background-color: ${this.getRarityColor(item.rarity)}">
-                ${item.rarity}
-              </span>
-            </div>
-          </div>
-          <div class="drop-sources">
-            <div class="sources-title">Sources:</div>
-            <div class="sources-list">
-              ${item.sources.map(source => {
-                const linkColor = this.getLinkColor(source);
-                const isClickable = this.locations.some(loc => 
-                  loc.name.toLowerCase() === source.toLowerCase()
-                );
-                return `
-                  <a href="#" 
-                     class="source-link ${isClickable ? 'clickable' : ''}" 
-                     data-source="${source}"
-                     style="color: ${linkColor}; border-color: ${linkColor}">
-                    ${source}
-                  </a>`;
-              }).join('')}
-            </div>
-          </div>
-        `;
-  
-        // Rest of the existing code...
-        itemElement.appendChild(headerElement);
-        itemElement.appendChild(detailsElement);
+      });
+    });
+
+    // Add click handlers to coordinate links
+    const coordLinks = this.descEl.querySelectorAll('.coordinate-link');
+    coordLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
         
-        // Existing event listeners...
-        headerElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          itemElement.classList.toggle('active');
-          const chevron = headerElement.querySelector('.fa-chevron-down');
-          if (chevron) {
-            chevron.classList.toggle('rotated');
-          }
-          
-          if (itemElement.classList.contains('active')) {
-            itemsList.querySelectorAll('.drop-item').forEach(el => {
-              if (el !== itemElement) {
-                el.classList.remove('active');
-                el.querySelector('.fa-chevron-down')?.classList.remove('rotated');
-              }
-            });
-            this.toggleDropLocations(item);
-          } else {
-            this.resetMarkersVisibility();
-          }
-        });
-  
-        itemsList.appendChild(itemElement);
-      });
-  
-      // Category collapse/expand functionality
-      categoryHeader.addEventListener('click', () => {
-        itemsList.classList.toggle('collapsed');
-        const chevron = categoryHeader.querySelector('.fa-chevron-down');
-        if (chevron) {
-          chevron.classList.toggle('rotated');
+        // Extract coordinates from data attributes
+        const x = parseInt(link.getAttribute('data-x') || '0', 10);
+        const y = parseInt(link.getAttribute('data-y') || '0', 10);
+        
+        if (isNaN(x) || isNaN(y)) return;
+        
+        // Bypass the history navigation flag to ensure coordinate links always work
+        window.isHandlingHistoryNavigation = false;
+        
+        // Use coordinate navigation 
+        if (window.navigateToCoordinates) {
+          window.navigateToCoordinates([x, y]);
+        } else if (window.handleInternalLink) {
+          // Fallback to URL-based navigation
+          const url = new URL(`${window.location.origin}${window.location.pathname}?coord=${x},${y}`);
+          window.handleInternalLink(url);
+        } else {
+          // Last resort - update URL directly
+          window.location.href = `?coord=${x},${y}`;
         }
       });
-      
-      categoryContainer.appendChild(categoryHeader);
-      categoryContainer.appendChild(itemsList);
-      this.dropsContent.appendChild(categoryContainer);
     });
   }
 }

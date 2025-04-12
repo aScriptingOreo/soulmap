@@ -180,3 +180,6 @@ node_modules
 deployment/hooks.dev.json
 deployment/hooks.json
 dist
+
+# discordbot
+discord_bot/data

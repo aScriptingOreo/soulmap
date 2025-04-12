@@ -1,0 +1,11 @@
+
+name: "OOB Entrypoint"
+coordinates: 
+  - coordinates: [4905, 6748]
+    mediaUrl: "https://youtu.be/7hUJEpCjf2o"
+    description: "There should be a gap in the geometry, simply walk all the way down and you're out!"
+  
+description: ""
+icon: "fa-solid fa-exclamation"
+iconSize: 1.25
+iconColor: "#FF0000"
