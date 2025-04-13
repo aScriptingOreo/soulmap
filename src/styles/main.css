@@ -2929,3 +2929,30 @@ background: rgba(255, 255, 255, 0.2);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
 }
+
+.database-update-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(33, 150, 243, 0.9);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 4px;
+  z-index: 9999;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  animation: slide-in 0.3s ease-out;
+}
+
+.database-update-notification.fade-out {
+  animation: fade-out 1s ease-out forwards;
+}
+
+@keyframes slide-in {
+  0% { transform: translateX(100%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}

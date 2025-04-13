@@ -183,3 +183,6 @@ dist
 
 # discordbot
 discord_bot/data
+
+# pgdb
+database/

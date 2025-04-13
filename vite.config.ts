@@ -1,20 +1,29 @@
 // vite.config.ts
 import { defineConfig } from 'vite';
+import { resolve } from 'path';
 import yaml from '@rollup/plugin-yaml';
+import glob from 'vite-plugin-glob';
 import fs from 'fs';
 import path from 'path';
 
 export default defineConfig({
   root: path.resolve(__dirname, 'src'),  // Set root to src directory
-  publicDir: path.resolve(__dirname, 'res'), // Keep res as public dir
+  publicDir: '../res', // Set public directory relative to root
   build: {
-    outDir: '../dist',  // Output to parent dist directory
+    outDir: '../dist',  // Output to dist directory in project root
     emptyOutDir: true,
+    copyPublicDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'src/index.html')
+      }
+    }
   },
   plugins: [
     yaml({
       include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
     }),
+    glob(),
     {
       // Add this plugin to handle icon caching
       name: 'svg-cache-control',
@@ -127,10 +136,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      'res': path.resolve(__dirname, './res')
-    },
-    extensions: ['.js', '.ts', '.json', '.yaml', '.yml', '.png']
+      '@': resolve(__dirname, 'src')
+    }
   },
   server: {
     fs: {

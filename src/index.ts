@@ -1,6 +1,6 @@
 // src/index.ts
 import { marked } from 'marked';
-import { loadLocations, clearLocationsCache } from './loader';
+import { loadLocations, clearLocationsCache, setupDatabaseChangeListener } from './loader';
 import { initializeMap, updateMetaTags, getMap } from './map';
 import { clearTileCache } from './gridLoader';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
@@ -33,6 +33,36 @@ function handleOnlineStatusChange() {
 
 function updateOfflineIndicator() {
   offlineIndicator.style.display = isOfflineMode ? 'flex' : 'none';
+}
+
+// Add missing showError function
+function showError(message: string) {
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'error-message';
+  errorDiv.textContent = message;
+  document.body.appendChild(errorDiv);
+  console.error(message);
+  
+  // Remove after a few seconds
+  setTimeout(() => {
+    errorDiv.remove();
+  }, 5000);
+}
+
+// Add missing showNotification function
+function showNotification(message: string, type: string = 'info') {
+  const notificationDiv = document.createElement('div');
+  notificationDiv.className = `notification ${type}`;
+  notificationDiv.textContent = message;
+  document.body.appendChild(notificationDiv);
+  
+  // Remove after a few seconds
+  setTimeout(() => {
+    notificationDiv.classList.add('fade-out');
+    setTimeout(() => {
+      notificationDiv.remove();
+    }, 1000);
+  }, 4000);
 }
 
 // Extract the greeting loading into a separate function that can be reused
@@ -139,50 +169,47 @@ async function checkForUpdates() {
 }
 
 async function initMain() {
-    try {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) {
-            loadingOverlay.style.display = 'flex';
+  try {
+    console.log('Starting application initialization...');
+    
+    // Load map locations
+    console.log('Loading locations...');
+    const locations = await loadLocations(isOfflineMode);
+    
+    console.log(`Loaded ${locations ? locations.length : 0} locations`);
+    
+    // Check if we have any locations
+    if (!locations || locations.length === 0) {
+      console.warn('No locations loaded from API. Using default locations instead.');
+      // Use some default locations to prevent the map from failing to initialize
+      const defaultLocations = [
+        {
+          name: "Starting Point",
+          coordinates: [500, 500],
+          description: "Default location when no data is available.",
+          type: "default"
         }
-
-        // Check for updates first (will skip if offline)
-        await checkForUpdates();
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        const debug = urlParams.get('debug') === 'true';
-        
-        // Load locations with progress display - passing offline flag
-        const locations = await loadLocations(isOfflineMode).catch(error => {
-            console.error("Failed to load locations:", error);
-            return [];
-        });
-
-        if (locations.length > 0) {
-            // Initialize the map with locations - this also initializes the sidebar
-            const map = await initializeMap(locations);
-            
-            // If map initialization failed, nothing more to do as the map.ts
-            // will display an appropriate error message
-            if (!map) {
-                console.error("Map initialization failed");
-            }
-        } else {
-            throw new Error("No locations loaded. Map initialization aborted.");
-        }
-    } catch (error) {
-        console.error("Failed to initialize application:", error);
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) {
-            loadingOverlay.innerHTML = `
-                <div class="loading-container">
-                    <div class="loading-text">Error Loading Application</div>
-                    <div class="error-message">${error?.message || 'Unknown error'}</div>
-                    <button onclick="location.reload()">Retry</button>
-                </div>
-            `;
-            loadingOverlay.style.display = 'flex';
-        }
+      ];
+      
+      // Initialize the map with default locations
+      console.log('Initializing map with default locations');
+      initializeMap(defaultLocations);
+      
+      // Show a notification to the user
+      showNotification('No location data available. Please check server connection.', 'warning');
+      
+      return;
     }
+    
+    // Initialize the map with the loaded locations
+    console.log(`Initializing map with ${locations.length} loaded locations`);
+    initializeMap(locations);
+    
+  } catch (error) {
+    console.error('Failed to load locations:', error);
+    showError('Failed to initialize application. Please try again later.');
+    throw new Error('No locations loaded. Map initialization aborted.');
+  }
 }
 
 // Create a custom event for URL changes
