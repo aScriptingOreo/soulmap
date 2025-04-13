@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Discord bot location requests table
+model DiscordLocationRequest {
+  id            String    @id @default(uuid())
+  messageId     String    @unique @map("message_id")
+  userId        String    @map("user_id")
+  coordinates   String
+  description   String
+  screenshotUrl String?   @map("screenshot_url")
+  status        String    @default("pending")
+  reason        String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("discord_location_requests")
+}
+
+// Discord bot leaderboard info table
+model DiscordLeaderboardInfo {
+  id        Int       @id
+  messageId String?   @map("message_id")
+  channelId String?   @map("channel_id")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("discord_leaderboard_info")
+}

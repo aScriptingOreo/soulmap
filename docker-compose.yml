@@ -20,43 +20,46 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     ports:
       - "5173:5173"  # Client port
-      - "3000:3000"  # API port
+      #- "3000:3000"  # API port
     networks:
+      - proxy
       - default
     restart: always
-#labels:
-    #  - traefik.enable=true
-    #  - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
-    #  - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
-    #  - traefik.http.routers.soulmap-nossl.service=soulmap
-    #  - traefik.http.routers.soulmap-nossl.entrypoints=http
-    #  - traefik.http.services.soulmap.loadbalancer.server.port=5173
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
+      - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
+      - traefik.http.routers.soulmap-nossl.service=soulmap
+      - traefik.http.routers.soulmap-nossl.entrypoints=http
+      - traefik.http.services.soulmap.loadbalancer.server.port=5173
     depends_on:
       sm-pg:
         condition: service_healthy
   
-  #soulmapbot:
-  #  build:
-  #    context: ./discord_bot/
-  #    dockerfile: Dockerfile
-  #  container_name: soulmapbot
-  #  command: npm run dev
-  #  environment:
-  #    - DISCORD_TOKEN=${discord_bot_token}
-  #    - CHANNEL_ID=1359034600969601234 
-  #    - ADMIN_ROLE_ID=1310672502355267697
-  #    - DATABASE_URL=${DATABASE_URL}
-  #  volumes:
-  #    - ./discord_bot/data:/app/data
-  #    - ./discord_bot/index.js:/app/index.js
-  #    - ./discord_bot/package.json:/app/package.json
-  #    - ./discord_bot/database.js:/app/database.js
-  #    - ./src/mapversion.yml:/app/src/mapversion.yml
-  #  restart: always
-  #  networks:
-  #    - default
-  #  depends_on:
-  #    - postgres
+  soulmapbot:
+    build:
+      context: ./discord_bot/
+      dockerfile: Dockerfile
+    container_name: soulmapbot
+    command: npm run dev
+    environment:
+      - DISCORD_TOKEN=${discord_bot_token}
+      - CHANNEL_ID=${discord_channel_id}
+      - ADMIN_ROLE_ID=${discord_admin_role_id}
+      - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - ./discord_bot/index.js:/app/index.js
+      - ./discord_bot/database.js:/app/database.js
+      - ./discord_bot/schema.prisma:/app/schema.prisma
+      - ./discord_bot/package.json:/app/package.json
+      - ./src/mapversion.yml:/app/src/mapversion.yml
+    restart: always
+    networks:
+      - default
+    depends_on:
+      sm-pg:
+        condition: service_healthy
   
   sm-pg:
     image: postgres:latest
