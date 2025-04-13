@@ -26,110 +26,296 @@ const locationStore = localforage.createInstance({
 // Track if a refresh is currently in progress to prevent multiple simultaneous refreshes
 let refreshInProgress = false;
 
+// Create a custom event for location updates
+const LOCATIONS_UPDATED_EVENT = 'locationsUpdated';
+
+// Function to broadcast location updates to all components
+function broadcastLocationsUpdate(locations: (Location & { type: string })[]) {
+  const event = new CustomEvent(LOCATIONS_UPDATED_EVENT, { 
+    detail: { locations, timestamp: Date.now() } 
+  });
+  console.log(`Broadcasting location update with ${locations.length} locations`);
+  document.dispatchEvent(event);
+}
+
 // Setup the refresh function that can be called when database changes occur
 export async function setupDatabaseChangeListener(refreshCallback: () => Promise<void>) {
-  try {
-    // Use EventSource for Server-Sent Events - use the configured API_BASE_URL
-    const eventSource = new EventSource(`${API_BASE_URL}/listen`);
-    
-    // Track last data refresh time to prevent over-refreshing
-    let lastRefreshTime = Date.now();
-    const MIN_REFRESH_INTERVAL = 10000; // 10 seconds minimum between refreshes
-    
-    eventSource.onmessage = async (event) => {
+  let eventSource: EventSource | null = null;
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 10;
+  const INITIAL_RECONNECT_DELAY = 1000;
+  
+  // Track last data refresh time to prevent over-refreshing
+  let lastRefreshTime = Date.now();
+  const MIN_REFRESH_INTERVAL = 10000; // 10 seconds minimum between refreshes
+  
+  function connect() {
+    // Close any existing connection first
+    if (eventSource) {
       try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'change' && !refreshInProgress) {
-          // Only refresh if it's been at least MIN_REFRESH_INTERVAL since the last refresh
-          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-          if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL) {
-            console.log(`Database change detected, but last refresh was ${timeSinceLastRefresh}ms ago. Waiting...`);
-            return;
-          }
+        eventSource.close();
+      } catch (e) {
+        console.warn('Error closing previous EventSource:', e);
+      }
+      eventSource = null;
+    }
+    
+    try {
+      console.log(`Connecting to SSE endpoint: ${API_BASE_URL}/listen`);
+      eventSource = new EventSource(`${API_BASE_URL}/listen`);
+      
+      eventSource.onopen = () => {
+        console.log('SSE connection established');
+        reconnectAttempts = 0; // Reset reconnect counter on successful connection
+      };
+      
+      eventSource.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
           
-          console.log('Database change detected, refreshing locations...');
-          refreshInProgress = true;
-          
-          try {
-            // Show notification about the update
-            showDatabaseUpdateNotification();
+          if (data.type === 'connected') {
+            console.log('Successfully connected to the SSE stream');
+          } else if (data.type === 'change' && !refreshInProgress) {
+            // Only refresh if it's been at least MIN_REFRESH_INTERVAL since the last refresh
+            const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+            if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL) {
+              console.log(`Database change detected, but last refresh was ${timeSinceLastRefresh}ms ago. Waiting...`);
+              return;
+            }
             
-            lastRefreshTime = Date.now();
-            await refreshCallback();
-          } catch (error) {
-            console.error('Error refreshing locations after database change:', error);
-          } finally {
-            refreshInProgress = false;
-          }
-        } else if (data.type === 'ping' && !refreshInProgress) {
-          // For ping events, periodically check for changes (less frequently)
-          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-          
-          if (timeSinceLastRefresh > 60000) { // 1 minute minimum between hash checks
-            console.log('Checking for database changes via ping...');
+            console.log('Database change detected, refreshing locations...');
+            refreshInProgress = true;
             
             try {
-              // Fetch database hash to see if anything changed
-              const newHash = await generateDatabaseHash();
-              const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
+              // Show notification about the update
+              showDatabaseUpdateNotification();
               
-              if (cachedData && cachedData.hash !== newHash) {
-                console.log('Database change detected via hash check, refreshing locations...');
+              lastRefreshTime = Date.now();
+              
+              // Load fresh locations directly without full page refresh
+              const freshLocations = await fetchLocationsFromAPI();
+              if (freshLocations && freshLocations.length > 0) {
+                // Update the cache with new data
+                await updateLocationCache(freshLocations);
                 
-                // Show notification about the update
-                showDatabaseUpdateNotification();
-                
-                refreshInProgress = true;
-                try {
-                  lastRefreshTime = Date.now();
-                  await refreshCallback();
-                } finally {
-                  refreshInProgress = false;
-                }
+                // Broadcast the updated locations to all components
+                broadcastLocationsUpdate(freshLocations);
               }
+              
+              // Still call the original callback for backward compatibility
+              await refreshCallback();
             } catch (error) {
-              console.error('Error checking for database changes:', error);
+              console.error('Error refreshing locations after database change:', error);
+            } finally {
+              refreshInProgress = false;
+            }
+          } else if (data.type === 'ping' && !refreshInProgress) {
+            // For ping events, handle them more intelligently
+            const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+            
+            // Only check every 5 minutes to drastically reduce unnecessary refreshes
+            if (timeSinceLastRefresh > 300000) { // 5 minutes
+              console.log('Performing periodic hash check...');
+              
+              try {
+                // Fetch database hash to see if anything changed
+                const newHash = await generateDatabaseHash();
+                const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
+                
+                // Skip invalid hashes completely
+                if (!newHash || newHash.startsWith('error-')) {
+                  console.log('Skipping hash check due to invalid hash');
+                  return;
+                }
+                
+                // Compare the hashes to detect actual changes
+                if (cachedData && cachedData.hash && cachedData.hash !== newHash) {
+                  // Important: Double-check with a second hash request to avoid false positives
+                  const confirmationHash = await generateDatabaseHash();
+                  
+                  if (confirmationHash === newHash && confirmationHash !== cachedData.hash) {
+                    console.log('Database change confirmed via hash check, refreshing locations...');
+                    
+                    refreshInProgress = true;
+                    try {
+                      lastRefreshTime = Date.now();
+                      
+                      // Load fresh locations
+                      const freshLocations = await fetchLocationsFromAPI();
+                      if (freshLocations && freshLocations.length > 0) {
+                        // Update cache with new data
+                        await updateLocationCache(freshLocations);
+                        
+                        // Broadcast updated locations to components
+                        broadcastLocationsUpdate(freshLocations);
+                        
+                        // Only show notification AFTER successfully loading new data
+                        showDatabaseUpdateNotification();
+                      }
+                      
+                      // Also call original callback for backward compatibility
+                      await refreshCallback();
+                    } finally {
+                      refreshInProgress = false;
+                    }
+                  } else {
+                    console.log('Ignoring false positive hash change');
+                  }
+                } else {
+                  console.log('No database changes detected during hash check');
+                }
+              } catch (error) {
+                console.error('Error checking for database changes:', error);
+              }
             }
           }
+        } catch (error) {
+          console.error('Error parsing SSE message:', error);
         }
-      } catch (error) {
-        console.error('Error parsing SSE message:', error);
-      }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      // Reconnect after a delay
-      setTimeout(() => {
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        
+        // Close the current connection
+        if (eventSource) {
+          try {
+            eventSource.close();
+          } catch (e) {
+            // Ignore errors during cleanup
+          }
+          eventSource = null;
+        }
+        
+        // Implement exponential backoff for reconnection
+        reconnectAttempts++;
+        const delay = Math.min(
+          INITIAL_RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1),
+          60000 // Max 1 minute delay
+        );
+        
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts} of ${MAX_RECONNECT_ATTEMPTS})`);
+          setTimeout(connect, delay);
+        } else {
+          console.warn('Maximum reconnection attempts reached. Falling back to periodic refresh.');
+          
+          // Set up a fallback refresh interval
+          setInterval(async () => {
+            if (!refreshInProgress) {
+              try {
+                console.log('Performing fallback refresh check');
+                const newHash = await generateDatabaseHash();
+                const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
+                
+                if (cachedData && cachedData.hash !== newHash) {
+                  console.log('Change detected during fallback refresh');
+                  refreshInProgress = true;
+                  
+                  try {
+                    lastRefreshTime = Date.now();
+                    
+                    // Load fresh locations directly
+                    const freshLocations = await fetchLocationsFromAPI();
+                    if (freshLocations && freshLocations.length > 0) {
+                      await updateLocationCache(freshLocations);
+                      broadcastLocationsUpdate(freshLocations);
+                    }
+                    
+                    await refreshCallback();
+                  } finally {
+                    refreshInProgress = false;
+                  }
+                }
+              } catch (error) {
+                console.error('Error in fallback refresh:', error);
+              }
+            }
+          }, 30000); // Check every 30 seconds
+        }
+      };
+    } catch (error) {
+      console.error('Failed to set up database change listener:', error);
+    }
+  }
+  
+  // Start the initial connection
+  connect();
+  
+  // Return a cleanup function
+  return () => {
+    if (eventSource) {
+      console.log('Cleaning up SSE connection');
+      try {
         eventSource.close();
-        setupDatabaseChangeListener(refreshCallback);
-      }, 5000);
-    };
+      } catch (e) {
+        console.warn('Error closing EventSource during cleanup:', e);
+      }
+      eventSource = null;
+    }
+  };
+}
+
+// Function to fetch locations directly from API
+async function fetchLocationsFromAPI(): Promise<(Location & { type: string })[] | null> {
+  try {
+    console.log(`Fetching locations from API: ${API_BASE_URL}/locations`);
+    const response = await fetch(`${API_BASE_URL}/locations`);
     
-    console.log('Database change listener initialized');
+    if (!response.ok) {
+      console.error(`API request failed with status: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`API error details: ${errorText}`);
+      throw new Error(`Failed to fetch locations: ${response.statusText}`);
+    }
+    
+    const locations = await response.json();
+    console.log(`Received ${locations.length} locations from API`);
+    
+    // Normalize the location data before returning
+    const normalizedLocations = locations.filter((loc: any) => !!loc)
+      .map((loc: any) => normalizeLocationCoordinates(loc));
+    
+    return normalizedLocations;
   } catch (error) {
-    console.error('Failed to set up database change listener:', error);
+    console.error("Error fetching locations from API:", error);
+    return null;
+  }
+}
+
+// Function to update the locations cache
+async function updateLocationCache(locations: (Location & { type: string })[]): Promise<void> {
+  try {
+    const contentHash = await generateContentHash();
+    await locationStore.setItem(LOCATIONS_CACHE_KEY, {
+      hash: contentHash,
+      data: locations
+    });
+    setStoredHash(contentHash);
+    console.log(`Updated location cache with ${locations.length} locations`);
+  } catch (error) {
+    console.error('Error updating location cache:', error);
   }
 }
 
 // Show a notification when database updates are detected
 function showDatabaseUpdateNotification() {
-  // Create notification element
+  // Create notification element - MAKE THIS LESS VISIBLE
   const notification = document.createElement('div');
-  notification.className = 'database-update-notification';
-  notification.textContent = 'Map data updated!';
+  notification.className = 'database-update-notification low-priority';
+  notification.textContent = 'Map data updated';
+  notification.style.cssText = 'opacity: 0.7; font-size: 0.8em; padding: 5px 10px;';
   
   // Add to document
   document.body.appendChild(notification);
   
-  // Remove after a delay
+  // Remove after a short delay
   setTimeout(() => {
     notification.classList.add('fade-out');
     setTimeout(() => {
       notification.remove();
-    }, 1000);
-  }, 3000);
+    }, 500);
+  }, 2000); // Show for just 2 seconds instead of 3
 }
 
 // Generate a checksum of the current database state
@@ -137,13 +323,28 @@ async function generateDatabaseHash(): Promise<string> {
   try {
     const response = await fetch(`${API_BASE_URL}/locations/hash`);
     if (!response.ok) {
-      throw new Error(`Failed to fetch database hash: ${response.statusText}`);
+      console.warn(`Hash API returned error status: ${response.status}`);
+      return `error-api-${Date.now()}`;
     }
+    
     const data = await response.json();
+    
+    // Validate the hash format
+    if (!data.hash) {
+      console.warn('Invalid hash format received from API');
+      return `error-format-${Date.now()}`;
+    }
+    
+    // If the hash contains error indicators, don't process it
+    if (data.hash.startsWith('error-')) {
+      console.log(`Server reported hash generation issue: ${data.hash}`);
+      return data.hash;
+    }
+    
     return data.hash;
   } catch (error) {
     console.error('Error generating database hash:', error);
-    return Date.now().toString();
+    return `error-client-${Date.now()}`;
   }
 }
 
@@ -252,9 +453,7 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
       const locations = await response.json();
       
       console.log(`Received ${locations.length} locations from API`);
-      if (locations.length > 0) {
-        console.log(`Sample location data: ${JSON.stringify(locations[0], null, 2).substring(0, 300)}...`);
-      } else {
+      if (locations.length === 0) {
         console.warn('API returned 0 locations - this may indicate a server-side issue');
       }
       
@@ -433,3 +632,6 @@ export function determineClusterIcon(cluster: any, locationTypes: Record<string,
   // Default cluster icon
   return 'default-cluster-icon';
 }
+
+// Export the event name for other modules to listen for location updates
+export const LOCATION_UPDATE_EVENT = LOCATIONS_UPDATED_EVENT;

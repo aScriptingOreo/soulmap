@@ -11,7 +11,7 @@ import { MarkerModal } from './components/MarkerModal';
 import mapVersion from './mapversion.yml';
 import analytics from './analytics';
 // Import clustering helpers
-import { prepareLocationsForClustering, getLocationTypeGroups, determineClusterIcon } from './loader';
+import { prepareLocationsForClustering, getLocationTypeGroups, determineClusterIcon, LOCATION_UPDATE_EVENT } from './loader';
 // Add visibility middleware import
 import {
   initVisibilityMiddleware,
@@ -30,11 +30,346 @@ export let mapInitialized = false;
 export let mainMap: L.Map | null = null;
 // Create a global reference to markers 
 export let markers: L.Marker[] = [];
+// Store all loaded locations for dynamic updates
+export let loadedLocations: (Location & { type: string })[] = [];
+// Define activeMarkers at the module level, similar to markers
+export let activeMarkers: Set<L.Marker> = new Set();
 
 // Add this declaration to extend the Leaflet namespace
 declare global {
   namespace L {
     function markerClusterGroup(options?: any): any;
+  }
+}
+
+// Add reference to marker groups so we can update them later
+let markerClusterGroup: any = null;
+let regularMarkerGroup: L.LayerGroup | null = null;
+
+// Add listener for location updates
+document.addEventListener(LOCATION_UPDATE_EVENT, async (event: CustomEvent) => {
+  const updatedLocations = event.detail.locations as (Location & { type: string })[];
+  console.log(`Received location update with ${updatedLocations.length} locations`);
+  
+  if (!mainMap || !mapInitialized) {
+    console.warn('Map not initialized, cannot update markers');
+    return;
+  }
+  
+  await updateMapMarkers(updatedLocations);
+});
+
+// Function to update markers on the map without a full reload
+async function updateMapMarkers(newLocations: (Location & { type: string })[]) {
+  console.log('Updating map markers with new location data...');
+  
+  if (!mainMap) {
+    console.warn('Map not initialized, cannot update markers');
+    return;
+  }
+  
+  try {
+    // Save current map state (center, zoom)
+    const currentCenter = mainMap.getCenter();
+    const currentZoom = mainMap.getZoom();
+    
+    // Store existing marker IDs for comparison
+    const existingMarkerIds = new Set(markers.map(m => m.options.markerId));
+    const newMarkerIds = new Set<string>();
+    
+    // Create a lookup for quick access to existing markers
+    const markerLookup = new Map<string, L.Marker>();
+    markers.forEach(marker => {
+      const id = marker.options.markerId;
+      if (id) markerLookup.set(id, marker);
+    });
+    
+    // Track markers to be added and removed
+    const markersToAdd: L.Marker[] = [];
+    const markersToKeep: L.Marker[] = [];
+    const markersToRemove: L.Marker[] = [];
+    
+    // Process each new location
+    for (const location of newLocations) {
+      // Check if this is a multi-location or a location with complex coordinates
+      const isMultiLocation = Array.isArray(location.coordinates[0]) || 
+                             (typeof location.coordinates[0] === 'object' && 
+                             (location.coordinates[0] as any).coordinates);
+      
+      if (isMultiLocation) {
+        // Handle multi-location markers
+        location.coordinates.forEach((coordItem, index) => {
+          // Extract coordinates
+          let coords: [number, number] | null = null;
+          
+          if (Array.isArray(coordItem) && coordItem.length === 2) {
+            coords = coordItem as [number, number];
+          } else if (typeof coordItem === 'object' && (coordItem as any).coordinates) {
+            coords = (coordItem as any).coordinates as [number, number];
+          }
+          
+          if (!coords) return;
+          
+          // Generate marker ID
+          const markerId = `${location.name}-${index}`;
+          newMarkerIds.add(markerId);
+          
+          // Check if marker already exists
+          if (markerLookup.has(markerId)) {
+            // Keep existing marker
+            const existingMarker = markerLookup.get(markerId)!;
+            markersToKeep.push(existingMarker);
+            
+            // Update marker position if coordinates changed
+            if (existingMarker.getLatLng().lng !== coords[0] || 
+                existingMarker.getLatLng().lat !== coords[1]) {
+              existingMarker.setLatLng([coords[1], coords[0]]);
+            }
+          } else {
+            // Create new marker for this location
+            try {
+              const marker = createLocationMarker(location, coords, index);
+              if (marker) markersToAdd.push(marker);
+            } catch (e) {
+              console.error(`Error creating marker for ${location.name} at index ${index}:`, e);
+            }
+          }
+        });
+      } else {
+        // Handle single location markers
+        const coords = location.coordinates as [number, number];
+        
+        // Generate marker ID
+        const markerId = location.name;
+        newMarkerIds.add(markerId);
+        
+        // Check if marker already exists
+        if (markerLookup.has(markerId)) {
+          // Keep existing marker
+          const existingMarker = markerLookup.get(markerId)!;
+          markersToKeep.push(existingMarker);
+          
+          // Update marker position if coordinates changed
+          if (existingMarker.getLatLng().lng !== coords[0] || 
+              existingMarker.getLatLng().lat !== coords[1]) {
+            existingMarker.setLatLng([coords[1], coords[0]]);
+          }
+        } else {
+          // Create new marker for this location
+          try {
+            const marker = createLocationMarker(location, coords);
+            if (marker) markersToAdd.push(marker);
+          } catch (e) {
+            console.error(`Error creating marker for ${location.name}:`, e);
+          }
+        }
+      }
+    }
+    
+    // Identify markers that need to be removed
+    markers.forEach(marker => {
+      const id = marker.options.markerId;
+      if (id && !newMarkerIds.has(id)) {
+        markersToRemove.push(marker);
+      }
+    });
+    
+    console.log(`Markers to add: ${markersToAdd.length}, to remove: ${markersToRemove.length}, to keep: ${markersToKeep.length}`);
+    
+    // Remove old markers
+    markersToRemove.forEach(marker => {
+      if ((marker as any).uncertaintyCircle) {
+        mainMap.removeLayer((marker as any).uncertaintyCircle);
+      }
+      
+      if (regularMarkerGroup) {
+        regularMarkerGroup.removeLayer(marker);
+      } else {
+        mainMap.removeLayer(marker);
+      }
+    });
+    
+    // Add new markers
+    markersToAdd.forEach(marker => {
+      if ((marker as any).uncertaintyCircle) {
+        (marker as any).uncertaintyCircle.addTo(mainMap);
+      }
+      
+      if (regularMarkerGroup) {
+        marker.addTo(regularMarkerGroup);
+      } else {
+        marker.addTo(mainMap);
+      }
+    });
+    
+    // Update the global markers array
+    markers = [...markersToKeep, ...markersToAdd];
+    
+    // Update global locations reference
+    loadedLocations = newLocations;
+    
+    // Force a marker visibility update based on stored settings
+    await updateMarkersVisibility();
+    
+    console.log(`Map markers updated successfully. Total markers: ${markers.length}`);
+    
+    // Broadcast event that markers have been updated
+    const markersUpdatedEvent = new CustomEvent('markersUpdated', {
+      detail: { markers, locations: newLocations }
+    });
+    document.dispatchEvent(markersUpdatedEvent);
+    
+  } catch (error) {
+    console.error('Error updating map markers:', error);
+  }
+}
+
+// Create a marker for a location
+function createLocationMarker(location: Location & { type: string }, 
+                             coords: [number, number], 
+                             index?: number): L.Marker | null {
+  if (!mainMap) return null;
+  
+  try {
+    // Get properties specific to this coordinate (for complex locations)
+    const props = getMarkerSpecificProperties(location, index);
+    
+    // Create marker icon
+    let icon;
+    if (props.icon) {
+      const isFontAwesome = props.icon.startsWith("fa-") || props.icon.includes("fa-");
+      const size = props.iconSize || 1;
+      
+      if (isFontAwesome) {
+        // Font Awesome icon
+        const html = `<div class="fa-marker"><i class="${props.icon}" style="color: ${props.iconColor || '#FFFFFF'}; font-size: ${size}em;"></i></div>`;
+        icon = L.divIcon({
+          html: html,
+          className: 'custom-location-icon',
+          iconSize: [30 * size, 30 * size],
+          iconAnchor: [15 * size, 30 * size]
+        });
+      } else {
+        // Image icon
+        icon = L.icon({
+          iconUrl: getIconUrl(props.icon),
+          iconSize: [30 * size, 30 * size],
+          iconAnchor: [15 * size, 30 * size],
+          className: 'custom-location-icon'
+        });
+      }
+    } else {
+      // Default icon
+      icon = L.divIcon({
+        html: `<span class="material-icons" style="color: ${props.iconColor || '#FFFFFF'}">location_on</span>`,
+        className: 'custom-location-icon default',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30]
+      });
+    }
+    
+    // Marker ID for tracking
+    const markerId = index !== undefined ? `${location.name}-${index}` : location.name;
+    
+    // Create marker
+    const marker = L.marker([coords[1], coords[0]], {
+      icon: icon,
+      markerId: markerId,
+      locationData: props
+    }).bindTooltip(index !== undefined ? `${location.name} #${index + 1}` : location.name);
+    
+    // Add uncertainty circle if radius is specified
+    if (props.radius) {
+      const color = props.iconColor || '#FFFFFF';
+      const circle = createUncertaintyCircle(coords, props.radius, color);
+      (marker as any).uncertaintyCircle = circle;
+    }
+    
+    // Add click handler
+    marker.on('click', () => {
+      if (window.sidebarInstance) {
+        window.sidebarInstance.updateContent(location, coords[0], coords[1], index);
+        
+        document.querySelectorAll('.custom-location-icon.selected').forEach(el => {
+          el.classList.remove('selected');
+        });
+        
+        marker.getElement()?.classList.add('selected');
+        
+        // Update URL if not already handling navigation
+        if (!window.isHandlingHistoryNavigation) {
+          const locationHash = generateLocationHash(location.name);
+          const urlParams = index !== undefined 
+            ? `?loc=${locationHash}&index=${index + 1}` 
+            : `?loc=${locationHash}`;
+          window.history.replaceState({}, '', urlParams);
+        }
+        
+        // Update meta tags
+        updateMetaTags(location, coords);
+      }
+    });
+    
+    // Set initial visibility based on stored settings
+    if (!isMarkerVisible(markerId)) {
+      const el = marker.getElement();
+      if (el) el.classList.add('marker-hidden');
+      
+      if ((marker as any).uncertaintyCircle) {
+        const circleElement = (marker as any).uncertaintyCircle._path;
+        if (circleElement) {
+          circleElement.classList.add('circle-hidden');
+        } else {
+          (marker as any).uncertaintyCircle.setStyle({
+            opacity: 0,
+            fillOpacity: 0
+          });
+        }
+      }
+    }
+    
+    return marker;
+  } catch (error) {
+    console.error(`Error creating marker for ${location.name}:`, error);
+    return null;
+  }
+}
+
+// Update all markers visibility based on stored settings
+async function updateMarkersVisibility() {
+  const hiddenMarkers = getHiddenMarkers();
+  const hiddenCategories = getHiddenCategories();
+  
+  for (const marker of markers) {
+    const markerId = marker.options.markerId as string;
+    const locationData = marker.options.locationData as (Location & { type: string });
+    
+    const isVisible = !hiddenMarkers.has(markerId) && !hiddenCategories.has(locationData.type);
+    
+    const el = marker.getElement();
+    if (el) {
+      if (isVisible) {
+        el.classList.remove('marker-hidden');
+      } else {
+        el.classList.add('marker-hidden');
+      }
+    }
+    
+    if ((marker as any).uncertaintyCircle) {
+      const circleElement = (marker as any).uncertaintyCircle._path;
+      if (circleElement) {
+        if (isVisible) {
+          circleElement.classList.remove('circle-hidden');
+        } else {
+          circleElement.classList.add('circle-hidden');
+        }
+      } else {
+        (marker as any).uncertaintyCircle.setStyle({
+          opacity: isVisible ? 0.6 : 0,
+          fillOpacity: isVisible ? 0.2 : 0
+        });
+      }
+    }
   }
 }
 
@@ -258,8 +593,7 @@ function getCoordinateValues(coordItem: any): [number, number] | null {
     // If it's a CoordinateProperties object with nested coordinates property
     if (coordItem.coordinates && Array.isArray(coordItem.coordinates) && 
         coordItem.coordinates.length === 2 &&
-        typeof coordItem.coordinates[0] === 'number' && 
-        typeof coordItem.coordinates[1] === 'number') {
+        typeof coordItem.coordinates[0] === 'number' && typeof coordItem.coordinates[1] === 'number') {
       return coordItem.coordinates as [number, number];
     }
     
@@ -377,6 +711,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
   if (!locations || locations.length === 0) {
     console.warn('No locations provided for map initialization!');
   }
+  
+  // Store locations for later use with dynamic updates
+  loadedLocations = [...locations];
   
   // More detailed logging of the first few locations
   if (locations.length > 0) {
@@ -547,8 +884,6 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       const { clusterable, unclustered } = prepareLocationsForClustering(locations);
       const locationTypes = getLocationTypeGroups(locations);
 
-      let markerClusterGroup: any;
-
       try {
           markerClusterGroup = L.layerGroup().addTo(map);
       } catch (e) {
@@ -556,10 +891,9 @@ export async function initializeMap(locations: (Location & { type: string })[], 
           markerClusterGroup = L.layerGroup().addTo(map);
       }
 
-      const regularMarkerGroup = L.layerGroup().addTo(map);
+      regularMarkerGroup = L.layerGroup().addTo(map);
       markers = []; // Store in the exported array
-      const activeMarkers = new Set<string>();
-
+      
       // Helper function to get coordinate-specific properties 
       function getCoordinateProperties(location: Location & { type: string }, coordIndex: number): any {
         if (!location.coordinates || !Array.isArray(location.coordinates)) {
@@ -593,6 +927,14 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       
       function updateVisibleMarkers() {
         const bounds = map.getBounds();
+        
+        // Initialize activeMarkers if it doesn't exist
+        if (!activeMarkers) {
+          activeMarkers = new Set();
+        }
+        
+        // Clear active markers
+        activeMarkers.clear();
         
         // Clear markers that are out of bounds
         markers.forEach((marker, index) => {
@@ -825,6 +1167,17 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       // Make sure markers are created and displayed
       updateVisibleMarkers();
       
+      // Add event listener for location updates to refresh the sidebar
+      document.addEventListener(LOCATION_UPDATE_EVENT, (event: CustomEvent) => {
+        const updatedLocations = event.detail.locations as (Location & { type: string })[];
+        console.log(`Updating sidebar with ${updatedLocations.length} locations`);
+        
+        // Update sidebar with new locations
+        if (window.sidebarInstance) {
+          window.sidebarInstance.updateLocations(updatedLocations);
+        }
+      });
+      
       // Add an additional call after a short delay to ensure markers display
       setTimeout(() => {
           updateVisibleMarkers();
@@ -910,6 +1263,11 @@ export function updateMarkerVisibility(markerId: string, visible: boolean): void
 // Add a helper function to get the map
 export function getMap(): L.Map | null {
   return mainMap;
+}
+
+// Export a function to manually trigger marker updates
+export async function refreshMapMarkers(newLocations: (Location & { type: string })[]) {
+  return updateMapMarkers(newLocations);
 }
 
 // Extend window interface

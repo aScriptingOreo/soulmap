@@ -4,6 +4,7 @@ import { generateLocationHash, getRelativeDirection, formatLastUpdated } from ".
 import { CustomMarkerService } from "./services/customMarkers";
 import { getMap } from "./map"; // Import the helper function
 import { forceMarkerRedraw } from './services/visibilityMiddleware';
+import { LOCATION_UPDATE_EVENT } from './loader';
 
 function getIconUrl(iconPath: string): string {
   // Check if it's a full URL (starts with http or https)
@@ -111,6 +112,12 @@ export class Sidebar {
         customCategory.remove();
         this.hasCustomCategory = false;
       }
+    });
+    
+    // Listen for location updates
+    document.addEventListener(LOCATION_UPDATE_EVENT, (event: CustomEvent) => {
+      const updatedLocations = event.detail.locations as (Location & { type: string })[];
+      this.updateLocations(updatedLocations);
     });
     
     // Start initialization right away
@@ -2412,5 +2419,73 @@ export class Sidebar {
         }
       });
     });
+  }
+
+  // Add a new method to update locations without reinitializing the whole sidebar
+  public updateLocations(newLocations: (Location & { type: string })[]): void {
+    console.log(`Sidebar updating locations, received ${newLocations.length} locations`);
+    
+    // Store the current location if any is selected
+    const currentLocationName = this.titleEl?.textContent?.split('#')[0]?.trim();
+    let currentCoordIndex: number | undefined;
+    
+    // Check if we're viewing a specific coordinate index
+    if (this.currentComplexCoordinateInfo) {
+      currentCoordIndex = this.currentComplexCoordinateInfo.currentIndex;
+    }
+    
+    // Update the locations array
+    this.locations = newLocations;
+    
+    // Only update the drawer if we're initialized
+    if (this.initialized) {
+      // Clear existing location list
+      const categoriesContainer = this.element.querySelector('.categories');
+      if (categoriesContainer) {
+        categoriesContainer.innerHTML = '';
+        
+        // Re-group locations
+        const groupedLocations = this.locations.reduce((acc, location) => {
+          if (!acc[location.type]) acc[location.type] = [];
+          acc[location.type].push(location);
+          return acc;
+        }, {} as Record<string, (Location & { type: string })[]>);
+        
+        // Rebuild location drawer
+        for (const [category, items] of Object.entries(groupedLocations)) {
+          this.createCategorySection(category, items, categoriesContainer);
+        }
+      }
+      
+      // If we were viewing a location, try to update the current view
+      if (currentLocationName) {
+        const updatedLocation = newLocations.find(loc => 
+          loc.name === currentLocationName
+        );
+        
+        if (updatedLocation) {
+          // Get coordinate values
+          let coordinates: [number, number];
+          
+          if (currentCoordIndex !== undefined && Array.isArray(updatedLocation.coordinates[0])) {
+            // Multi-location with known index
+            coordinates = updatedLocation.coordinates[currentCoordIndex] as [number, number];
+          } else if (typeof updatedLocation.coordinates[0] === 'object' && 
+                    (updatedLocation.coordinates[0] as any).coordinates && 
+                    currentCoordIndex !== undefined) {
+            // Complex location with nested coordinates
+            coordinates = (updatedLocation.coordinates[currentCoordIndex] as any).coordinates;
+          } else {
+            // Simple location
+            coordinates = updatedLocation.coordinates as [number, number];
+          }
+          
+          // Update the content with the new location data
+          this.updateContent(updatedLocation, coordinates[0], coordinates[1], currentCoordIndex);
+        }
+      }
+    }
+    
+    console.log('Sidebar locations updated successfully');
   }
 }

@@ -4,6 +4,7 @@ import { getRelativeDirection } from './utils';
 import { setMarkerVisibility, showMarker, forceMarkerRedraw } from './services/visibilityMiddleware';
 import { tempMarker, createTemporaryMarker, updateMetaTags, removeTemporaryMarker, getMap } from './map';
 import analytics from './analytics';
+import { LOCATION_UPDATE_EVENT } from './loader';
 
 interface SearchResult {
   location: Location & { type: string };
@@ -353,6 +354,20 @@ export async function initializeSearch(locationsData: (Location & { type: string
   locations = locationsData;
   markers = markersData;
   mainMap = map;
+  
+  // Listen for location updates
+  document.addEventListener(LOCATION_UPDATE_EVENT, (event: CustomEvent) => {
+    // Update locations data
+    locations = event.detail.locations;
+    console.log(`Search component updated with ${locations.length} locations`);
+  });
+  
+  // Listen for marker updates
+  document.addEventListener('markersUpdated', (event: CustomEvent) => {
+    // Update markers reference
+    markers = event.detail.markers;
+    console.log(`Search component updated with ${markers.length} markers`);
+  });
   
   const searchContainer = document.querySelector('.search-container') as HTMLElement;
   const searchOverlay = document.querySelector('.search-overlay') as HTMLElement;

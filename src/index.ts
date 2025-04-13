@@ -1,16 +1,65 @@
 // src/index.ts
 import { marked } from 'marked';
-import { loadLocations, clearLocationsCache, setupDatabaseChangeListener } from './loader';
-import { initializeMap, updateMetaTags, getMap } from './map';
+import { loadLocations, clearLocationsCache, setupDatabaseChangeListener, LOCATION_UPDATE_EVENT } from './loader';
+import { initializeMap, updateMetaTags, getMap, refreshMapMarkers } from './map';
 import { clearTileCache } from './gridLoader';
 import { generateContentHash, getStoredHash, setStoredHash } from './services/hashService';
 import type { VersionInfo } from './types';
 import mapVersion from './mapversion.yml';
 import { navigateToLocation, navigateToCoordinates, generateLocationHash } from './search';
 
-// Add offline mode tracking
-let isOfflineMode = !navigator.onLine;
-const offlineIndicator = document.createElement('div');
+// Flag to detect if we're running in offline mode - use 'let' instead of 'const' to allow reassignment
+let isOfflineMode = window.location.search.includes('offline=true') || 
+                    window.location.hash.includes('offline') ||
+                    localStorage.getItem('offline_mode') === 'true';
+
+// Store cleanup functions for proper resource management
+let cleanupFunctions: (() => void)[] = [];
+
+// Update the documentation URL
+const docUrl = 'https://github.com/oreo-map/soulmap';
+
+// Show error message when an unhandled error occurs
+function showError(message: string) {
+  const errorContainer = document.createElement('div');
+  errorContainer.className = 'error-container';
+  errorContainer.innerHTML = `
+    <div class="error-message">
+      <h2>Error</h2>
+      <p>${message}</p>
+      <button id="reload-btn">Reload</button>
+      <button id="clear-cache-btn">Clear Cache & Reload</button>
+    </div>
+  `;
+  document.body.appendChild(errorContainer);
+  
+  document.getElementById('reload-btn')?.addEventListener('click', () => window.location.reload());
+  document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
+    try {
+      await clearLocationsCache();
+      await clearTileCache();
+      window.location.reload();
+    } catch (e) {
+      console.error('Error clearing cache:', e);
+      window.location.reload();
+    }
+  });
+}
+
+// Show notification for non-error messages
+function showNotification(message: string, type: 'info' | 'warning' | 'success' = 'info') {
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.innerHTML = `<p>${message}</p>`;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.classList.add('fade-out');
+    setTimeout(() => {
+      notification.remove();
+    }, 500);
+  }, 3000);
+}
 
 // Initialize offline indicator
 function setupOfflineIndicator() {
@@ -33,36 +82,6 @@ function handleOnlineStatusChange() {
 
 function updateOfflineIndicator() {
   offlineIndicator.style.display = isOfflineMode ? 'flex' : 'none';
-}
-
-// Add missing showError function
-function showError(message: string) {
-  const errorDiv = document.createElement('div');
-  errorDiv.className = 'error-message';
-  errorDiv.textContent = message;
-  document.body.appendChild(errorDiv);
-  console.error(message);
-  
-  // Remove after a few seconds
-  setTimeout(() => {
-    errorDiv.remove();
-  }, 5000);
-}
-
-// Add missing showNotification function
-function showNotification(message: string, type: string = 'info') {
-  const notificationDiv = document.createElement('div');
-  notificationDiv.className = `notification ${type}`;
-  notificationDiv.textContent = message;
-  document.body.appendChild(notificationDiv);
-  
-  // Remove after a few seconds
-  setTimeout(() => {
-    notificationDiv.classList.add('fade-out');
-    setTimeout(() => {
-      notificationDiv.remove();
-    }, 1000);
-  }, 4000);
 }
 
 // Extract the greeting loading into a separate function that can be reused
@@ -172,6 +191,15 @@ async function initMain() {
   try {
     console.log('Starting application initialization...');
     
+    // Check if browser is offline and update offline mode
+    if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+      if (!navigator.onLine) {
+        isOfflineMode = true;
+        console.log('Browser is offline, enabling offline mode');
+        // Removed notification for offline mode
+      }
+    }
+    
     // Load map locations
     console.log('Loading locations...');
     const locations = await loadLocations(isOfflineMode);
@@ -203,7 +231,54 @@ async function initMain() {
     
     // Initialize the map with the loaded locations
     console.log(`Initializing map with ${locations.length} loaded locations`);
-    initializeMap(locations);
+    const map = await initializeMap(locations);
+    
+    // Set up database change listener to enable real-time updates
+    const cleanupSSE = await setupDatabaseChangeListener(async () => {
+      try {
+        // This is a fallback for older code - the actual updates
+        // will be handled by event listeners in each component
+        console.log('Database change detected, refreshing...');
+        
+        // No need to reload the page, just fetch fresh locations
+        const freshLocations = await loadLocations(isOfflineMode);
+        
+        // Map will update via the LOCATION_UPDATE_EVENT
+        return;
+      } catch (error) {
+        console.error('Error handling database change:', error);
+      }
+    });
+    
+    // Add cleanup function
+    if (cleanupSSE) {
+      cleanupFunctions.push(cleanupSSE);
+    }
+    
+    // Set up cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      cleanupFunctions.forEach(cleanup => {
+        try {
+          cleanup();
+        } catch (e) {
+          console.warn('Error during cleanup:', e);
+        }
+      });
+    });
+    
+    // Listen for network status changes but don't show notifications
+    window.addEventListener('online', () => {
+      if (isOfflineMode) {
+        // Just log the status change instead of showing notification
+        console.log('Internet connection detected. Offline mode still active.');
+      }
+    });
+    
+    window.addEventListener('offline', () => {
+      // Just update offline mode without showing notification
+      console.log('Internet connection lost. Switched to offline mode.');
+      isOfflineMode = true;
+    });
     
   } catch (error) {
     console.error('Failed to load locations:', error);
@@ -382,3 +457,71 @@ declare global {
     navigateToCoordinates?: (coords: [number, number]) => void;
   }
 }
+
+// Define global namespace for TypeScript
+declare global {
+  interface Window {
+    isHandlingHistoryNavigation?: boolean;
+    sidebarInstance?: any;
+    markersGlobal?: any;
+    clickNavigationInProgress?: boolean;
+    complexNavigationInProgress?: boolean;
+    lastNavigatedLocation?: string;
+    lastNavigatedIndex?: number;
+    navigationTimeout?: number;
+    navigationInProgress?: boolean;
+    generateLocationHash?: (name: string) => string;
+    navigateToCoordinates?: (coords: [number, number]) => void;
+    navigateToLocation?: (locationSlug: string, coordIndex?: number) => void;
+    handleInternalLink?: (url: URL) => void;
+  }
+}
+
+// Make navigation functions available globally
+window.generateLocationHash = generateLocationHash;
+window.navigateToLocation = navigateToLocation;
+window.navigateToCoordinates = navigateToCoordinates;
+
+// Handle navigation through internal links
+window.handleInternalLink = (url: URL) => {
+  try {
+    if (url.searchParams.has('coord')) {
+      // Handle coordinate navigation
+      const coordString = url.searchParams.get('coord');
+      if (coordString) {
+        const [x, y] = coordString.split(',').map(Number);
+        if (!isNaN(x) && !isNaN(y)) {
+          navigateToCoordinates([x, y]);
+        }
+      }
+    } else if (url.searchParams.has('loc')) {
+      // Handle location navigation
+      const locationSlug = url.searchParams.get('loc');
+      const indexParam = url.searchParams.get('index');
+      const index = indexParam ? parseInt(indexParam, 10) - 1 : undefined;
+      
+      if (locationSlug) {
+        navigateToLocation(locationSlug, index);
+      }
+    }
+  } catch (e) {
+    console.error('Error handling internal link:', e);
+  }
+};
+
+// Start initialization once the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', initMain);
+
+// Add global error handler
+window.addEventListener('error', (event) => {
+  console.error('Unhandled error:', event.error);
+  showError('An unexpected error occurred. Please try reloading the page.');
+});
+
+// Add this to handle errors in promises
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  if (event.reason.stack) {
+    console.error('Stack trace:', event.reason.stack);
+  }
+});
