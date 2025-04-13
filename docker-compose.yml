@@ -1,6 +1,8 @@
-networks:
-  proxy:
-    external: true
+#networks:
+#  proxy:
+#    external: true
+#  backend:
+#    internal: true
 
 services:
   soulmap:
@@ -8,37 +10,71 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: soulmap
+    command: bun dev
     volumes:
       - .:/app
       - /app/node_modules
       - /app/dist
     environment:
       - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "5173:5173"  # Client port
+      - "3000:3000"  # API port
     networks:
-      - proxy
+      - default
     restart: always
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
-      - traefik.http.routers.soulmap-nossl.service=soulmap
-      - traefik.http.routers.soulmap-nossl.entrypoints=http
-      - traefik.http.services.soulmap.loadbalancer.server.port=5173
+#labels:
+    #  - traefik.enable=true
+    #  - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
+    #  - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
+    #  - traefik.http.routers.soulmap-nossl.service=soulmap
+    #  - traefik.http.routers.soulmap-nossl.entrypoints=http
+    #  - traefik.http.services.soulmap.loadbalancer.server.port=5173
+    depends_on:
+      sm-pg:
+        condition: service_healthy
   
-  soulmapbot:
-    build:
-      context: ./discord_bot/
-      dockerfile: Dockerfile
-    container_name: soulmapbot
-    command: npm run dev
+  #soulmapbot:
+  #  build:
+  #    context: ./discord_bot/
+  #    dockerfile: Dockerfile
+  #  container_name: soulmapbot
+  #  command: npm run dev
+  #  environment:
+  #    - DISCORD_TOKEN=${discord_bot_token}
+  #    - CHANNEL_ID=1359034600969601234 
+  #    - ADMIN_ROLE_ID=1310672502355267697
+  #    - DATABASE_URL=${DATABASE_URL}
+  #  volumes:
+  #    - ./discord_bot/data:/app/data
+  #    - ./discord_bot/index.js:/app/index.js
+  #    - ./discord_bot/package.json:/app/package.json
+  #    - ./discord_bot/database.js:/app/database.js
+  #    - ./src/mapversion.yml:/app/src/mapversion.yml
+  #  restart: always
+  #  networks:
+  #    - default
+  #  depends_on:
+  #    - postgres
+  
+  sm-pg:
+    image: postgres:latest
+    container_name: soulmap-postgres
     environment:
-      - DISCORD_TOKEN=${discord_bot_token}
-      - CHANNEL_ID=1359034600969601234 
-      - ADMIN_ROLE_ID=1310672502355267697
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
-      - ./discord_bot/data:/app/data
-      - ./discord_bot/index.js:/app/index.js
-      - ./discord_bot/package.json:/app/package.json
-      - ./discord_bot/database.js:/app/database.js
-      - ./src/mapversion.yml:/app/src/mapversion.yml
+      - ./database:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"  # PostgreSQL port
+    networks:
+      - default
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

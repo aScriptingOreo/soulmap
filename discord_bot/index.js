@@ -3,6 +3,10 @@ const { initializeDatabase, saveRequest, updateRequestStatus, getRequestsByStatu
 const fs = require('fs');
 const yaml = require('js-yaml');
 const path = require('path');
+const { PrismaClient } = require('@prisma/client');
+
+// Initialize Prisma client
+const prisma = new PrismaClient();
 
 // Create a new client instance
 const client = new Client({
@@ -187,6 +191,16 @@ async function safeMessageFetch(channel, messageId) {
   }
 }
 
+// Function to notify the web application of database changes
+async function notifyDatabaseChange() {
+  try {
+    await prisma.$executeRaw`NOTIFY location_changes`;
+    console.log('Notified application of database changes');
+  } catch (error) {
+    console.error('Failed to notify about database changes:', error);
+  }
+}
+
 // Ready event
 client.once(Events.ClientReady, async client => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -256,6 +270,105 @@ client.once(Events.ClientReady, async client => {
             ]
           }
         ]
+      },
+      // New command to add a location directly to the database
+      {
+        name: 'addlocation',
+        description: 'Add a new location to the database (admin only)',
+        options: [
+          {
+            name: 'name',
+            description: 'Location name',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          },
+          {
+            name: 'coordinates',
+            description: 'Coordinates in [X, Y] format',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          },
+          {
+            name: 'type',
+            description: 'Location type/category',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          },
+          {
+            name: 'description',
+            description: 'Location description',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          },
+          {
+            name: 'icon',
+            description: 'Icon (e.g. fa-solid fa-house)',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          },
+          {
+            name: 'media_url',
+            description: 'URL to media (image/video)',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          }
+        ]
+      },
+      // Command to edit existing location
+      {
+        name: 'editlocation',
+        description: 'Edit an existing location (admin only)',
+        options: [
+          {
+            name: 'name',
+            description: 'Exact name of the location to edit',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          },
+          {
+            name: 'new_name',
+            description: 'New name for the location',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          },
+          {
+            name: 'coordinates',
+            description: 'New coordinates in [X, Y] format',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          },
+          {
+            name: 'description',
+            description: 'New description',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          },
+          {
+            name: 'type',
+            description: 'New location type/category',
+            type: ApplicationCommandOptionType.String,
+            required: false
+          }
+        ]
+      },
+      // Command to delete a location
+      {
+        name: 'deletelocation',
+        description: 'Delete a location from the database (admin only)',
+        options: [
+          {
+            name: 'name',
+            description: 'Exact name of the location to delete',
+            type: ApplicationCommandOptionType.String,
+            required: true
+          }
+        ]
+      },
+      // Command to import locations from YAML files
+      {
+        name: 'importlocations',
+        description: 'Import locations from YAML files to database (admin only)',
+        options: []
       }
     ];
     
@@ -463,6 +576,269 @@ client.on(Events.InteractionCreate, async interaction => {
       console.error('Error listing requests:', error);
       await interaction.reply({ content: 'An error occurred while retrieving requests.', ephemeral: true });
     }
+  } else if (interaction.commandName === 'addlocation') {
+    // Check if user has admin role
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
+    
+    if (!hasAdminRole) {
+      await interaction.reply({ content: 'You do not have permission to add locations directly.', ephemeral: true });
+      return;
+    }
+    
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      
+      const name = interaction.options.getString('name');
+      const coordsString = interaction.options.getString('coordinates');
+      const type = interaction.options.getString('type');
+      const description = interaction.options.getString('description');
+      const icon = interaction.options.getString('icon');
+      const mediaUrl = interaction.options.getString('media_url');
+      
+      // Validate coordinates
+      if (!validateCoordinates(coordsString)) {
+        await interaction.editReply('Invalid coordinates format. Please use [X, Y] format.');
+        return;
+      }
+      
+      // Parse coordinates
+      const { coordinates } = formatCoordinates(coordsString);
+      
+      // Check if location with same name already exists
+      const existingLocation = await prisma.location.findFirst({
+        where: { name }
+      });
+      
+      if (existingLocation) {
+        await interaction.editReply(`A location with the name "${name}" already exists.`);
+        return;
+      }
+      
+      // Create the location in the database
+      await prisma.location.create({
+        data: {
+          name,
+          coordinates: coordinates.length === 1 
+            ? [coordinates[0].x, coordinates[0].y]  // Single coordinate pair
+            : coordinates.map(c => [c.x, c.y]),     // Array of coordinate pairs
+          type,
+          description,
+          icon,
+          mediaUrl: mediaUrl ? [mediaUrl] : undefined,
+          createdBy: interaction.user.id,
+          lastModified: new Date()
+        }
+      });
+      
+      // Notify web application of the change
+      await notifyDatabaseChange();
+      
+      await interaction.editReply(`Location "${name}" added successfully to the ${type} category.`);
+    } catch (error) {
+      console.error('Error adding location:', error);
+      await interaction.editReply('An error occurred while adding the location.');
+    }
+  } else if (interaction.commandName === 'editlocation') {
+    // Check if user has admin role
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
+    
+    if (!hasAdminRole) {
+      await interaction.reply({ content: 'You do not have permission to edit locations.', ephemeral: true });
+      return;
+    }
+    
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      
+      const name = interaction.options.getString('name');
+      const newName = interaction.options.getString('new_name');
+      const coordsString = interaction.options.getString('coordinates');
+      const description = interaction.options.getString('description');
+      const type = interaction.options.getString('type');
+      
+      // Check if location exists
+      const existingLocation = await prisma.location.findFirst({
+        where: { name }
+      });
+      
+      if (!existingLocation) {
+        await interaction.editReply(`Location "${name}" not found.`);
+        return;
+      }
+      
+      // Prepare data to update
+      const updateData = {};
+      
+      if (newName) updateData.name = newName;
+      if (description) updateData.description = description;
+      if (type) updateData.type = type;
+      
+      // Parse coordinates if provided
+      if (coordsString) {
+        if (!validateCoordinates(coordsString)) {
+          await interaction.editReply('Invalid coordinates format. Please use [X, Y] format.');
+          return;
+        }
+        
+        const { coordinates } = formatCoordinates(coordsString);
+        updateData.coordinates = coordinates.length === 1 
+          ? [coordinates[0].x, coordinates[0].y]  // Single coordinate pair
+          : coordinates.map(c => [c.x, c.y]);     // Array of coordinate pairs
+      }
+      
+      // Update lastModified timestamp
+      updateData.lastModified = new Date();
+      
+      // Update the location
+      await prisma.location.update({
+        where: { id: existingLocation.id },
+        data: updateData
+      });
+      
+      // Notify web application of the change
+      await notifyDatabaseChange();
+      
+      await interaction.editReply(`Location "${name}" updated successfully.`);
+    } catch (error) {
+      console.error('Error editing location:', error);
+      await interaction.editReply('An error occurred while editing the location.');
+    }
+  } else if (interaction.commandName === 'deletelocation') {
+    // Check if user has admin role
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
+    
+    if (!hasAdminRole) {
+      await interaction.reply({ content: 'You do not have permission to delete locations.', ephemeral: true });
+      return;
+    }
+    
+    try {
+      const name = interaction.options.getString('name');
+      
+      // Create confirmation buttons
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`confirm_delete_${name}`)
+            .setLabel('Confirm Delete')
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId('cancel_delete')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Secondary)
+        );
+      
+      await interaction.reply({ 
+        content: `Are you sure you want to delete the location "${name}"? This action cannot be undone.`,
+        components: [row],
+        ephemeral: true
+      });
+    } catch (error) {
+      console.error('Error processing delete location command:', error);
+      await interaction.reply({ 
+        content: 'An error occurred while processing the delete command.',
+        ephemeral: true
+      });
+    }
+  } else if (interaction.commandName === 'importlocations') {
+    // Check if user has admin role
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
+    
+    if (!hasAdminRole) {
+      await interaction.reply({ content: 'You do not have permission to import locations.', ephemeral: true });
+      return;
+    }
+    
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      
+      const baseDir = path.resolve(__dirname, '../src/locations');
+      if (!fs.existsSync(baseDir)) {
+        await interaction.editReply('Locations directory not found.');
+        return;
+      }
+      
+      // Get all location type directories
+      const typeDirectories = fs.readdirSync(baseDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+      
+      let totalImported = 0;
+      let errors = 0;
+      
+      // Process each type directory
+      for (const type of typeDirectories) {
+        const typeDir = path.join(baseDir, type);
+        const files = fs.readdirSync(typeDir)
+          .filter(file => file.endsWith('.yml') || file.endsWith('.yaml'));
+        
+        for (const file of files) {
+          try {
+            const filePath = path.join(typeDir, file);
+            const content = fs.readFileSync(filePath, 'utf8');
+            const locationData = yaml.load(content);
+            
+            // Check if location already exists
+            const existingLocation = await prisma.location.findFirst({
+              where: { name: locationData.name }
+            });
+            
+            if (existingLocation) {
+              console.log(`Location ${locationData.name} already exists, skipping`);
+              continue;
+            }
+            
+            // Process coordinates to ensure they're in the right format
+            let coordinates = locationData.coordinates;
+            if (!Array.isArray(coordinates)) {
+              coordinates = [[0, 0]]; // Default if missing
+            } else if (coordinates.length === 2 && typeof coordinates[0] === 'number') {
+              // Single coordinate pair like [x, y]
+              coordinates = [coordinates];
+            }
+            
+            // Create location in database
+            await prisma.location.create({
+              data: {
+                name: locationData.name,
+                coordinates,
+                description: locationData.description || '',
+                type,
+                icon: locationData.icon,
+                iconSize: locationData.iconSize,
+                mediaUrl: locationData.mediaUrl ? 
+                  (Array.isArray(locationData.mediaUrl) ? locationData.mediaUrl : [locationData.mediaUrl]) : 
+                  undefined,
+                iconColor: locationData.iconColor,
+                radius: locationData.radius,
+                lore: locationData.lore,
+                spoilers: locationData.spoilers,
+                lastModified: new Date()
+              }
+            });
+            
+            totalImported++;
+          } catch (fileError) {
+            console.error(`Error importing file ${file}:`, fileError);
+            errors++;
+          }
+        }
+      }
+      
+      // Notify web application of the change
+      await notifyDatabaseChange();
+      
+      await interaction.editReply(
+        `Import completed: ${totalImported} locations imported, ${errors} errors encountered.`
+      );
+    } catch (error) {
+      console.error('Error importing locations:', error);
+      await interaction.editReply('An error occurred while importing locations.');
+    }
   }
 });
 
@@ -471,6 +847,48 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
   
   try {
+    // Check if this is a delete confirmation
+    if (interaction.customId.startsWith('confirm_delete_')) {
+      // Check if user has admin role
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      const hasAdminRole = member.roles.cache.has(ADMIN_ROLE_ID);
+      
+      if (!hasAdminRole) {
+        await interaction.reply({ content: 'You do not have permission to delete locations.', ephemeral: true });
+        return;
+      }
+      
+      const locationName = interaction.customId.replace('confirm_delete_', '');
+      
+      // Delete the location
+      const result = await prisma.location.deleteMany({
+        where: { name: locationName }
+      });
+      
+      if (result.count > 0) {
+        // Notify web application of the change
+        await notifyDatabaseChange();
+        
+        await interaction.update({ 
+          content: `Location "${locationName}" has been deleted successfully.`,
+          components: []
+        });
+      } else {
+        await interaction.update({ 
+          content: `Location "${locationName}" not found or already deleted.`,
+          components: []
+        });
+      }
+      
+      return;
+    } else if (interaction.customId === 'cancel_delete') {
+      await interaction.update({ 
+        content: 'Delete operation canceled.',
+        components: []
+      });
+      return;
+    }
+    
     // Check if user has admin role
     const member = await interaction.guild.members.fetch(interaction.user.id);
     
@@ -527,6 +945,63 @@ client.on(Events.InteractionCreate, async interaction => {
         await requester.send({ content: 'Your location request has been implemented!' });
       } catch (error) {
         console.error('Could not notify user:', error);
+      }
+      
+      // Extract coordinates from the embed
+      try {
+        const embed = interaction.message.embeds[0];
+        const coordsField = embed.fields.find(f => f.name === 'Coordinates');
+        const descField = embed.fields.find(f => f.name === 'Description');
+        
+        if (coordsField && descField) {
+          // Extract and clean up coordinates text
+          let coordsText = coordsField.value;
+          coordsText = coordsText.replace(/```yml\n|\n```/g, '').trim();
+          
+          // Parse coordinates
+          const coordinates = [];
+          const coordLines = coordsText.split('\n');
+          
+          for (const line of coordLines) {
+            const match = line.match(/\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]/);
+            if (match) {
+              coordinates.push([parseInt(match[1]), parseInt(match[2])]);
+            }
+          }
+          
+          if (coordinates.length > 0) {
+            // Create location in database
+            const locationData = {
+              name: `User Submitted Location #${interaction.message.id.slice(-6)}`,
+              coordinates: coordinates.length === 1 ? coordinates[0] : coordinates,
+              description: descField.value,
+              type: 'user_submitted', // Default category
+              createdBy: userId,
+              lastModified: new Date()
+            };
+            
+            // Add screenshot if included in the embed
+            if (interaction.message.embeds[0].image) {
+              locationData.mediaUrl = [interaction.message.embeds[0].image.url];
+            }
+            
+            // Check if a location with this name already exists
+            const existingLocation = await prisma.location.findFirst({
+              where: { name: locationData.name }
+            });
+            
+            if (!existingLocation) {
+              await prisma.location.create({ data: locationData });
+              
+              // Notify web application of the change
+              await notifyDatabaseChange();
+              
+              console.log(`Created location in database from approved request: ${locationData.name}`);
+            }
+          }
+        }
+      } catch (dbError) {
+        console.error('Error creating location in database:', dbError);
       }
     } 
     else if (action === 'dismiss') {

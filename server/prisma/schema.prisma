@@ -1,0 +1,32 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Location {
+  id              String   @id @default(uuid())
+  name            String
+  coordinates     Json     // Stores either [number, number] or array of coordinates
+  description     String
+  type            String   // Category (previously subdirectory)
+  icon            String?
+  iconSize        Float?
+  mediaUrl        Json?    // Can be a string or array of strings
+  iconColor       String?
+  radius          Float?
+  lastModified    DateTime @default(now())
+  isCoordinateSearch Boolean? @default(false)
+  lore            String?  @db.Text
+  spoilers        String?  @db.Text
+  noCluster       Boolean? @default(false)
+  exactCoordinates Json?   // Removed underscore prefix
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  submittedBy     String?  // Discord user ID who submitted this location
+  approvedBy      String?  // Discord user ID of admin who approved the location
+}

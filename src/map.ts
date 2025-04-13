@@ -372,6 +372,20 @@ export async function initializeMap(locations: (Location & { type: string })[], 
   const customMarkerService = new CustomMarkerService();
   const markerModal = new MarkerModal();
   
+  console.log(`Initializing map with ${locations.length} locations`);
+  
+  if (!locations || locations.length === 0) {
+    console.warn('No locations provided for map initialization!');
+  }
+  
+  // More detailed logging of the first few locations
+  if (locations.length > 0) {
+    console.log('First location sample:', JSON.stringify(locations[0]));
+    if (locations.length > 1) {
+      console.log('Second location sample:', JSON.stringify(locations[1]));
+    }
+  }
+  
   try {
       await initVisibilityMiddleware();
 
@@ -815,6 +829,8 @@ export async function initializeMap(locations: (Location & { type: string })[], 
       setTimeout(() => {
           updateVisibleMarkers();
       }, 1000);
+
+      console.log(`Created ${markers.length} markers on the map`);
 
       updateProgress(100, 'Ready!');
       setTimeout(() => {

@@ -5,6 +5,7 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 
 const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
 const METADATA_CACHE_KEY = 'soulmap_metadata_cache';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 // Initialize localforage instance for locations
 const locationStore = localforage.createInstance({
@@ -18,8 +19,132 @@ const locationStore = localforage.createInstance({
   storeName: 'locations' // Add explicit store name
 });
 
-// Load file metadata from Vite's development server or static JSON in production
-async function loadFileMetadata(): Promise<Record<string, { lastModified: number }>> {
+// Track if a refresh is currently in progress to prevent multiple simultaneous refreshes
+let refreshInProgress = false;
+
+// Setup the refresh function that can be called when database changes occur
+export async function setupDatabaseChangeListener(refreshCallback: () => Promise<void>) {
+  try {
+    // Use EventSource for Server-Sent Events
+    const eventSource = new EventSource(`${API_BASE_URL}/listen`);
+    
+    // Track last data refresh time to prevent over-refreshing
+    let lastRefreshTime = Date.now();
+    const MIN_REFRESH_INTERVAL = 10000; // 10 seconds minimum between refreshes
+    
+    eventSource.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'change' && !refreshInProgress) {
+          // Only refresh if it's been at least MIN_REFRESH_INTERVAL since the last refresh
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL) {
+            console.log(`Database change detected, but last refresh was ${timeSinceLastRefresh}ms ago. Waiting...`);
+            return;
+          }
+          
+          console.log('Database change detected, refreshing locations...');
+          refreshInProgress = true;
+          
+          try {
+            // Show notification about the update
+            showDatabaseUpdateNotification();
+            
+            lastRefreshTime = Date.now();
+            await refreshCallback();
+          } catch (error) {
+            console.error('Error refreshing locations after database change:', error);
+          } finally {
+            refreshInProgress = false;
+          }
+        } else if (data.type === 'ping' && !refreshInProgress) {
+          // For ping events, periodically check for changes (less frequently)
+          const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+          
+          if (timeSinceLastRefresh > 60000) { // 1 minute minimum between hash checks
+            console.log('Checking for database changes via ping...');
+            
+            try {
+              // Fetch database hash to see if anything changed
+              const newHash = await generateDatabaseHash();
+              const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
+              
+              if (cachedData && cachedData.hash !== newHash) {
+                console.log('Database change detected via hash check, refreshing locations...');
+                
+                // Show notification about the update
+                showDatabaseUpdateNotification();
+                
+                refreshInProgress = true;
+                try {
+                  lastRefreshTime = Date.now();
+                  await refreshCallback();
+                } finally {
+                  refreshInProgress = false;
+                }
+              }
+            } catch (error) {
+              console.error('Error checking for database changes:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing SSE message:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      // Reconnect after a delay
+      setTimeout(() => {
+        eventSource.close();
+        setupDatabaseChangeListener(refreshCallback);
+      }, 5000);
+    };
+    
+    console.log('Database change listener initialized');
+  } catch (error) {
+    console.error('Failed to set up database change listener:', error);
+  }
+}
+
+// Show a notification when database updates are detected
+function showDatabaseUpdateNotification() {
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.className = 'database-update-notification';
+  notification.textContent = 'Map data updated!';
+  
+  // Add to document
+  document.body.appendChild(notification);
+  
+  // Remove after a delay
+  setTimeout(() => {
+    notification.classList.add('fade-out');
+    setTimeout(() => {
+      notification.remove();
+    }, 1000);
+  }, 3000);
+}
+
+// Generate a checksum of the current database state
+async function generateDatabaseHash(): Promise<string> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/locations/hash`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch database hash: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data.hash;
+  } catch (error) {
+    console.error('Error generating database hash:', error);
+    return Date.now().toString();
+  }
+}
+
+// Load metadata - now from database via API instead of direct Prisma access
+async function loadDatabaseMetadata(): Promise<Record<string, { lastModified: number }>> {
   try {
     // Try to get cached metadata first
     const cachedMetadata = await locationStore.getItem<Record<string, { lastModified: number }>>(METADATA_CACHE_KEY);
@@ -27,20 +152,30 @@ async function loadFileMetadata(): Promise<Record<string, { lastModified: number
       return cachedMetadata;
     }
 
-    // If no cached metadata, fetch from server API endpoint
-    const response = await fetch('/api/file-metadata');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch metadata: ${response.status}`);
+    // Build metadata from API request instead of direct Prisma access
+    try {
+      const response = await fetch(`${API_BASE_URL}/locations`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch locations: ${response.statusText}`);
+      }
+      const locations = await response.json();
+      
+      const metadata: Record<string, { lastModified: number }> = {};
+      locations.forEach((loc: any) => {
+        const path = `locations/${loc.type}/${loc.name.toLowerCase().replace(/\s+/g, '_')}`;
+        metadata[path] = { lastModified: loc.lastModified };
+      });
+      
+      // Cache the metadata
+      await locationStore.setItem(METADATA_CACHE_KEY, metadata);
+      
+      return metadata;
+    } catch (apiError) {
+      console.error('Error fetching location metadata from API:', apiError);
+      return {};
     }
-
-    const metadata = await response.json();
-    
-    // Cache the metadata
-    await locationStore.setItem(METADATA_CACHE_KEY, metadata);
-    
-    return metadata;
   } catch (error) {
-    console.warn('Error loading file metadata:', error);
+    console.warn('Error loading database metadata:', error);
     return {}; // Return empty object if metadata can't be loaded
   }
 }
@@ -70,34 +205,13 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
     const contentHash = await generateContentHash();
     const storedHash = getStoredHash();
 
-    // Fetch file metadata (will be used later)
-    let fileMetadata = {};
-    try {
-      fileMetadata = await loadFileMetadata();
-    } catch (error) {
-      console.warn('Failed to load file metadata, continuing with cache if available');
-    }
-
     // Use cached data if hashes match and we're online
     if (cachedData && cachedData.hash === contentHash) {
       console.log('Using cached locations data (hashes match)');
-      
-      // Even if using cached data, update the lastModified timestamps
-      // from the latest metadata (in case files were modified)
-      const updatedData = cachedData.data.map(location => {
-        const filePath = `src/locations/${location.type}/${location.name.toLowerCase().replace(/\s+/g, '_')}.yml`;
-        const metadata = fileMetadata[filePath];
-        
-        return {
-          ...location,
-          lastModified: metadata?.lastModified || location.lastModified
-        };
-      });
-      
-      return updatedData;
+      return cachedData.data;
     }
 
-    // If we get here, we need to load fresh data from the server
+    // If we get here, we need to load fresh data from the API
     const loadingOverlay = document.getElementById('loading-overlay');
     const progressBar = document.querySelector('.loading-progress') as HTMLElement;
     const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
@@ -109,7 +223,7 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
     }
 
     const updateProgress = (progress: number, text: string) => {
-      console.log(`Loading progress: ${progress}%, ${text}`); // Add debug logging
+      console.log(`Loading progress: ${progress}%, ${text}`); 
       if (progressBar && percentageText && loadingText) {
         progressBar.style.width = `${progress}%`;
         percentageText.textContent = `${Math.round(progress)}%`;
@@ -119,56 +233,63 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
 
     updateProgress(0, 'Loading location data...');
 
-    // If no cache or version mismatch, load from files
-    const importLocations = import.meta.glob('./locations/*/*.y?(a)ml');
-    const totalFiles = Object.keys(importLocations).length;
-    let loaded = 0;
+    try {
+      console.log(`Fetching locations from API: ${API_BASE_URL}/locations`);
+      // Load locations from API instead of direct DB access
+      const response = await fetch(`${API_BASE_URL}/locations`);
+      
+      if (!response.ok) {
+        console.error(`API request failed with status: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`API error details: ${errorText}`);
+        throw new Error(`Failed to fetch locations: ${response.statusText}`);
+      }
+      
+      const locations = await response.json();
+      
+      console.log(`Received ${locations.length} locations from API`);
+      if (locations.length > 0) {
+        console.log(`Sample location data: ${JSON.stringify(locations[0], null, 2).substring(0, 300)}...`);
+      } else {
+        console.warn('API returned 0 locations - this may indicate a server-side issue');
+      }
+      
+      updateProgress(50, 'Processing location data...');
+      const validLocations = locations.filter((loc: any) => !!loc);
 
-    if (totalFiles === 0) {
-      throw new Error('No location files found');
+      // Normalize the location data before returning
+      const normalizedLocations = validLocations.map((loc: any) => normalizeLocationCoordinates(loc));
+
+      // Cache the new data with hash
+      await locationStore.setItem(LOCATIONS_CACHE_KEY, {
+        hash: contentHash,
+        data: normalizedLocations
+      });
+
+      // Store the new hash
+      setStoredHash(contentHash);
+
+      updateProgress(100, 'Location data loaded!');
+      
+      // Hide loading overlay when done
+      if (loadingOverlay) {
+        setTimeout(() => {
+          loadingOverlay.style.display = 'none';
+        }, 500); // Short delay for smooth transition
+      }
+
+      return normalizedLocations;
+    } catch (apiError) {
+      console.error("Error loading locations from API:", apiError);
+      
+      // If we have cached data, use it as fallback
+      if (cachedData) {
+        console.log('API request failed, using cached data as fallback');
+        return cachedData.data;
+      }
+      
+      throw apiError;
     }
-
-    const locations = await Promise.all(
-      Object.entries(importLocations).map(async ([path, importFn]) => {
-        try {
-          const module = await importFn();
-          loaded++;
-          const progress = (loaded / totalFiles) * 50;
-          updateProgress(progress, 'Loading location data...');
-          
-          // Use real file lastModified from metadata if available
-          const relativePath = path.replace(/^\.\//, ''); // Remove leading ./
-          const metadata = fileMetadata[relativePath];
-          const lastModified = metadata?.lastModified || Date.now();
-          
-          return { 
-            ...module.default, 
-            type: path.split('/')[2],
-            lastModified
-          };
-        } catch (error) {
-          console.error(`Error loading location file: ${path}`, error);
-          return null;
-        }
-      })
-    );
-
-    updateProgress(50, 'Initializing map...');
-    const validLocations = locations.filter((loc): loc is Location & { type: string } => loc !== null);
-
-    // Normalize the location data before returning
-    return validLocations.map(loc => normalizeLocationCoordinates(loc));
-
-    // Cache the new data with hash
-    await locationStore.setItem(LOCATIONS_CACHE_KEY, {
-      hash: contentHash,
-      data: validLocations
-    });
-
-    // Store the new hash
-    setStoredHash(contentHash);
-
-    return validLocations;
   } catch (error) {
     console.error("Error loading location files:", error);
     throw error; // Let the error propagate to show in the UI
