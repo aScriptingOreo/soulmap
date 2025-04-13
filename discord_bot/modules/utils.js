@@ -161,6 +161,21 @@ function generateEditDiff(originalData, newData) {
   return diff;
 }
 
+/**
+ * Generate a diff display between old and new values
+ */
+function generateEditDiff(oldValue, newValue) {
+  // Convert values to strings for display
+  const oldStr = typeof oldValue === 'object' ? JSON.stringify(oldValue, null, 2) : String(oldValue || '');
+  const newStr = typeof newValue === 'object' ? JSON.stringify(newValue, null, 2) : String(newValue || '');
+  
+  // Create a diff display
+  return "```diff\n" +
+         "- " + oldStr.replace(/\n/g, '\n- ') + "\n" +
+         "+ " + newStr.replace(/\n/g, '\n+ ') + "\n" +
+         "```";
+}
+
 module.exports = {
   getMapVersionInfo,
   formatCoordinates,

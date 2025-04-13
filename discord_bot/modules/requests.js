@@ -129,15 +129,22 @@ async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNE
  * Handler for /request edit
  */
 async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomplete) {
-  const markerSelection = interaction.options.getString('name');
-  
-  // Parse marker name and index if provided
-  let { name: markerName, index: coordIndex } = parseMarkerSelection(markerSelection);
+  const markerName = interaction.options.getString('name');
   
   try {
-    // Get marker info from the database using searchLocationsForAutocomplete
+    // Get marker info from the database
     const locations = await searchLocationsForAutocomplete(markerName);
-    const marker = locations.find(loc => loc.name.toLowerCase() === markerName.toLowerCase());
+    let marker = null;
+    
+    // First look for exact match
+    marker = locations.find(loc => 
+      loc.name.toLowerCase() === markerName.toLowerCase()
+    );
+    
+    // If not found, take first result
+    if (!marker && locations.length > 0) {
+      marker = locations[0];
+    }
     
     if (!marker) {
       await interaction.reply({ 
@@ -147,167 +154,55 @@ async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomp
       return;
     }
 
-    // Create an embed with marker information
-    const embed = new EmbedBuilder()
-      .setTitle(`Marker Information: ${marker.name}`)
-      .setColor('#3498db')
-      .addFields(
-        { name: 'Type', value: marker.type || 'Unknown', inline: true },
-        { name: 'ID', value: marker.id || 'Unknown', inline: true }
-      );
-
-    // Add description if available
-    if (marker.description) {
-      embed.addFields({ 
-        name: 'Description', 
-        value: marker.description.length > 1024 ? 
-          marker.description.substring(0, 1020) + '...' : 
-          marker.description 
-      });
-    }
-
-    // Process coordinates for display and determine if this is a multi-coordinate marker
+    // Check if this is a multi-coordinate marker
     let isMultiCoord = false;
     let coordCount = 1;
     
     try {
       const coords = marker.coordinates;
       
-      // Handle different coordinate formats
       if (Array.isArray(coords)) {
         if (coords.length === 2 && typeof coords[0] === 'number') {
           // Single coordinate pair
-          const coordsString = `[${coords[0]}, ${coords[1]}]`;
-          embed.addFields({ name: 'Coordinates', value: coordsString });
-        } else {
+          isMultiCoord = false;
+        } else if (coords.length > 1) {
           // Multiple coordinates
           isMultiCoord = true;
           coordCount = coords.length;
-          
-          if (coords.length > 10) {
-            // If too many coordinates, show a summary
-            embed.addFields({ name: 'Coordinates', value: `${coords.length} coordinate points (showing first 10)` });
-            
-            // Show first 10 coordinates
-            const firstTen = coords.slice(0, 10).map((coord, index) => {
-              if (Array.isArray(coord) && coord.length === 2) {
-                return `${index + 1}. [${coord[0]}, ${coord[1]}]`;
-              }
-              return `${index + 1}. [Invalid format]`;
-            });
-            
-            embed.addFields({ name: 'Preview', value: firstTen.join('\n') });
-          } else {
-            // Show all coordinates if 10 or fewer
-            const allCoords = coords.map((coord, index) => {
-              if (Array.isArray(coord) && coord.length === 2) {
-                return `${index + 1}. [${coord[0]}, ${coord[1]}]`;
-              }
-              return `${index + 1}. [Invalid format]`;
-            });
-            
-            embed.addFields({ name: 'Coordinates', value: allCoords.join('\n') });
-          }
         }
       }
-      // ...additional coordinate handling code...
     } catch (e) {
       console.error('Error processing coordinates:', e);
-      embed.addFields({ name: 'Coordinates', value: 'Error processing coordinates' });
     }
-
-    // Create components array for buttons and select menus
-    const components = [];
     
-    // For specific coordinate index edits, only show coordinate editing
-    if (coordIndex !== undefined && coordIndex !== '*') {
-      // Add button specifically for this coordinate
-      components.push(
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`req_edit_coord_${marker.id}_${coordIndex}_${interaction.user.id}`)
-            .setLabel(`Edit Coordinate #${parseInt(coordIndex) + 1}`)
-            .setStyle(ButtonStyle.Primary)
-        )
-      );
-    } else {
-      // For wildcard or full marker edits, show a select menu of all editable fields
-      const editFieldsMenu = new StringSelectMenuBuilder()
-        .setCustomId(`select_edit_field_${marker.id}_${coordIndex || '*'}_${interaction.user.id}`)
-        .setPlaceholder('Select field to edit')
-        .addOptions([
-          {
-            label: 'Name',
-            description: 'Edit the marker name',
-            value: 'name'
-          },
-          {
-            label: 'Description',
-            description: 'Edit the marker description',
-            value: 'description'
-          },
-          {
-            label: 'Type',
-            description: 'Edit the marker type/category',
-            value: 'type'
-          },
-          {
-            label: 'Icon',
-            description: 'Edit the marker icon',
-            value: 'icon'
-          },
-          {
-            label: 'Coordinates',
-            description: isMultiCoord ? 'Edit all coordinates' : 'Edit the coordinates',
-            value: 'coordinates'
-          }
-        ]);
+    // For multi-coordinate markers, show the coordinate selection modal first
+    if (isMultiCoord && coordCount > 1) {
+      // Create a modal for coordinate selection
+      const modal = new ModalBuilder()
+        .setCustomId(`coord_select_modal_${marker.id}_${interaction.user.id}`)
+        .setTitle(`Select Coordinate for ${marker.name}`);
       
-      components.push(new ActionRowBuilder().addComponents(editFieldsMenu));
-
-      // Also add a coordinate select menu for multi-coordinate markers if not using a specific index
-      if (isMultiCoord && coordCount > 1 && coordIndex === undefined) {
-        const selectMenu = new StringSelectMenuBuilder()
-          .setCustomId(`select_coord_req_${marker.id}_${interaction.user.id}`)
-          .setPlaceholder('Or select a specific coordinate to edit')
-          .addOptions([
-            {
-              label: `All coordinates (${coordCount} points)`,
-              description: 'Submit edit request for all coordinates',
-              value: '*'
-            },
-            ...Array.from({ length: Math.min(coordCount, 24) }, (_, i) => ({
-              label: `Coordinate #${i + 1}`,
-              description: `Submit edit request for coordinate #${i + 1}`,
-              value: i.toString()
-            }))
-          ]);
-        
-        components.push(new ActionRowBuilder().addComponents(selectMenu));
-      }
-
-      // Add a cancel button
-      components.push(
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`cancel_edit_request`)
-            .setLabel('Cancel')
-            .setStyle(ButtonStyle.Secondary)
-        )
-      );
+      // Add input field for the coordinate index
+      const indexInput = new TextInputBuilder()
+        .setCustomId('coord_index')
+        .setLabel(`Enter coordinate number (1-${coordCount}) or * for all`)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Example: 2 or *')
+        .setRequired(true);
+      
+      // Create action row
+      const indexRow = new ActionRowBuilder().addComponents(indexInput);
+      
+      // Add the component to the modal
+      modal.addComponents(indexRow);
+      
+      // Show the modal to the user
+      await interaction.showModal(modal);
+      return;
     }
-
-    // For edit requests, show info and components
-    await interaction.reply({
-      embeds: [embed],
-      content: "📝 Please select what you'd like to edit for this marker" + 
-               (isMultiCoord && coordCount > 1 && coordIndex === undefined ? 
-                ". You can edit a specific property or select a specific coordinate to edit." : 
-                "."),
-      components: components,
-      ephemeral: true
-    });
     
+    // For single-coordinate markers, proceed with normal editing flow
+    await showMarkerEditOptions(interaction, marker);
   } catch (error) {
     console.error('Error in handleRequestEdit:', error);
     await interaction.reply({
@@ -315,6 +210,167 @@ async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomp
       ephemeral: true
     });
   }
+}
+
+/**
+ * Helper function to show marker edit options after handling coordinate selection
+ */
+async function showMarkerEditOptions(interaction, marker, coordIndex) {
+  // Create an embed with marker information
+  const embed = new EmbedBuilder()
+    .setTitle(`Marker Information: ${marker.name}`)
+    .setColor('#3498db')
+    .addFields(
+      { name: 'Type', value: marker.type || 'Unknown', inline: true },
+      { name: 'ID', value: marker.id || 'Unknown', inline: true }
+    );
+
+  // Add description if available
+  if (marker.description) {
+    embed.addFields({ 
+      name: 'Description', 
+      value: marker.description.length > 1024 ? 
+        marker.description.substring(0, 1020) + '...' : 
+        marker.description 
+    });
+  }
+
+  // Process coordinates for display
+  let isMultiCoord = false;
+  let coordCount = 1;
+  
+  try {
+    const coords = marker.coordinates;
+    
+    // Handle different coordinate formats
+    if (Array.isArray(coords)) {
+      if (coords.length === 2 && typeof coords[0] === 'number') {
+        // Single coordinate pair
+        const coordsString = `[${coords[0]}, ${coords[1]}]`;
+        embed.addFields({ name: 'Coordinates', value: coordsString });
+      } else {
+        // Multiple coordinates
+        isMultiCoord = true;
+        coordCount = coords.length;
+        
+        if (coordIndex !== undefined && coordIndex !== '*') {
+          // Show only the selected coordinate
+          const idx = parseInt(coordIndex);
+          if (idx >= 0 && idx < coords.length) {
+            const coord = coords[idx];
+            if (Array.isArray(coord) && coord.length === 2) {
+              embed.addFields({ 
+                name: `Coordinate #${idx + 1}`, 
+                value: `[${coord[0]}, ${coord[1]}]` 
+              });
+            }
+          }
+        } else if (coords.length > 10) {
+          // If too many coordinates, show a summary
+          embed.addFields({ name: 'Coordinates', value: `${coords.length} coordinate points (showing first 10)` });
+          
+          // Show first 10 coordinates
+          const firstTen = coords.slice(0, 10).map((coord, index) => {
+            if (Array.isArray(coord) && coord.length === 2) {
+              return `${index + 1}. [${coord[0]}, ${coord[1]}]`;
+            }
+            return `${index + 1}. [Invalid format]`;
+          });
+          
+          embed.addFields({ name: 'Preview', value: firstTen.join('\n') });
+        } else {
+          // Show all coordinates if 10 or fewer
+          const allCoords = coords.map((coord, index) => {
+            if (Array.isArray(coord) && coord.length === 2) {
+              return `${index + 1}. [${coord[0]}, ${coord[1]}]`;
+            }
+            return `${index + 1}. [Invalid format]`;
+          });
+          
+          embed.addFields({ name: 'Coordinates', value: allCoords.join('\n') });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error processing coordinates:', e);
+    embed.addFields({ name: 'Coordinates', value: 'Error processing coordinates' });
+  }
+
+  // Create components array for buttons and select menus
+  const components = [];
+  
+  // For specific coordinate index edits, only show coordinate editing
+  if (coordIndex !== undefined && coordIndex !== '*') {
+    // Add button specifically for this coordinate
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`req_edit_coord_${marker.id}_${coordIndex}_${interaction.user.id}`)
+          .setLabel(`Edit Coordinate #${parseInt(coordIndex) + 1}`)
+          .setStyle(ButtonStyle.Primary)
+      )
+    );
+  } else {
+    // Show a select menu of all editable fields
+    const editFieldsMenu = new StringSelectMenuBuilder()
+      .setCustomId(`select_edit_field_${marker.id}_${coordIndex || '*'}_${interaction.user.id}`)
+      .setPlaceholder('Select field to edit')
+      .addOptions([
+        {
+          label: 'Name',
+          description: 'Edit the marker name',
+          value: 'name'
+        },
+        {
+          label: 'Description',
+          description: 'Edit the marker description',
+          value: 'description'
+        },
+        {
+          label: 'Type',
+          description: 'Edit the marker type/category',
+          value: 'type'
+        },
+        {
+          label: 'Icon',
+          description: 'Edit the marker icon',
+          value: 'icon'
+        },
+        {
+          label: 'Coordinates',
+          description: isMultiCoord ? 'Edit all coordinates' : 'Edit the coordinates',
+          value: 'coordinates'
+        }
+      ]);
+    
+    components.push(new ActionRowBuilder().addComponents(editFieldsMenu));
+
+    // Add submit and cancel buttons
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`submit_edits_${marker.id}_${interaction.user.id}`)
+          .setLabel('Submit Changes')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`cancel_edit_session`) // IMPORTANT: Match the ID in buttonHandler.js
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+  }
+
+  // Determine the appropriate reply method
+  const replyMethod = interaction.deferred ? interaction.editReply : interaction.reply;
+  
+  await replyMethod.call(interaction, {
+    embeds: [embed],
+    content: "📝 Please select what you'd like to edit for this marker" + 
+             (coordIndex !== undefined ? ` (Coordinate #${parseInt(coordIndex) + 1})` : 
+              (coordIndex === '*' ? " (All metadata)" : ".")),
+    components: components,
+    ephemeral: true
+  });
 }
 
 /**
@@ -447,5 +503,6 @@ module.exports = {
   handleRequestEdit,
   handleRequestRemove,
   safeMessageFetch,
-  syncDatabase
+  syncDatabase,
+  showMarkerEditOptions
 };

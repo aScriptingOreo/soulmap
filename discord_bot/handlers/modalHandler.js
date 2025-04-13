@@ -1,618 +1,559 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { validateCoordinates, formatCoordinates, generateEditDiff } = require('../modules/utils');
 
 /**
  * Handle modal submissions
  */
 async function handleModalSubmit(interaction, prisma, dbFunctions) {
-  console.log(`Modal submission received: ${interaction.customId}`);
-  
-  // Log field values for debugging
-  const fieldValues = {};
-  interaction.fields.fields.forEach((value, key) => {
-    fieldValues[key] = value.value;
-  });
-  console.log('Modal field values:', fieldValues);
-  
+  const customId = interaction.customId;
+  console.log(`Handling modal submission: ${customId}`);
+
   try {
-    // Handle edit request modals
-    if (interaction.customId.startsWith('req_edit_')) {
-      await handleEditRequestModal(interaction, dbFunctions);
+    // Handle coordinate selection modal
+    if (customId.startsWith('coord_select_modal_')) {
+      await handleCoordinateSelection(interaction, prisma, dbFunctions);
     }
-    // Handle submit reason modal (final submission)
-    else if (interaction.customId.startsWith('submit_reason_')) {
+    // Handle edit submission modals
+    else if (customId.startsWith('submit_reason_')) {
       await handleSubmitReason(interaction, prisma, dbFunctions);
     }
-    // Handle remove request modals
-    else if (interaction.customId.startsWith('request_remove_')) {
-      await handleRemoveRequestModal(interaction, dbFunctions);
+    // Handle field edit modals
+    else if (customId.startsWith('req_edit_')) {
+      await handleRequestEditField(interaction, prisma, dbFunctions);
     }
-    // Handle deny reason modal
-    else if (interaction.customId.startsWith('deny_reason_')) {
-      await handleDenyReasonModal(interaction, prisma, dbFunctions);
+    // Handle denial reason modals
+    else if (customId.startsWith('deny_reason_')) {
+      await handleDenyReason(interaction, prisma, dbFunctions);
     }
-    // Handle admin edit field modal
-    else if (interaction.customId.startsWith('admin_edit_field_modal_')) {
-      await handleAdminEditFieldModal(interaction, prisma, dbFunctions);
-    }
-    // Other modal types
+    // Handle other types of modals
     else {
-      console.log(`Unhandled modal type: ${interaction.customId}`);
+      console.warn(`Unhandled modal submission: ${customId}`);
       await interaction.reply({
-        content: 'This action is not implemented.',
+        content: 'This type of submission is not yet implemented.',
         ephemeral: true
       });
     }
   } catch (error) {
-    console.error('Error processing modal submission:', error);
-    try {
-      await interaction.reply({
-        content: `An error occurred: ${error.message}`,
-        ephemeral: true
-      });
-    } catch (replyError) {
-      console.error('Could not reply to modal submission:', replyError);
-    }
+    console.error(`Error handling modal submission ${customId}:`, error);
+    await interaction.reply({
+      content: `An error occurred: ${error.message}`,
+      ephemeral: true
+    });
   }
 }
 
 /**
- * Handle edit request modal submissions
+ * Handle coordinate selection modal for multi-coordinate markers
  */
-async function handleEditRequestModal(interaction, dbFunctions) {
+async function handleCoordinateSelection(interaction, prisma, dbFunctions) {
   const parts = interaction.customId.split('_');
-  const editType = parts[2]; // name, description, type, icon, coordinates
   const markerId = parts[3];
-  const coordIndex = parts[4];
-  const userId = parts[5];
+  const userId = parts[4];
   
-  console.log(`Processing edit request: type=${editType}, markerId=${markerId}, coordIndex=${coordIndex}`);
+  // Get the coordinate index from the modal input
+  const coordIndexInput = interaction.fields.getTextInputValue('coord_index');
+  let coordIndex;
   
-  // Get the marker details
-  const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
-  const marker = locations.find(loc => loc.id === markerId);
-  
-  if (!marker) {
-    await interaction.reply({
-      content: 'Error: Marker not found.',
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Get the new value from the form
-  const newValue = interaction.fields.getTextInputValue(editType) || 
-                  interaction.fields.getTextInputValue('coordinates') || '';
-  
-  // Get existing edit session or start a new one
-  let editSession = await dbFunctions.getEditSession(userId, markerId);
-  
-  // Add or update the edit
-  if (!editSession.edits) {
-    editSession.edits = {};
-  }
-  
-  // Store the edit with timestamp
-  editSession.edits[editType] = {
-    oldValue: editType === 'coordinates' && coordIndex !== '*' && coordIndex !== undefined ? 
-      (Array.isArray(marker.coordinates) && marker.coordinates[parseInt(coordIndex)] || '') : 
-      marker[editType] || '',
-    newValue: newValue,
-    coordIndex: coordIndex,
-    timestamp: Date.now()
-  };
-  
-  // Save updated session
-  await dbFunctions.saveEditSession(userId, markerId, marker.name, editSession.edits);
-  
-  // Generate a diff display for the embed
-  let diffText = '';
-  for (const [field, data] of Object.entries(editSession.edits)) {
-    const displayField = field.charAt(0).toUpperCase() + field.slice(1);
-    const oldValueDisplay = typeof data.oldValue === 'object' ? 
-      JSON.stringify(data.oldValue) : (data.oldValue || 'None');
-    const newValueDisplay = typeof data.newValue === 'object' ? 
-      JSON.stringify(data.newValue) : (data.newValue || 'None');
-    
-    diffText += `**${displayField}**:\n`;
-    diffText += `- Old: ${oldValueDisplay}\n`;
-    diffText += `+ New: ${newValueDisplay}\n\n`;
-  }
-  
-  // Create an embed showing all the changes
-  const embed = new EmbedBuilder()
-    .setTitle(`Edit Request for ${marker.name}`)
-    .setColor('#3498db')
-    .setDescription('The following changes have been queued for review:')
-    .addFields({ name: 'Changes', value: diffText || 'No changes yet.' })
-    .setFooter({ text: 'Continue editing or submit your changes when ready' })
-    .setTimestamp();
-
-  // Determine if this is a multi-coordinate marker
-  let isMultiCoord = false;
-  let coordCount = 1;
-  
-  try {
-    const coords = marker.coordinates;
-    
-    if (Array.isArray(coords)) {
-      if (coords.length === 2 && typeof coords[0] === 'number') {
-        isMultiCoord = false;
-      } else {
-        isMultiCoord = true;
-        coordCount = coords.length;
-      }
-    }
-  } catch (e) {
-    console.error('Error processing coordinates:', e);
-  }
-  
-  // Create components array
-  const components = [];
-  
-  // Add field selection menu - keep it always visible
-  const editFieldsMenu = new StringSelectMenuBuilder()
-    .setCustomId(`select_edit_field_${marker.id}_${coordIndex || '*'}_${userId}`)
-    .setPlaceholder('Select field to edit')
-    .addOptions([
-      {
-        label: 'Name',
-        description: 'Edit the marker name',
-        value: 'name'
-      },
-      {
-        label: 'Description',
-        description: 'Edit the marker description',
-        value: 'description'
-      },
-      {
-        label: 'Type',
-        description: 'Edit the marker type/category',
-        value: 'type'
-      },
-      {
-        label: 'Icon',
-        description: 'Edit the marker icon',
-        value: 'icon'
-      },
-      {
-        label: 'Coordinates',
-        description: isMultiCoord ? 'Edit all coordinates' : 'Edit the coordinates',
-        value: 'coordinates'
-      }
-    ]);
-  
-  components.push(new ActionRowBuilder().addComponents(editFieldsMenu));
-  
-  // Add coordinate selection menu if needed
-  if (isMultiCoord && coordCount > 1) {
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(`select_coord_req_${marker.id}_${userId}`)
-      .setPlaceholder('Or select a specific coordinate to edit')
-      .addOptions([
-        {
-          label: `All coordinates (${coordCount} points)`,
-          description: 'Edit all coordinates at once',
-          value: '*'
-        },
-        ...Array.from({ length: Math.min(coordCount, 24) }, (_, i) => ({
-          label: `Coordinate #${i + 1}`,
-          description: `Edit coordinate #${i + 1}`,
-          value: i.toString()
-        }))
-      ]);
-    
-    components.push(new ActionRowBuilder().addComponents(selectMenu));
-  }
-  
-  // Add submit and cancel buttons
-  components.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`submit_edits_${marker.id}_${userId}`)
-        .setLabel('Submit Changes')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('cancel_edit_session')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger)
-    )
-  );
-  
-  try {
-    // First try to update the original message
-    await interaction.update({
-      embeds: [embed],
-      components: components,
-      content: 'Your changes have been added to the edit request.'
-    });
-  } catch (error) {
-    // If that fails, reply with a new message
-    console.error('Failed to update message, sending new reply:', error);
-    await interaction.reply({
-      embeds: [embed],
-      components: components,
-      ephemeral: true
-    });
-  }
-}
-
-/**
- * Handle final submission with reason
- */
-async function handleSubmitReason(interaction, client, prisma, dbFunctions, config) {
-  const parts = interaction.customId.split('_');
-  const markerId = parts[2];
-  const userId = parts[3];
-  
-  // Get the reason from the form
-  const reason = interaction.fields.getTextInputValue('reason');
-  
-  // Get the edit session
-  const editSession = await dbFunctions.getEditSession(userId, markerId);
-  
-  if (!editSession || !editSession.edits || Object.keys(editSession.edits).length === 0) {
-    await interaction.reply({
-      content: 'No edits found to submit.',
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Get current marker data for storing the original state
-  let currentMarker = null;
-  
-  try {
-    const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
-    currentMarker = locations.find(loc => loc.id === markerId);
-    
-    if (!currentMarker) {
+  // Process the input - could be a number or "*"
+  if (coordIndexInput === '*') {
+    coordIndex = '*';
+  } else {
+    // Convert to zero-based index
+    const parsedIndex = parseInt(coordIndexInput);
+    if (isNaN(parsedIndex) || parsedIndex < 1) {
       await interaction.reply({
-        content: 'Error: Cannot find the marker you are trying to edit.',
+        content: 'Invalid coordinate number. Please enter a positive number or *.',
         ephemeral: true
       });
       return;
     }
-  } catch (error) {
-    console.error('Error fetching current marker data:', error);
+    coordIndex = (parsedIndex - 1).toString(); // Store as string for consistency
+  }
+  
+  // Get the marker using searchLocationsForAutocomplete
+  const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
+  const marker = locations.find(loc => loc.id === markerId);
+  
+  if (!marker) {
     await interaction.reply({
-      content: 'Error: Unable to retrieve current marker data.',
+      content: 'Marker not found. It may have been deleted.',
       ephemeral: true
     });
     return;
   }
   
-  // Create a copy of current marker data that will have the edits applied
-  let newMarker = JSON.parse(JSON.stringify(currentMarker));
-  
-  // Apply each edit to the new marker data
-  for (const [field, data] of Object.entries(editSession.edits)) {
-    if (field === 'coordinates' && data.coordIndex !== undefined && data.coordIndex !== '*') {
-      // Handle specific coordinate update
-      if (Array.isArray(newMarker.coordinates) && 
-          !(newMarker.coordinates.length === 2 && typeof newMarker.coordinates[0] === 'number')) {
-        // Update a specific coordinate in a multi-coordinate marker
-        const newCoordValue = typeof data.newValue === 'string' ? 
-          JSON.parse(data.newValue) : data.newValue;
-        newMarker.coordinates[parseInt(data.coordIndex)] = newCoordValue;
-      } else {
-        // Replace single coordinate
-        newMarker.coordinates = typeof data.newValue === 'string' ? 
-          JSON.parse(data.newValue) : data.newValue;
+  // Validate the coordinate index exists if not "*"
+  if (coordIndex !== '*') {
+    const idx = parseInt(coordIndex);
+    try {
+      const coords = marker.coordinates;
+      if (!Array.isArray(coords) || idx < 0 || idx >= coords.length) {
+        await interaction.reply({
+          content: `Invalid coordinate index. Please choose a number between 1 and ${coords.length} or *`,
+          ephemeral: true
+        });
+        return;
       }
-    } else {
-      // Standard field update
-      newMarker[field] = data.newValue;
+    } catch (e) {
+      console.error('Error validating coordinate index:', e);
+      await interaction.reply({
+        content: 'Error validating coordinate index.',
+        ephemeral: true
+      });
+      return;
     }
   }
   
-  // Send request to admin channel 
-  const CHANNEL_ID = config.CHANNEL_ID;
-  const channel = interaction.client.channels.cache.get(CHANNEL_ID);
+  // Use the showMarkerEditOptions function to display edit options
+  const { showMarkerEditOptions } = require('../modules/requests');
+  await showMarkerEditOptions(interaction, marker, coordIndex);
+}
+
+/**
+ * Handle field edit modal submissions (name, description, coordinates, etc.)
+ */
+async function handleRequestEditField(interaction, prisma, dbFunctions) {
+  const parts = interaction.customId.split('_');
+  const field = parts[2]; // name, description, type, icon, coordinates
+  const markerId = parts[3];
+  const coordIndex = parts[4]; // Could be a number index, '*', or undefined
+  const userId = parts[5];
+
+  console.log(`Field edit submission: field=${field}, markerId=${markerId}, coordIndex=${coordIndex}, userId=${userId}`);
   
-  if (channel) {
-    // Create a diff display for the embed
-    let diffText = '';
-    for (const [field, data] of Object.entries(editSession.edits)) {
-      const displayField = field.charAt(0).toUpperCase() + field.slice(1);
-      const oldValueDisplay = typeof data.oldValue === 'object' ? 
-        JSON.stringify(data.oldValue) : (data.oldValue || 'None');
-      const newValueDisplay = typeof data.newValue === 'object' ? 
-        JSON.stringify(data.newValue) : (data.newValue || 'None');
-      
-      diffText += `**${displayField}**:\n`;
-      diffText += `- Old: ${oldValueDisplay}\n`;
-      diffText += `+ New: ${newValueDisplay}\n\n`;
+  try {
+    // Get the field value from the modal
+    const value = interaction.fields.getTextInputValue(field);
+    
+    // Get the current edit session or create a new one
+    let session = await dbFunctions.getEditSession(userId, markerId);
+    
+    if (!session || !session.edits) {
+      session = { edits: {} };
     }
     
-    // Create an embed for the admin channel
+    // Get current marker data from the database
+    const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
+    const marker = locations.find(loc => loc.id === markerId);
+    
+    if (!marker) {
+      await interaction.reply({
+        content: 'Error: Marker not found in the database.',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Process the edit based on field type
+    let oldValue;
+    let newValue;
+    let hasChanged = false;
+    
+    switch (field) {
+      case 'coordinates':
+        [oldValue, newValue, hasChanged] = processCoordinatesEdit(marker, coordIndex, value);
+        break;
+      case 'name':
+      case 'description':
+      case 'type':
+      case 'icon':
+        // Simple field edits
+        oldValue = marker[field];
+        newValue = value;
+        hasChanged = oldValue !== newValue;
+        break;
+      default:
+        await interaction.reply({
+          content: `Editing field "${field}" is not supported.`,
+          ephemeral: true
+        });
+        return;
+    }
+    
+    // Only save changes if the value actually changed
+    if (hasChanged) {
+      // Save the edit to the session
+      session.edits[field] = {
+        oldValue,
+        newValue,
+        timestamp: Date.now()
+      };
+      
+      // Save the edit session
+      await dbFunctions.saveEditSession(userId, markerId, marker.name, session.edits);
+    }
+    
+    // Generate a summary of ALL current edits in the session
+    const editSummary = Object.entries(session.edits).map(([editField, data]) => {
+      const fieldName = editField.charAt(0).toUpperCase() + editField.slice(1);
+      const diffText = generateEditDiff(data.oldValue, data.newValue);
+      return `**${fieldName}**\n${diffText}`;
+    }).join('\n\n');
+    
+    // Create an embed with status information
     const embed = new EmbedBuilder()
-      .setTitle('Edit Request')
-      .setColor('#FFA500')
-      .addFields(
-        { name: 'Marker', value: currentMarker.name },
-        { name: 'Requested By', value: `<@${userId}>` },
-        { name: 'Changes', value: diffText },
-        { name: 'Reason', value: reason }
-      )
-      .setFooter({ text: `Marker ID: ${markerId}` })
+      .setTitle(`Edit Session: ${marker.name}`)
+      .setColor('#0099ff')
+      .setDescription(hasChanged 
+        ? `Your changes to the **${field}** field have been saved.`
+        : `No changes detected for the **${field}** field - the value is identical.`)
+      .addFields({
+        name: 'Current Edits',
+        value: editSummary || 'No changes have been made yet.'
+      })
+      .setFooter({ 
+        text: `Click "Submit Changes" when you're done, or use the menu to edit more fields.`
+      })
       .setTimestamp();
     
-    // Add admin buttons
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`approve_edit_${markerId}_${userId}`)
-        .setLabel('✅ Approve')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`modify_edit_${markerId}_${userId}`)
-        .setLabel('✏️ Modify')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`deny_edit_${markerId}`)
-        .setLabel('❌ Deny')
-        .setStyle(ButtonStyle.Danger)
-    );
+    // CRITICAL FIX: Get the original message components to preserve them
+    const originalComponents = interaction.message.components;
     
-    // Send the message to get its ID
-    const message = await channel.send({ embeds: [embed], components: [row] });
+    // Update ONLY the embeds, preserve ALL original components
+    try {
+      await interaction.update({
+        embeds: [embed],
+        components: originalComponents // Preserve all original components
+      });
+    } catch (updateError) {
+      console.error('Could not update message embeds:', updateError);
+      // If update fails, reply with a new message
+      await interaction.reply({
+        content: `Changes saved but couldn't update display. Use the select menu above to continue editing.`,
+        ephemeral: true
+      });
+    }
     
-    // Save request to database with the complete JSON data
-    const saveSuccess = await dbFunctions.saveRequest(
-      message.id, // Discord message ID for tracking
-      userId,
-      'edit', // Request type
-      reason,
-      {
-        currentData: currentMarker, // Original marker as JSON
-        newData: newMarker          // Modified marker as JSON
-      }
-    );
-    
-    // Delete the edit session
-    await dbFunctions.deleteEditSession(userId, markerId);
-    
-    // Confirm to the user
+  } catch (error) {
+    console.error(`Error handling field edit:`, error);
     await interaction.reply({
-      content: '✅ Your edit request has been submitted and will be reviewed by administrators.',
-      ephemeral: true
-    });
-  } else {
-    // Handle case where channel not found
-    await interaction.reply({
-      content: 'Error: Admin channel not found. Please contact an administrator.',
+      content: `An error occurred while processing your edit: ${error.message}`,
       ephemeral: true
     });
   }
 }
 
 /**
- * Handle removal request modal submissions 
+ * Process coordinates field edits
+ * Returns [oldValue, newValue, hasChanged]
  */
-async function handleRemoveRequestModal(interaction, dbFunctions) {
-  const parts = interaction.customId.split('_');
-  const markerId = parts[2];
-  const coordIndex = parts[3];
-  const userId = parts[4];
+function processCoordinatesEdit(marker, coordIndex, value) {
+  const coords = marker.coordinates;
+  let oldValue = coords;
+  let newValue;
+  let hasChanged = false;
   
-  // Get the reason from the form
-  const reason = interaction.fields.getTextInputValue('reason');
-  
-  // Get marker details
-  const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
-  const marker = locations.find(loc => loc.id === markerId);
-  
-  if (!marker) {
-    await interaction.reply({
-      content: 'Error: Marker not found.',
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Generate a unique request ID
-  const requestId = `remove_${Date.now()}_${userId}`;
-  
-  // Format the request for the database
-  const removalType = coordIndex === 'all' ? 'marker' : 'coordinate';
-  const description = `Request to remove ${removalType}: ${marker.name}${coordIndex !== 'all' ? ` (coordinate #${parseInt(coordIndex) + 1})` : ''}`;
-  
-  // Prepare change information for removal request
-  const changes = {
-    type: removalType,
-    coordIndex: coordIndex !== 'all' ? parseInt(coordIndex) : 'all'
-  };
-  
-  // If removing a specific coordinate, include the coordinate value
-  if (coordIndex !== 'all' && Array.isArray(marker.coordinates)) {
-    try {
-      changes.coordinate = marker.coordinates[parseInt(coordIndex)];
-    } catch (e) {
-      console.error('Error getting coordinate for removal:', e);
-    }
-  }
-  
-  // Save the request to the database with complete change information
-  await dbFunctions.saveRequest(
-    requestId,
-    userId,
-    marker.name,
-    coordIndex !== 'all' ? JSON.stringify(marker.coordinates[parseInt(coordIndex)]) : '',
-    description,
-    null, // screenshot
-    'remove',
-    reason,
-    {
-      markerId: markerId,
-      markerName: marker.name,
-      changes: changes
-    }
-  );
-  
-  // Send a request to the admin channel
-  const CHANNEL_ID = process.env.CHANNEL_ID;
-  const channel = interaction.client.channels.cache.get(CHANNEL_ID);
-  
-  if (channel) {
-    // Create an embed for the request
-    const embed = new EmbedBuilder()
-      .setTitle('Removal Request')
-      .setColor('#FF5733')
-      .addFields(
-        { name: 'Marker', value: marker.name },
-        { name: 'Type', value: removalType },
-        { name: 'Requested By', value: `<@${userId}>` },
-        { name: 'Reason', value: reason }
-      )
-      .setFooter({ text: `Request ID: ${requestId}` })
-      .setTimestamp();
+  try {
+    // Parse the coordinates from the input value
+    const parsedCoords = parseCoordinatesInput(value);
     
-    // Add coordinate information if applicable
-    if (coordIndex !== 'all' && Array.isArray(marker.coordinates)) {
-      const coord = marker.coordinates[parseInt(coordIndex)];
-      if (Array.isArray(coord) && coord.length === 2) {
-        embed.addFields({ name: 'Coordinate', value: `[${coord[0]}, ${coord[1]}]` });
+    // Handle different edit modes based on coordIndex
+    if (coordIndex === '*') {
+      // Edit all coordinates
+      newValue = parsedCoords;
+      hasChanged = JSON.stringify(oldValue) !== JSON.stringify(newValue);
+    } else if (coordIndex !== undefined) {
+      // Edit specific coordinate
+      const idx = parseInt(coordIndex);
+      
+      // Create a copy of the coordinates array
+      const newCoords = [...coords];
+      
+      // Replace the specific coordinate
+      if (Array.isArray(parsedCoords) && parsedCoords.length === 2 && typeof parsedCoords[0] === 'number') {
+        // Single coordinate pair provided
+        newCoords[idx] = parsedCoords;
+      } else if (Array.isArray(parsedCoords) && parsedCoords.length >= 1) {
+        // Multiple coordinates provided, use the first one
+        newCoords[idx] = parsedCoords[0];
       }
+      
+      newValue = newCoords;
+      hasChanged = JSON.stringify(oldValue) !== JSON.stringify(newValue);
+    } else {
+      // Replace all coordinates (standard edit)
+      newValue = parsedCoords;
+      hasChanged = JSON.stringify(oldValue) !== JSON.stringify(newValue);
     }
     
-    // Create admin action buttons
-    const row = new ActionRowBuilder().addComponents(
+    return [oldValue, newValue, hasChanged];
+  } catch (error) {
+    console.error('Error processing coordinates:', error);
+    throw error;
+  }
+}
+
+/**
+ * Parse coordinates from various input formats
+ */
+function parseCoordinatesInput(input) {
+  // Remove any whitespace and check format
+  const trimmed = input.trim();
+  
+  // Split by newlines or commas
+  const lines = trimmed
+    .replace(/\]\s*,\s*\[/g, ']\n[') // Normalize separators between coordinates
+    .split(/\n/)
+    .filter(line => line.trim().length > 0);
+  
+  if (lines.length === 0) {
+    throw new Error('No valid coordinates found in input');
+  }
+  
+  if (lines.length === 1) {
+    // Could be a single coordinate pair
+    const match = lines[0].match(/\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]/);
+    if (!match) {
+      throw new Error('Invalid coordinate format. Expected [X, Y]');
+    }
+    return [parseFloat(match[1]), parseFloat(match[2])];
+  } else {
+    // Multiple coordinates
+    return lines.map(line => {
+      const match = line.match(/\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]/);
+      if (!match) {
+        throw new Error(`Invalid coordinate format: ${line}. Expected [X, Y]`);
+      }
+      return [parseFloat(match[1]), parseFloat(match[2])];
+    });
+  }
+}
+
+/**
+ * Create buttons for edit session actions
+ */
+function createEditSessionButtons(markerId, userId) {
+  const row = new ActionRowBuilder()
+    .addComponents(
       new ButtonBuilder()
-        .setCustomId(`approve_remove_${requestId}_${markerId}_${coordIndex}`)
-        .setLabel('✅ Approve')
+        .setCustomId(`submit_edits_${markerId}_${userId}`)
+        .setLabel('Submit Changes')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`edit_remove_${requestId}_${markerId}_${coordIndex}`)
-        .setLabel('✏️ Edit')
+        .setCustomId(`edit_more_${markerId}_${userId}`)
+        .setLabel('Edit More')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`deny_remove_${requestId}`)
-        .setLabel('❌ Deny')
-        .setStyle(ButtonStyle.Danger)
+        .setCustomId('cancel_edit_session')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  
+  return [row];
+}
+
+/**
+ * Handle submit reason modal (when user submits edits with reason)
+ */
+async function handleSubmitReason(interaction, prisma, dbFunctions) {
+  // Extract data from modal and customId
+  const parts = interaction.customId.split('_');
+  const markerId = parts[2];
+  const userId = parts[3];
+  const reason = interaction.fields.getTextInputValue('reason');
+  
+  console.log(`Submit reason modal: markerId=${markerId}, userId=${userId}`);
+  
+  try {
+    // Defer reply while we process
+    await interaction.deferReply({ ephemeral: true });
+    
+    // Create a new message in the requests channel
+    const CHANNEL_ID = process.env.CHANNEL_ID;
+    const channel = interaction.client.channels.cache.get(CHANNEL_ID);
+    
+    if (!channel) {
+      await interaction.editReply('Error: Could not find the requests channel.');
+      return;
+    }
+    
+    // Get the edit session data
+    const session = await dbFunctions.getEditSession(userId, markerId);
+    
+    if (!session || !session.edits || Object.keys(session.edits).length === 0) {
+      await interaction.editReply('No edit data found. Your session may have expired.');
+      return;
+    }
+    
+    // Get marker information
+    const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
+    const marker = locations.find(loc => loc.id === markerId);
+    
+    if (!marker) {
+      await interaction.editReply('Error: Could not find the marker information.');
+      return;
+    }
+    
+    // Create a formatted message showing the edit request
+    const { generateEditDiff } = require('../modules/utils');
+    
+    // Create an embed for the request
+    const embed = new EmbedBuilder()
+      .setTitle(`Edit Request: ${marker.name}`)
+      .setColor('#0099ff')
+      .setDescription(`User <@${userId}> has requested the following changes:`)
+      .addFields(
+        { name: 'Reason', value: reason }
+      );
+    
+    // Add fields showing what's being changed
+    for (const [field, data] of Object.entries(session.edits)) {
+      const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+      const diffText = generateEditDiff(data.oldValue, data.newValue);
+      embed.addFields({ name: fieldName, value: diffText });
+    }
+    
+    // Add footer
+    embed.setFooter({ 
+      text: `Marker ID: ${markerId}`,
+      iconURL: interaction.user.displayAvatarURL() 
+    });
+    
+    embed.setTimestamp();
+    
+    // Create buttons for the request
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`approve_edit_${markerId}`)
+          .setLabel('✅ Approve')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`modify_edit_${markerId}`)
+          .setLabel('🔧 Modify')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`deny_edit_${markerId}`)
+          .setLabel('❌ Deny')
+          .setStyle(ButtonStyle.Danger)
+      );
+    
+    // Send the embed to the specified channel
+    const requestMessage = await channel.send({ 
+      embeds: [embed], 
+      components: [row] 
+    });
+    
+    console.log('Converting edit session to request:', {
+      messageId: requestMessage.id,
+      userId,
+      markerId,
+      reason
+    });
+    
+    // Save the request to the database with currentData and newData
+    const result = await dbFunctions.saveEditSessionAsRequest(
+      requestMessage.id,
+      userId,
+      markerId,
+      reason
     );
     
-    // Send the request to the channel
-    await channel.send({ embeds: [embed], components: [row] });
+    if (result) {
+      await interaction.editReply('Your edit request has been submitted! Admins will review it soon.');
+    } else {
+      await interaction.editReply('There was an error submitting your request. Please try again later.');
+      // Try to delete the message if we couldn't save to database
+      try {
+        await requestMessage.delete();
+      } catch (deleteError) {
+        console.error('Error deleting request message after failure:', deleteError);
+      }
+    }
+  } catch (error) {
+    console.error('Error handling submit reason:', error);
+    try {
+      // Check if we've already replied
+      if (interaction.deferred) {
+        await interaction.editReply(`Error: ${error.message}`);
+      } else {
+        await interaction.reply({ content: `Error: ${error.message}`, ephemeral: true });
+      }
+    } catch (replyError) {
+      console.error('Error replying to interaction:', replyError);
+    }
   }
-  
-  // Reply to the user
-  await interaction.reply({
-    content: 'Your removal request has been submitted and will be reviewed by administrators.',
-    ephemeral: true
-  });
 }
 
 /**
  * Handle deny reason modal submission
  */
-async function handleDenyReasonModal(interaction, prisma, dbFunctions) {
-  const messageId = interaction.customId.split('_')[2];
+async function handleDenyReason(interaction, prisma, dbFunctions) {
+  const parts = interaction.customId.split('_');
+  const messageId = parts[2];
   const reason = interaction.fields.getTextInputValue('reason');
   
-  try {
-    // Update request status to denied
-    await prisma.discordLocationRequest.update({
-      where: { messageId: messageId },
-      data: {
-        status: 'denied',
-        reason: reason // Store the denial reason
-      }
-    });
-    
-    // Get the original message
-    const originalMessage = interaction.message;
-    
-    // Create updated embed with denied status
-    const originalEmbed = originalMessage.embeds[0];
-    const updatedEmbed = EmbedBuilder.from(originalEmbed)
-      .setColor('#FF0000')
-      .setTitle(`❌ DENIED: ${originalEmbed.title}`)
-      .addFields({
-        name: 'Denied By',
-        value: `<@${interaction.user.id}>`,
-        inline: true
-      })
-      .addFields({
-        name: 'Denied At',
-        value: `<t:${Math.floor(Date.now()/1000)}:F>`,
-        inline: true
-      })
-      .addFields({
-        name: 'Denial Reason',
-        value: reason
-      });
-    
-    // Update message without buttons
-    await originalMessage.edit({
-      embeds: [updatedEmbed],
-      components: [] // Remove all buttons
-    });
-    
-    // Confirm to the admin
-    await interaction.reply({
-      content: '✅ Edit request has been denied.',
-      ephemeral: true
-    });
-  } catch (error) {
-    console.error('Error denying edit request:', error);
-    await interaction.reply({
-      content: `Error: ${error.message}`,
-      ephemeral: true
-    });
-  }
-}
-
-/**
- * Handle admin edit field modal submission
- */
-async function handleAdminEditFieldModal(interaction, prisma, dbFunctions) {
-  const parts = interaction.customId.split('_');
-  const messageId = parts[3];
-  const markerId = parts[4];
-  const fieldToEdit = parts[5];
-  
-  console.log(`Admin submitting edit for field: ${fieldToEdit}, message: ${messageId}, marker: ${markerId}`);
-  
-  // Get the new value from the form
-  const newValue = interaction.fields.getTextInputValue('value');
+  console.log(`Deny reason modal for message: ${messageId}, reason: ${reason}`);
   
   try {
-    // Get admin's edit session
-    const adminUserId = interaction.user.id;
-    const adminEditSession = await dbFunctions.getEditSession(adminUserId, markerId);
+    // Get the request
+    const request = await dbFunctions.getRequestByMessageId(messageId);
     
-    if (!adminEditSession || !adminEditSession.edits) {
+    if (!request) {
       await interaction.reply({
-        content: 'Your edit session has expired. Please try again.',
+        content: 'Request not found in database.',
         ephemeral: true
       });
       return;
     }
     
-    // Update the field in the admin's session
-    if (adminEditSession.edits[fieldToEdit]) {
-      adminEditSession.edits[fieldToEdit].newValue = newValue;
+    // Update the request status
+    await prisma.discordLocationRequest.update({
+      where: { messageId: messageId },
+      data: {
+        status: 'denied',
+        approvedBy: interaction.user.id, // Using approvedBy for the admin who denied it
+        approvedAt: new Date()
+      }
+    });
+    
+    console.log('Request status updated to denied');
+    
+    // Update message to show it's been denied
+    try {
+      const message = await interaction.channel.messages.fetch(messageId);
       
-      // Save the updated session
-      await dbFunctions.saveEditSession(
-        adminUserId, 
-        markerId, 
-        adminEditSession.markerName, 
-        adminEditSession.edits
-      );
+      // Create updated embed with denial status
+      const originalEmbed = message.embeds[0];
+      const updatedEmbed = EmbedBuilder.from(originalEmbed)
+        .setColor('#FF0000')
+        .setTitle(`❌ DENIED: ${originalEmbed.title}`)
+        .addFields({
+          name: 'Denied By',
+          value: `<@${interaction.user.id}>`,
+          inline: true
+        })
+        .addFields({
+          name: 'Denied At',
+          value: `<t:${Math.floor(Date.now()/1000)}:F>`,
+          inline: true
+        })
+        .addFields({
+          name: 'Reason for Denial',
+          value: reason
+        });
       
-      // Show updated changes to the admin - pass the message ID from the original request
-      await handleModifyEdit(interaction, prisma, dbFunctions, messageId);
-    } else {
-      await interaction.reply({
-        content: `Field ${fieldToEdit} not found in your edit session.`,
-        ephemeral: true
+      // Update message without buttons
+      await message.edit({
+        embeds: [updatedEmbed],
+        components: [] // Remove all buttons
       });
+      
+      console.log('Message updated to show denial');
+    } catch (messageError) {
+      console.error('Error updating message:', messageError);
     }
-  } catch (error) {
-    console.error('Error updating admin edit field:', error);
+    
+    // Reply to the interaction - NO DMs
     await interaction.reply({
-      content: `Error: ${error.message}`,
+      content: `❌ Edit request has been denied.`,
+      ephemeral: true
+    });
+    
+  } catch (error) {
+    console.error('Error denying edit request:', error);
+    await interaction.reply({
+      content: `Error denying edit request: ${error.message}`,
       ephemeral: true
     });
   }

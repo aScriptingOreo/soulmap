@@ -12,9 +12,13 @@ async function handleButtonInteraction(interaction, client, prisma, dbFunctions,
     if (interaction.customId.startsWith('submit_edits_')) {
       await handleSubmitEdits(interaction, client, prisma, dbFunctions, config);
     }
-    // Handle cancel edit session button
-    else if (interaction.customId === 'cancel_edit_session') {
+    // Handle cancel edit session button - FIX: Add both possible button IDs
+    else if (interaction.customId === 'cancel_edit_session' || interaction.customId === 'cancel_edit_request') {
       await handleCancelEditSession(interaction, prisma, dbFunctions);
+    }
+    // Handle edit more button
+    else if (interaction.customId.startsWith('edit_more_')) {
+      await handleEditMore(interaction, prisma, dbFunctions);
     }
     // Handle approve edit request button
     else if (interaction.customId.startsWith('approve_edit_')) {
@@ -433,133 +437,162 @@ async function handleApproveEdit(interaction, prisma, dbFunctions) {
   console.log(`Approving edit request in message: ${messageId}`);
   
   // Fetch the edit request from the database
-  let request;
-  try {
-    request = await prisma.discordLocationRequest.findUnique({
-      where: { messageId: messageId }
-    });
-    
-    if (!request) {
-      // Try the backup approach with raw SQL
-      const requests = await prisma.$queryRaw`
-        SELECT * FROM discord_location_requests 
-        WHERE message_id = ${messageId}`;
-      
-      if (requests && requests.length > 0) {
-        request = requests[0];
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching request:', error);
-    await interaction.reply({
-      content: 'Error retrieving request data.',
-      ephemeral: true
-    });
-    return;
-  }
+  const request = await dbFunctions.getRequestByMessageId(messageId);
   
   if (!request) {
     await interaction.reply({
       content: 'Request not found in database.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
   
-  // Get the marker ID
-  const markerId = request.markerId;
+  // Get the marker ID from the JSON fields
+  let markerId = null;
+  let currentData = {};
+  let newData = {};
   
-  if (!markerId) {
-    await interaction.reply({
-      content: 'Error: No marker ID found in the request.',
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Get the update data from newData field if available
-  let updateData = {};
-  
-  if (request.newData) {
-    try {
-      const newDataObj = JSON.parse(request.newData);
-      
-      // Extract relevant fields for update
-      // Depending on your Location model, you might need to adjust which fields to include
-      const fieldsToUpdate = ['name', 'description', 'type', 'coordinates', 'icon'];
-      
-      for (const field of fieldsToUpdate) {
-        if (newDataObj[field] !== undefined) {
-          updateData[field] = newDataObj[field];
-        }
-      }
-    } catch (error) {
-      console.error('Error parsing newData:', error);
-      
-      // Fall back to legacy changes if available
-      if (request.changes) {
-        try {
-          const changes = JSON.parse(request.changes);
-          
-          // Apply each requested change from legacy format
-          for (const [field, data] of Object.entries(changes)) {
-            if (!data.newValue) continue;
-            updateData[field] = data.newValue;
-          }
-        } catch (changeParsError) {
-          console.error('Error parsing changes fallback:', changeParsError);
-          await interaction.reply({
-            content: 'Error parsing change data. Cannot implement request.',
-            ephemeral: true
-          });
-          return;
-        }
-      } else {
-        await interaction.reply({
-          content: 'Error: Cannot determine what changes to apply.',
-          ephemeral: true
-        });
-        return;
+  // Try to extract the marker ID from current_data or new_data
+  try {
+    if (request.current_data) {
+      currentData = JSON.parse(request.current_data);
+      markerId = currentData.id;
+    }
+    
+    if (request.new_data) {
+      newData = JSON.parse(request.new_data);
+      if (!markerId && newData.id) {
+        markerId = newData.id;
       }
     }
-  } else if (request.changes) {
-    // Legacy approach if newData isn't available
-    try {
-      const changes = JSON.parse(request.changes);
-      
-      // Apply each requested change from legacy format
-      for (const [field, data] of Object.entries(changes)) {
-        if (!data.newValue) continue;
-        updateData[field] = data.newValue;
-      }
-    } catch (error) {
-      console.error('Error parsing changes:', error);
+  } catch (error) {
+    console.error('Error parsing JSON data from request:', error);
+  }
+  
+  // Fallback to the old marker_id column if it exists
+  if (!markerId && request.marker_id) {
+    markerId = request.marker_id;
+  }
+  
+  if (!markerId) {
+    console.error('No marker ID found in request data:', request);
+    await interaction.reply({
+      content: 'Error: No marker ID found in the request. Please check the request data.',
+      flags: 64 // Use flags instead of ephemeral
+    });
+    return;
+  }
+  
+  console.log(`Extracted marker ID: ${markerId}`);
+  
+  // Get the existing location using searchLocationsForAutocomplete instead of direct Prisma access
+  try {
+    const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
+    
+    if (!locations || locations.length === 0) {
       await interaction.reply({
-        content: 'Error parsing change data. Cannot implement request.',
-        ephemeral: true
+        content: 'Error: Marker no longer exists in the database.',
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
-  } else {
-    await interaction.reply({
-      content: 'Error: No changes found to apply.',
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Add lastModified timestamp and approvedBy
-  updateData.lastModified = new Date();
-  updateData.approvedBy = interaction.user.id;
-  
-  console.log('Update data:', updateData);
-  
-  try {
-    // Update the marker in the database
-    await prisma.Location.update({
-      where: { id: markerId },
-      data: updateData
-    });
+    
+    // Find the location by matching ID
+    const existingLocation = locations.find(loc => loc.id === markerId);
+    
+    if (!existingLocation) {
+      await interaction.reply({
+        content: 'Error: Marker no longer exists in the database.',
+        flags: 64 // Use flags instead of ephemeral
+      });
+      return;
+    }
+    
+    // Extract relevant fields for update
+    const validFields = [
+      'name', 'description', 'type', 'coordinates', 'icon', 
+      'iconSize', 'mediaUrl', 'iconColor', 'radius',
+      'isCoordinateSearch', 'lore', 'spoilers', 'noCluster', 'exactCoordinates'
+    ];
+    
+    // Build update data object, ONLY including fields that actually changed
+    let updateData = {};
+    
+    // Only update fields that have changed from currentData to newData
+    for (const field of validFields) {
+      // Only process fields present in newData
+      if (newData[field] !== undefined) {
+        // Check if the field actually changed
+        const oldValue = currentData[field];
+        const newValue = newData[field];
+        
+        // Compare values - for objects, stringify for comparison
+        const oldValueStr = typeof oldValue === 'object' ? JSON.stringify(oldValue) : String(oldValue);
+        const newValueStr = typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue);
+        
+        if (oldValueStr !== newValueStr) {
+          // Field has changed, include in update
+          updateData[field] = newValue;
+        }
+      }
+    }
+    
+    // Add metadata fields
+    const now = new Date();
+    updateData.lastModified = now;
+    updateData.approvedBy = interaction.user.id;
+    updateData.updatedAt = now;
+    
+    console.log('Update data prepared:', Object.keys(updateData));
+    
+    if (Object.keys(updateData).length === 0) {
+      await interaction.reply({
+        content: 'No changes detected between current and new data.',
+        flags: 64 // Use flags instead of ephemeral
+      });
+      return;
+    }
+    
+    // We can't use prisma.Location directly since bot's prisma doesn't have that model
+    // Use a raw query via prisma.$executeRawUnsafe instead with proper type casting
+    const setClauseParts = [];
+    const queryParams = [];
+    
+    // Build the SET clause with proper type casting for each field
+    for (const [key, value] of Object.entries(updateData)) {
+      // Add parameter placeholder
+      const paramIndex = queryParams.length + 1;
+      
+      // Handle different data types with proper casting
+      if (['coordinates', 'mediaUrl', 'exactCoordinates'].includes(key)) {
+        // Cast these fields to JSONB
+        setClauseParts.push(`"${key}" = $${paramIndex}::jsonb`);
+        // Add the parameter value - serialize objects to JSON strings
+        queryParams.push(typeof value === 'object' && !(value instanceof Date) ? 
+          JSON.stringify(value) : value);
+      } 
+      else if (['lastModified', 'updatedAt', 'createdAt', 'approvedAt'].includes(key) && value instanceof Date) {
+        // Cast date fields to timestamp
+        setClauseParts.push(`"${key}" = $${paramIndex}::timestamp`);
+        // Format date as ISO string for PostgreSQL 
+        queryParams.push(value.toISOString());
+      }
+      else {
+        // Regular fields without casting
+        setClauseParts.push(`"${key}" = $${paramIndex}`);
+        queryParams.push(value);
+      }
+    }
+    
+    // Add ID as the last parameter for the WHERE clause
+    queryParams.push(markerId);
+    
+    // Execute the update - build the complete query as a string
+    const query = `UPDATE "Location" SET ${setClauseParts.join(', ')} WHERE id = $${queryParams.length}`;
+    console.log('Executing update query:', query);
+    
+    // Execute the query with all parameters
+    await prisma.$executeRawUnsafe(query, ...queryParams);
     
     console.log('Location updated successfully');
     
@@ -568,8 +601,8 @@ async function handleApproveEdit(interaction, prisma, dbFunctions) {
       where: { messageId: messageId },
       data: {
         status: 'implemented',
-        implementedBy: interaction.user.id,
-        implementedAt: new Date()
+        approvedBy: interaction.user.id,
+        approvedAt: new Date()
       }
     });
     
@@ -609,19 +642,83 @@ async function handleApproveEdit(interaction, prisma, dbFunctions) {
       console.error('Error updating message:', messageError);
     }
     
-    // Reply to the interaction
+    // Reply to the interaction - use flags instead of ephemeral
     await interaction.reply({
       content: `✅ Edit request has been approved and implemented.`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     
   } catch (error) {
     console.error('Error approving edit request:', error);
     await interaction.reply({
       content: `Error approving edit request: ${error.message}`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
+}
+
+/**
+ * Format coordinates for storage in database
+ * Handles various input formats and ensures proper structure
+ */
+function formatCoordinatesForStorage(coordinates) {
+  // If already in proper format (array), return as is
+  if (Array.isArray(coordinates)) {
+    // Check if it's a flat [x,y] pair
+    if (coordinates.length === 2 && typeof coordinates[0] === 'number') {
+      return coordinates; // Return as is - single coordinate pair
+    }
+    
+    // Check if it's an array of coordinate pairs
+    if (coordinates.length > 0 && Array.isArray(coordinates[0])) {
+      // Validate each pair
+      return coordinates.map(coord => {
+        if (Array.isArray(coord) && coord.length === 2 && 
+            typeof coord[0] === 'number' && typeof coord[1] === 'number') {
+          return coord; // Valid coordinate pair
+        }
+        // Invalid pair, return [0,0] to prevent errors
+        console.warn('Invalid coordinate pair found, replacing with [0,0]');
+        return [0, 0];
+      });
+    }
+  }
+  
+  // If it's a string, try to parse it
+  if (typeof coordinates === 'string') {
+    try {
+      // Try to parse as JSON
+      const parsed = JSON.parse(coordinates);
+      // Recursive call with parsed result
+      return formatCoordinatesForStorage(parsed);
+    } catch (e) {
+      // Not valid JSON, try to parse as comma-separated format "[[X1,Y1],[X2,Y2]]"
+      try {
+        const coordRegex = /\[\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*\]/g;
+        const matches = [...coordinates.matchAll(coordRegex)];
+        
+        if (matches.length === 0) {
+          console.warn('No valid coordinates found in string');
+          return [[0, 0]]; // Default to prevent errors
+        }
+        
+        if (matches.length === 1) {
+          // Single coordinate pair
+          return [parseFloat(matches[0][1]), parseFloat(matches[0][2])];
+        } else {
+          // Multiple coordinates
+          return matches.map(match => [parseFloat(match[1]), parseFloat(match[2])]);
+        }
+      } catch (parseError) {
+        console.error('Error parsing coordinate string:', parseError);
+        return [[0, 0]]; // Default to prevent errors
+      }
+    }
+  }
+  
+  // Fallback for unknown formats
+  console.warn('Unknown coordinate format, using default [0,0]');
+  return [[0, 0]];
 }
 
 /**
@@ -649,6 +746,9 @@ async function handleDenyEdit(interaction, prisma, dbFunctions) {
   
   // Show the modal
   await interaction.showModal(modal);
+  
+  // Note: The actual denial logic happens in the modalHandler when the reason is submitted
+  // No DMs are sent in this implementation
 }
 
 /**

@@ -73,7 +73,7 @@ async function validateAndEnsureSchema() {
       const columnNames = columns.map(col => col.column_name);
       console.log('discord_location_requests columns:', columnNames);
       
-      // Define required columns
+      // Define required columns - REMOVED marker_id and marker_name since they're now in JSON
       const requiredColumns = {
         // Core fields
         'message_id': 'TEXT UNIQUE NOT NULL',
@@ -170,9 +170,9 @@ async function setLeaderboardInfo(messageId, channelId) {
 async function saveRequest(messageId, userId, requestType = 'new', reason = '', options = {}) {
   console.log(`Saving request: messageId=${messageId}, userId=${userId}, type=${requestType}`);
   try {
-    const { currentData, newData } = options;
+    const { currentData, newData, markerName, markerId } = options;
     
-    // Build basic request data
+    // Build basic request data with only columns that actually exist in the table
     const requestData = {
       message_id: messageId,
       user_id: userId,
@@ -181,21 +181,54 @@ async function saveRequest(messageId, userId, requestType = 'new', reason = '', 
       status: 'pending'
     };
     
-    // Add JSON data if provided
+    // Create JSON objects to store all data
+    let currentDataJson = {};
+    let newDataJson = {};
+    
+    // If currentData provided, use it
     if (currentData) {
-      requestData.current_data = typeof currentData === 'string' ? 
-        currentData : JSON.stringify(currentData);
+      currentDataJson = typeof currentData === 'string' ? 
+        JSON.parse(currentData) : currentData;
     }
     
+    // If newData provided, use it
     if (newData) {
-      requestData.new_data = typeof newData === 'string' ? 
-        newData : JSON.stringify(newData);
+      newDataJson = typeof newData === 'string' ? 
+        JSON.parse(newData) : newData;
     }
     
-    // Build the SQL for insertion
-    const columns = Object.keys(requestData).map(key => `"${key}"`).join(', ');
-    const placeholders = Object.keys(requestData).map((_, i) => `$${i + 1}`).join(', ');
-    const values = Object.values(requestData);
+    // Ensure marker metadata is included in the JSON rather than separate columns
+    if (markerId && !currentDataJson.id) {
+      currentDataJson.id = markerId;
+      newDataJson.id = markerId;
+    }
+    
+    if (markerName && !currentDataJson.name) {
+      currentDataJson.name = markerName;
+      if (!newDataJson.name) {
+        newDataJson.name = markerName;
+      }
+    }
+    
+    // Store the complete JSON objects
+    requestData.current_data = JSON.stringify(currentDataJson);
+    requestData.new_data = JSON.stringify(newDataJson);
+    
+    console.log('Request data prepared:', Object.keys(requestData));
+    
+    // Build the SQL for insertion - ONLY include columns that exist in schema
+    const safeColumns = ['message_id', 'user_id', 'request_type', 'reason', 'status', 'current_data', 'new_data'];
+    const columns = safeColumns
+      .filter(key => requestData[key] !== undefined)
+      .map(key => `"${key}"`).join(', ');
+    
+    const placeholders = safeColumns
+      .filter(key => requestData[key] !== undefined)
+      .map((_, i) => `$${i + 1}`).join(', ');
+    
+    const values = safeColumns
+      .filter(key => requestData[key] !== undefined)
+      .map(key => requestData[key]);
     
     // Execute the insertion
     await prisma.$executeRawUnsafe(
@@ -221,6 +254,61 @@ async function saveRequest(messageId, userId, requestType = 'new', reason = '', 
       console.error('Fallback also failed:', fallbackError);
       return false;
     }
+  }
+}
+
+/**
+ * Convert an edit session to a database request
+ * This is called when a user confirms their edits and provides a reason
+ */
+async function saveEditSessionAsRequest(messageId, userId, markerId, markerName, reason) {
+  console.log(`Converting edit session to request: userId=${userId}, markerId=${markerId}`);
+  try {
+    // Get the edit session
+    const session = await getEditSession(userId, markerId);
+    
+    if (!session || !session.edits || Object.keys(session.edits).length === 0) {
+      console.error('No edit session found to convert');
+      return false;
+    }
+    
+    // Fetch current marker data from the database
+    const locations = await searchLocationsForAutocomplete(markerId);
+    const marker = locations.find(loc => loc.id === markerId);
+    
+    if (!marker) {
+      console.error('Marker not found in database');
+      return false;
+    }
+    
+    // Prepare the edits into a new data object
+    const currentData = { ...marker };
+    const newData = { ...marker };
+    
+    // Apply each edit to the newData
+    for (const [field, data] of Object.entries(session.edits)) {
+      if (data.newValue !== undefined) {
+        newData[field] = data.newValue;
+      }
+    }
+    
+    // Save the request with current and new data
+    const result = await saveRequest(messageId, userId, 'edit', reason, {
+      currentData,
+      newData,
+      markerId,
+      markerName
+    });
+    
+    if (result) {
+      // Delete the edit session after successful conversion
+      await deleteEditSession(userId, markerId);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error converting edit session to request:', error);
+    return false;
   }
 }
 
@@ -549,144 +637,85 @@ async function searchLocationsForAutocomplete(searchTerm) {
     // Check if the search term is a UUID (marker ID format)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchTerm);
     
-    let locations = [];
-    
     if (isUuid) {
-      // If it's a UUID format, do a direct ID query
+      // Direct ID lookup for UUID format
       console.log('Detected UUID format, performing direct ID lookup');
-      
-      // Query by ID directly with raw SQL
-      locations = await prisma.$queryRaw`
+      const locations = await prisma.$queryRaw`
         SELECT id, name, type, description, coordinates, icon 
         FROM "Location" 
         WHERE id = ${searchTerm}`;
       
       console.log(`ID lookup result count: ${locations.length}`);
-    } else {
-      // Continue with the existing name-based search
-      // Check if search includes the '#' character (index search)
-      if (searchTerm.includes('#')) {
-        const [namePrefix, indexStr] = searchTerm.split('#');
-        const baseName = namePrefix.trim();
-        
-        // Get all locations matching the name prefix
-        locations = await prisma.$queryRaw`
-          SELECT id, name, type, coordinates 
-          FROM "Location" 
-          WHERE name ILIKE ${`%${baseName}%`} 
-          ORDER BY 
-            -- Prioritize exact matches first
-            CASE WHEN name ILIKE ${baseName} THEN 0
-                 WHEN name ILIKE ${`${baseName}%`} THEN 1
-                 ELSE 2 
-            END,
-            name ASC 
-          LIMIT 25`;
-        
-        if (!locations || locations.length === 0) {
-          return [];
-        }
-        
-        // Process the coordinates for each location
-        const processedLocations = [];
-        
-        // Track if we found an exact match for index
-        let exactMatchFound = false;
-        
-        for (let loc of locations) {
-          try {
-            const coords = loc.coordinates;
-            
-            // Skip if not a multi-coordinate location
-            if (!Array.isArray(coords) || (coords.length === 2 && typeof coords[0] === 'number')) {
-              processedLocations.push(loc);
-              continue;
-            }
-            
-            // Number of coordinate points
-            const coordCount = coords.length;
-            
-            // If there's an index string, prioritize exact matches
-            if (indexStr && indexStr.trim() !== '') {
-              const indexNum = parseInt(indexStr.trim());
-              
-              // If specific index is requested and valid
-              if (!isNaN(indexNum) && indexNum > 0 && indexNum <= coordCount) {
-                const exactMatch = {
-                  ...loc,
-                  indexRequested: indexNum - 1, // Convert to 0-based for internal use
-                  name: `${loc.name} #${indexNum}`, // Include index in name for display
-                  isExactMatch: true
-                };
-                
-                // If this is our first exact match and it belongs to the top location result,
-                // put it at the very beginning to prioritize it
-                if (!exactMatchFound && processedLocations.length === 0) {
-                  processedLocations.unshift(exactMatch);
-                  exactMatchFound = true;
-                } else {
-                  processedLocations.push(exactMatch);
-                }
-              }
-            } else {
-              // No specific index - add all indices for this location
-              for (let i = 0; i < coordCount; i++) {
-                processedLocations.push({
-                  ...loc,
-                  indexRequested: i,
-                  name: `${loc.name} #${i+1}` // Include index in name for display
-                });
-              }
-            }
-          } catch (e) {
-            console.error('Error processing coordinates for search:', e);
-            processedLocations.push(loc); // Add the location as-is on error
-          }
-        }
-        
-        // Sort results to prioritize exact matches
-        if (indexStr && indexStr.trim() !== '') {
-          processedLocations.sort((a, b) => {
-            // First prioritize locations with exact name match
-            const aNameMatch = a.name.toLowerCase().startsWith(baseName.toLowerCase()) ? 0 : 1;
-            const bNameMatch = b.name.toLowerCase().startsWith(baseName.toLowerCase()) ? 0 : 1;
-            
-            if (aNameMatch !== bNameMatch) return aNameMatch - bNameMatch;
-            
-            // Then prioritize locations with exact index match
-            const aExactMatch = a.isExactMatch ? 0 : 1;
-            const bExactMatch = b.isExactMatch ? 0 : 1;
-            
-            return aExactMatch - bExactMatch;
-          });
-        }
-        
-        console.log(`Found ${processedLocations.length} matches for "${searchTerm}"`);
-        
-        // Log the top result for debugging
-        if (processedLocations.length > 0) {
-          console.log(`Top match: ${processedLocations[0].name}`);
-        }
-        
-        return processedLocations;
-      }
-      
-      // Standard search without '#' character
-      locations = await prisma.$queryRaw`
-        SELECT id, name, type, coordinates 
-        FROM "Location" 
-        WHERE name ILIKE ${`%${searchTerm}%`} 
-        ORDER BY 
-          -- Prioritize exact matches first
-          CASE WHEN name ILIKE ${searchTerm} THEN 0
-               WHEN name ILIKE ${`${searchTerm}%`} THEN 1
-               ELSE 2 
-          END,
-          name ASC 
-        LIMIT 25`;
+      return locations || [];
     }
     
-    return locations || [];
+    // Check if we're searching for a specific index
+    const indexPattern = /^(.+?)\s+#(\d+)$/i;
+    const indexMatch = searchTerm.match(indexPattern);
+    
+    let baseName = searchTerm;
+    let requestedIndex = null;
+    
+    if (indexMatch) {
+      baseName = indexMatch[1].trim();
+      requestedIndex = parseInt(indexMatch[2]) - 1; // Convert to 0-based index
+      console.log(`Index search: baseName="${baseName}", index=${requestedIndex+1}`);
+    }
+    
+    // Search for locations matching the name
+    const locations = await prisma.$queryRaw`
+      SELECT id, name, type, description, coordinates, icon
+      FROM "Location" 
+      WHERE name ILIKE ${`%${baseName}%`} 
+      ORDER BY 
+        CASE WHEN name ILIKE ${baseName} THEN 0
+             WHEN name ILIKE ${`${baseName}%`} THEN 1
+             ELSE 2 
+        END,
+        name ASC 
+      LIMIT 25`;
+    
+    if (!locations || locations.length === 0) {
+      return [];
+    }
+    
+    // For specific index searches, return the raw locations and let the handler format them
+    if (requestedIndex !== null) {
+      console.log(`Returning locations for index search with index ${requestedIndex+1}`);
+      
+      // Add metadata for index-specific search
+      return locations.map(loc => ({
+        ...loc,
+        requestedIndex,
+        isExactIndex: true
+      }));
+    }
+    
+    // For regular searches, return the raw locations with minimal processing
+    return locations.map(loc => {
+      // Check if multi-coordinate
+      let isMultiCoord = false;
+      let coordCount = 1;
+      
+      try {
+        const coords = loc.coordinates;
+        if (Array.isArray(coords) && 
+            !(coords.length === 2 && typeof coords[0] === 'number') && 
+            coords.length > 0) {
+          isMultiCoord = true;
+          coordCount = coords.length;
+        }
+      } catch (e) {
+        console.error('Error processing coordinates:', e);
+      }
+      
+      // Include the multi-coordinate info but don't modify the base object
+      return {
+        ...loc,
+        isMultiCoord,
+        coordCount
+      };
+    });
   } catch (error) {
     console.error('Error searching locations for autocomplete:', error);
     return []; // Return empty array on error
@@ -729,5 +758,6 @@ module.exports = {
   undoRequest,
   getRequestByMessageId,
   createSessionFromRequest,
-  columnExists
+  columnExists,
+  saveEditSessionAsRequest
 };

@@ -1,12 +1,13 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const { initializeDatabase, saveRequest, updateRequestStatus, getRequestsByStatus, getAllRequests, 
         getContributorLeaderboard, getLeaderboardInfo, setLeaderboardInfo, deleteRequestByMessageId,
-        searchLocationsForAutocomplete, getEditSession, saveEditSession, deleteEditSession,
-        getRequestByMessageId, createSessionFromRequest, getRequestById, undoRequest, columnExists } = require('./database');
+        searchLocationsForAutocomplete, getRequestByMessageId, getRequestById, undoRequest, columnExists } = require('./database');
 const { PrismaClient } = require('@prisma/client');
 const { setupEventHandlers } = require('./handlers/eventHandler');
 const { registerCommands } = require('./handlers/commandRegistration');
 const { handleModalSubmit } = require('./handlers/modalHandler');
+// Import the new EditSessionManager class
+const EditSessionManager = require('./classes/EditSessionManager');
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
@@ -66,6 +67,13 @@ async function notifyDatabaseChange() {
   }
 }
 
+// Create a new EditSessionManager instance
+const editSessionManager = new EditSessionManager({
+  searchLocationsForAutocomplete,
+  saveRequest,
+  getRequestByMessageId
+});
+
 // Collect database-related functions to pass to handlers
 const dbFunctions = {
   saveRequest,
@@ -79,16 +87,19 @@ const dbFunctions = {
   notifyDatabaseChange,
   searchLocationsForAutocomplete,
   handleModalSubmit,
-  // Edit session functions
-  getEditSession,
-  saveEditSession,
-  deleteEditSession,
-  // New functions
   getRequestByMessageId,
-  createSessionFromRequest,
   getRequestById,
   undoRequest,
-  columnExists
+  columnExists,
+  // Replace individual session functions with editSessionManager methods
+  getEditSession: (userId, markerId) => editSessionManager.getSession(userId, markerId),
+  saveEditSession: (userId, markerId, markerName, edits) => editSessionManager.saveSession(userId, markerId, markerName, edits),
+  deleteEditSession: (userId, markerId) => editSessionManager.deleteSession(userId, markerId),
+  createSessionFromRequest: (userId, messageId, isAdmin) => editSessionManager.createSessionFromRequest(userId, messageId, isAdmin),
+  saveEditSessionAsRequest: (messageId, userId, markerId, markerName, reason) => 
+    editSessionManager.saveSessionAsRequest(messageId, userId, markerId, reason),
+  // Add new methods
+  editSessionManager: editSessionManager
 };
 
 // Collect configuration to pass to handlers

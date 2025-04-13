@@ -160,71 +160,51 @@ async function handleAutocomplete(interaction, dbFunctions, config) {
       
       if (focusedOption.name === 'name') {
         const searchTerm = focusedOption.value.toLowerCase();
-        const isAdminCommand = interaction.commandName === 'admin';
         
-        // Check if user has admin role for admin commands
-        let isAdmin = false;
-        if (isAdminCommand) {
-          const member = await interaction.guild.members.fetch(interaction.user.id);
-          isAdmin = member.roles.cache.has(ADMIN_ROLE_ID);
-        }
-        
-        // Use our new database function instead of direct Prisma access
+        // Get locations from database
         const locations = await searchLocationsForAutocomplete(searchTerm);
+        
+        // Group locations by name to avoid duplicates (keep only unique names)
+        const locationMap = new Map();
+        
+        // First pass: collect all unique locations
+        for (const loc of locations) {
+          const key = loc.name.toLowerCase();
+          
+          // If we found a multi-coordinate location, prefer it over single ones
+          if (!locationMap.has(key) || (loc.isMultiCoord && !locationMap.get(key).isMultiCoord)) {
+            locationMap.set(key, loc);
+          }
+        }
         
         const choices = [];
         
-        // Process each location and format options
-        for (const location of locations) {
-          // Determine if this is a multi-coordinate location
-          let isMultiCoord = false;
-          let coordCount = 1;
-          
-          try {
-            if (location.coordinates) {
-              // Parse coordinates if they're stored as a string
-              const coords = typeof location.coordinates === 'string' 
-                ? JSON.parse(location.coordinates) 
-                : location.coordinates;
-                
-              // Check if it's a single coordinate pair [x, y]
-              if (Array.isArray(coords) && coords.length === 2 && typeof coords[0] === 'number') {
-                isMultiCoord = false;
-              } 
-              // Must be an array of coordinate pairs
-              else if (Array.isArray(coords) && coords.length > 0) {
-                isMultiCoord = true;
-                coordCount = coords.length;
-              }
-            }
-          } catch (parseError) {
-            console.error('Error parsing coordinates for autocomplete:', parseError);
-            isMultiCoord = false;
-            coordCount = 1;
-          }
-          
-          if (isMultiCoord && coordCount > 1) {
-            // First add the wildcard option for the entire marker
-            choices.push({
-              name: `${location.name} * (All ${coordCount} points)`,
-              value: `${location.name}|*`
-            });
-            
-            // Then add individual coordinate options
-            for (let i = 0; i < coordCount; i++) {
-              choices.push({
-                name: `${location.name} #${i+1}`,
-                value: `${location.name}|${i}`
-              });
-            }
-          } else {
-            // Regular single-coordinate location
-            choices.push({
-              name: `${location.name} (${location.type || 'unknown'})`,
-              value: `${location.name}`
-            });
-          }
+        // Second pass: create choice options - only include the main location name without indices
+        for (const location of locationMap.values()) {
+          // Simple location entry - always just use the base name
+          choices.push({
+            name: location.name,
+            value: location.name
+          });
         }
+        
+        // Sort choices to prioritize exact matches
+        choices.sort((a, b) => {
+          const aNameLower = a.name.toLowerCase();
+          const bNameLower = b.name.toLowerCase();
+          const searchTermLower = searchTerm.toLowerCase();
+          
+          // Check for exact match first
+          if (aNameLower === searchTermLower && bNameLower !== searchTermLower) return -1;
+          if (aNameLower !== searchTermLower && bNameLower === searchTermLower) return 1;
+          
+          // Then check for starts with
+          if (aNameLower.startsWith(searchTermLower) && !bNameLower.startsWith(searchTermLower)) return -1;
+          if (!aNameLower.startsWith(searchTermLower) && bNameLower.startsWith(searchTermLower)) return 1;
+          
+          // Default to alphabetical
+          return a.name.localeCompare(b.name);
+        });
         
         await interaction.respond(choices.slice(0, 25)); // Discord limit is 25 choices
       }
@@ -241,56 +221,26 @@ async function handleAutocomplete(interaction, dbFunctions, config) {
         
         const choices = [];
         
-        // Process each location and format options
-        for (const location of locations) {
-          // Determine if this is a multi-coordinate location
-          let isMultiCoord = false;
-          let coordCount = 1;
+        // Group locations by name to avoid duplicates
+        const locationMap = new Map();
+        
+        // First pass: collect all unique locations
+        for (const loc of locations) {
+          const key = loc.name.toLowerCase();
           
-          try {
-            if (location.coordinates) {
-              // Parse coordinates if they're stored as a string
-              const coords = typeof location.coordinates === 'string' 
-                ? JSON.parse(location.coordinates) 
-                : location.coordinates;
-                
-              // Check if it's a single coordinate pair [x, y]
-              if (Array.isArray(coords) && coords.length === 2 && typeof coords[0] === 'number') {
-                isMultiCoord = false;
-              } 
-              // Must be an array of coordinate pairs
-              else if (Array.isArray(coords) && coords.length > 0) {
-                isMultiCoord = true;
-                coordCount = coords.length;
-              }
-            }
-          } catch (parseError) {
-            console.error('Error parsing coordinates for autocomplete:', parseError);
-            isMultiCoord = false;
-            coordCount = 1;
+          // If we found a multi-coordinate location, prefer it over single ones
+          if (!locationMap.has(key) || (loc.isMultiCoord && !locationMap.get(key).isMultiCoord)) {
+            locationMap.set(key, loc);
           }
-          
-          if (isMultiCoord && coordCount > 1) {
-            // Main location entry
-            choices.push({
-              name: `${location.name} (${location.type || 'unknown'})`,
-              value: location.name
-            });
-            
-            // Add individual coordinate points
-            for (let i = 0; i < Math.min(coordCount, 10); i++) {
-              choices.push({
-                name: `${location.name} #${i+1} (Specific point)`,
-                value: `${location.name} #${i+1}`
-              });
-            }
-          } else {
-            // Regular single-coordinate location
-            choices.push({
-              name: `${location.name} (${location.type || 'unknown'})`,
-              value: location.name
-            });
-          }
+        }
+        
+        // Second pass: create choice options
+        for (const location of locationMap.values()) {
+          // Basic location entry
+          choices.push({
+            name: location.name,
+            value: location.name
+          });
         }
         
         await interaction.respond(choices.slice(0, 25)); // Discord limit is 25 choices
@@ -298,7 +248,7 @@ async function handleAutocomplete(interaction, dbFunctions, config) {
     }
   } catch (error) {
     console.error('Error handling autocomplete:', error);
-    // Respond with empty choices on error to prevent Discord API timeout
+    // Respond with empty choices on error
     await interaction.respond([]);
   }
 }

@@ -86,6 +86,7 @@ services:
     volumes:
       - ./discord_bot/handlers:/app/handlers
       - ./discord_bot/modules:/app/modules
+      - ./discord_bot/classes:/app/classes
 
       - ./discord_bot/index.js:/app/index.js
       - ./discord_bot/database.js:/app/database.js
