@@ -5,7 +5,11 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 
 const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
 const METADATA_CACHE_KEY = 'soulmap_metadata_cache';
-const API_BASE_URL = 'http://localhost:3000/api';
+
+// Use the environment variable provided by Vite for the API base URL
+// Fallback to relative /api if the variable is not set (e.g., during build or local dev without env)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'; 
+console.log(`Using API Base URL: ${API_BASE_URL}`); // Add log for debugging
 
 // Initialize localforage instance for locations
 const locationStore = localforage.createInstance({
@@ -25,7 +29,7 @@ let refreshInProgress = false;
 // Setup the refresh function that can be called when database changes occur
 export async function setupDatabaseChangeListener(refreshCallback: () => Promise<void>) {
   try {
-    // Use EventSource for Server-Sent Events
+    // Use EventSource for Server-Sent Events - use the configured API_BASE_URL
     const eventSource = new EventSource(`${API_BASE_URL}/listen`);
     
     // Track last data refresh time to prevent over-refreshing

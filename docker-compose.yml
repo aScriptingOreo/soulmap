@@ -1,8 +1,6 @@
-#networks:
-#  proxy:
-#    external: true
-#  backend:
-#    internal: true
+networks:
+  proxy:
+    external: true
 
 services:
   soulmap:
@@ -18,20 +16,57 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL}
+      - CLIENT_PORT=${CLIENT_PORT}
+      - SERVER_PORT=${SERVER_PORT}
+      - DOMAIN=${DOMAIN} # Pass domain to container if needed later
+      - API_DOMAIN=${API_DOMAIN} # Pass API domain
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL} # Pass API base URL for client
     ports:
-      - "5173:5173"  # Client port
-      #- "3000:3000"  # API port
+      - "${CLIENT_PORT}:${CLIENT_PORT}"  # Client port
+      # - "${SERVER_PORT}:${SERVER_PORT}" # API port - Removed, Traefik handles this
     networks:
       - proxy
       - default
     restart: always
     labels:
       - traefik.enable=true
-      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.soulmap-nossl.rule=Host(`soulmap.avakot.org`)
-      - traefik.http.routers.soulmap-nossl.service=soulmap
+      
+      # --- Client Routers (Handles UI on root path) ---
+      - traefik.http.routers.soulmap-nossl.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.soulmap-nossl.entrypoints=http
-      - traefik.http.services.soulmap.loadbalancer.server.port=5173
+      - traefik.http.routers.soulmap-nossl.service=soulmap-client-svc # Use client service
+      
+      - traefik.http.routers.soulmap-ssl.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.soulmap-ssl.entrypoints=https
+      - traefik.http.routers.soulmap-ssl.tls=true
+      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
+      - traefik.http.routers.soulmap-ssl.service=soulmap-client-svc # Use client service
+
+      # --- Client Service (Points to Vite/Client Port) ---
+      - traefik.http.services.soulmap-client-svc.loadbalancer.server.port=${CLIENT_PORT}
+
+      # --- API Routers (Handles API subdomain) ---
+      # Use API_DOMAIN, remove PathPrefix and middleware
+      - traefik.http.routers.soulmap-api-nossl.rule=Host(`${API_DOMAIN}`) 
+      - traefik.http.routers.soulmap-api-nossl.entrypoints=http
+      - traefik.http.routers.soulmap-api-nossl.service=soulmap-api-svc # Use API service
+      # - traefik.http.routers.soulmap-api-nossl.middlewares=strip-api-prefix # Removed
+
+      # Use API_DOMAIN, remove PathPrefix and middleware
+      - traefik.http.routers.soulmap-api-ssl.rule=Host(`${API_DOMAIN}`) 
+      - traefik.http.routers.soulmap-api-ssl.entrypoints=https
+      - traefik.http.routers.soulmap-api-ssl.tls=true
+      - traefik.http.routers.soulmap-api-ssl.tls.certresolver=letsencrypt
+      - traefik.http.routers.soulmap-api-ssl.service=soulmap-api-svc # Use API service
+      # - traefik.http.routers.soulmap-api-ssl.middlewares=strip-api-prefix # Removed
+
+      # --- API Service (Points to Backend/Server Port) ---
+      - traefik.http.services.soulmap-api-svc.loadbalancer.server.port=${SERVER_PORT}
+
+      # --- Middleware (Strips /api prefix) ---
+      # This middleware is no longer needed for the API service
+      # - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
+
     depends_on:
       sm-pg:
         condition: service_healthy

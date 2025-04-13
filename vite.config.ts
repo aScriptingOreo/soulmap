@@ -6,6 +6,9 @@ import glob from 'vite-plugin-glob';
 import fs from 'fs';
 import path from 'path';
 
+// Read ports from environment variables, providing defaults
+const clientPort = parseInt(process.env.CLIENT_PORT || '5173');
+
 export default defineConfig({
   root: path.resolve(__dirname, 'src'),  // Set root to src directory
   publicDir: '../res', // Set public directory relative to root
@@ -152,7 +155,11 @@ export default defineConfig({
       '*.png': {
         'Cache-Control': 'public, max-age=604800, immutable' // 1 week
       }
-    }
+    },
+    // Allow requests from the specified host when running behind a reverse proxy
+    host: '0.0.0.0', // Listen on all network interfaces
+    port: clientPort, // Use CLIENT_PORT from env
+    allowedHosts: ['soulmap.avakot.org']
   },
   assetsInclude: ['**/*.png', '**/*.svg']
 });

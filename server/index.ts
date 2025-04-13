@@ -9,7 +9,8 @@ const RETRY_DELAY = 3000; // 3 seconds
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Use SERVER_PORT from environment variable, default to 3000 if not set
+const PORT = process.env.SERVER_PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -26,7 +27,7 @@ app.use('/styles', express.static(path.join(__dirname, '../dist/styles')));
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // Health check endpoint (crucial for startup sequence)
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   const dbStatus = globalThis.__dbConnected === true;
   if (dbStatus) {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), database: 'connected' });
@@ -36,7 +37,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Database hash endpoint
-app.get('/api/locations/hash', async (req, res) => {
+app.get('/locations/hash', async (req, res) => {
   try {
     // Generate a hash based on the count and most recent modification date
     const stats = await prisma.location.aggregate({
@@ -135,14 +136,14 @@ async function initializeDatabase() {
 // Wrap routes in a function that ensures database is initialized
 async function setupRoutes() {
   // Get all locations
-  app.get('/api/locations', async (req, res) => {
+  app.get('/locations', async (req, res) => {
     try {
       if (!globalThis.__dbConnected) {
-        console.error('GET /api/locations - Database connection not established');
+        console.error('GET /locations - Database connection not established');
         return res.status(503).json({ error: 'Database connection not established' });
       }
       
-      console.log('GET /api/locations - Fetching all locations from database');
+      console.log('GET /locations - Fetching all locations from database');
       
       // First check if the table exists
       try {
@@ -213,7 +214,7 @@ async function setupRoutes() {
   });
 
   // Set up PostgreSQL LISTEN/NOTIFY for real-time updates
-  app.get('/api/listen', async (req, res) => {
+  app.get('/listen', async (req, res) => {
     try {
       if (!globalThis.__dbConnected) {
         return res.status(503).json({ error: 'Database connection not established' });
