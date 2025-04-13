@@ -12,7 +12,7 @@
     "client:dev": "vite --host",
     "server:dev": "bun run --watch server/index.ts",
     "check-env": "bun run server/utils/check-env.ts",
-    "db:init": "bun run server/utils/init-database.ts",
+    "db:init": "bun run server/utils/init-database.ts && bun run setup-triggers",
     "db:seed": "bun run server/utils/seed-database.ts",
     "wait-db": "bun run server/utils/wait-for-db.ts",
     "wait-api": "bun run server/utils/wait-for-api.ts",
@@ -22,7 +22,8 @@
     "db:studio": "cd server && prisma studio",
     "db:migrate": "cd server && prisma migrate dev",
     "db:reset": "cd server && prisma migrate reset",
-    "db:status": "cd server && prisma migrate status"
+    "db:status": "cd server && prisma migrate status",
+    "setup-triggers": "bun run server/utils/setup-triggers.ts"
   },
   "devDependencies": {
     "@rollup/plugin-yaml": "^4.1.2",

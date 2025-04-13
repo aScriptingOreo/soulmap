@@ -102,30 +102,34 @@ async function initializeNotifications() {
   try {
     console.log('Setting up PostgreSQL LISTEN for database changes...');
     
-    // Get a Prisma client for connection details
-    const prisma = await getPrismaClient();
+    // Use our db module's setupListener function directly
+    const cleanup = await db.setupListener('location_changes', (payload) => {
+      try {
+        console.log(`Received notification on location_changes: ${payload}`);
+        const data = payload ? JSON.parse(payload) : {};
+        const changeData = {
+          ...data,
+          type: 'change',
+          timestamp: Date.now(),
+          source: 'postgres-notification'
+        };
+        
+        dbNotifier.emit('db-change', changeData);
+      } catch (e) {
+        console.error('Error processing database notification:', e);
+      }
+    });
     
-    // Set up the dedicated PostgreSQL listener
-    const success = await setupPostgresListener('location_changes', prisma);
+    console.log('PostgreSQL LISTEN setup complete');
+    listenerSetupComplete = true;
     
-    if (success) {
-      console.log('PostgreSQL LISTEN setup complete');
-      
-      // Forward PostgreSQL notifications to the dbNotifier
-      notificationEmitter.on('db-change', (data) => {
-        console.log('Forwarding PostgreSQL notification to clients');
-        dbNotifier.emit('db-change', data);
-      });
-      
-      listenerSetupComplete = true;
-    } else {
-      console.log('Failed to set up PostgreSQL LISTEN, falling back to polling');
-      startPollingFallback();
-    }
+    // Return cleanup function
+    return cleanup;
   } catch (error) {
     console.error('Error setting up PostgreSQL LISTEN:', error);
     console.log('Falling back to polling mechanism');
     startPollingFallback();
+    return null;
   }
 }
 
@@ -389,19 +393,13 @@ function setupPollingFallback(res: any, req: any) {
 // Add this function to trigger a notification when locations change
 export async function notifyDatabaseChange(): Promise<boolean> {
   try {
-    // Use the dedicated PostgreSQL notification sender
-    const success = await sendNotification('location_changes');
+    const success = await db.sendNotification('location_changes', JSON.stringify({
+      action: 'update',
+      table: 'Location',
+      timestamp: new Date().toISOString()
+    }));
     
-    // As a fallback, also emit the event on our local notifier
-    if (!success) {
-      dbNotifier.emit('db-change', {
-        type: 'change',
-        timestamp: Date.now(),
-        source: 'manual'
-      });
-    }
-    
-    return true;
+    return success;
   } catch (error) {
     console.error('Failed to notify about database changes:', error);
     return false;
