@@ -61,29 +61,6 @@ function showNotification(message: string, type: 'info' | 'warning' | 'success' 
   }, 3000);
 }
 
-// Initialize offline indicator
-function setupOfflineIndicator() {
-  offlineIndicator.className = 'offline-indicator';
-  offlineIndicator.innerHTML = '<span class="material-icons">cloud_off</span> Offline Mode';
-  document.body.appendChild(offlineIndicator);
-  
-  // Initial state
-  updateOfflineIndicator();
-  
-  // Listen for online/offline events
-  window.addEventListener('online', handleOnlineStatusChange);
-  window.addEventListener('offline', handleOnlineStatusChange);
-}
-
-function handleOnlineStatusChange() {
-  isOfflineMode = !navigator.onLine;
-  updateOfflineIndicator();
-}
-
-function updateOfflineIndicator() {
-  offlineIndicator.style.display = isOfflineMode ? 'flex' : 'none';
-}
-
 // Extract the greeting loading into a separate function that can be reused
 async function showGreetingPopup() {
     try {
@@ -196,7 +173,6 @@ async function initMain() {
       if (!navigator.onLine) {
         isOfflineMode = true;
         console.log('Browser is offline, enabling offline mode');
-        // Removed notification for offline mode
       }
     }
     
@@ -407,9 +383,6 @@ window.addEventListener('popstate', handleUrlChange);
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', async () => {
-  // Setup offline indicator
-  setupOfflineIndicator();
-  
   // Add to window for easy access from other modules
   window.isOfflineMode = isOfflineMode;
   
@@ -508,9 +481,6 @@ window.handleInternalLink = (url: URL) => {
     console.error('Error handling internal link:', e);
   }
 };
-
-// Start initialization once the DOM is fully loaded
-document.addEventListener('DOMContentLoaded', initMain);
 
 // Add global error handler
 window.addEventListener('error', (event) => {

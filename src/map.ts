@@ -692,6 +692,12 @@ function saveVisibilityState(markerId: string, visible: boolean, category?: stri
 }
 
 export async function initializeMap(locations: (Location & { type: string })[], debug: boolean = false): Promise<L.Map | null> {
+  // Prevent double initialization
+  if (mapInitialized || mainMap) {
+    console.warn('Map already initialized, skipping initialization');
+    return mainMap;
+  }
+
   const progressBar = document.querySelector('.loading-progress') as HTMLElement;
   const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
   const loadingText = document.querySelector('.loading-text') as HTMLElement;
