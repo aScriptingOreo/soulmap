@@ -75,8 +75,8 @@ services:
     build:
       context: ./discord_bot/
       dockerfile: Dockerfile
-    container_name: soulmapbot
     command: npm run dev
+    container_name: soulmapbot
     environment:
       - DISCORD_TOKEN=${discord_bot_token}
       - CHANNEL_ID=${discord_channel_id}
@@ -84,6 +84,9 @@ services:
       - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
       - DATABASE_URL=${DATABASE_URL}
     volumes:
+      - ./discord_bot/handlers:/app/handlers
+      - ./discord_bot/modules:/app/modules
+
       - ./discord_bot/index.js:/app/index.js
       - ./discord_bot/database.js:/app/database.js
       - ./discord_bot/schema.prisma:/app/schema.prisma
@@ -111,7 +114,7 @@ services:
       - default
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]  # Use POSTGRES_USER instead of hardcoded "postgres"
       interval: 5s
       timeout: 5s
       retries: 5

@@ -4,15 +4,14 @@
   "description": "Discord Bot for SoulMap",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "prisma generate && nodemon index.js",
-    "migrate": "prisma migrate dev",
-    "generate": "prisma generate"
+    "start": "npx prisma generate && node index.js",
+    "dev": "npx prisma generate && nodemon index.js"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",

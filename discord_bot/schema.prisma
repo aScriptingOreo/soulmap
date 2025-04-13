@@ -7,18 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Discord bot location requests table
+// Simplified Discord bot location requests table using JSON data
 model DiscordLocationRequest {
-  id            String    @id @default(uuid())
-  messageId     String    @unique @map("message_id")
-  userId        String    @map("user_id")
-  coordinates   String
-  description   String
-  screenshotUrl String?   @map("screenshot_url")
-  status        String    @default("pending")
-  reason        String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  messageId      String    @unique @map("message_id")
+  userId         String    @map("user_id")
+  requestType    String    @default("new") @map("request_type")
+  reason         String?
+  
+  // Store data as JSON
+  currentData    String?   @map("current_data") // Original marker data as JSON
+  newData        String?   @map("new_data")     // Edited marker data as JSON
+  
+  // Approval tracking
+  status         String    @default("pending")
+  approvedBy     String?   @map("approved_by")
+  approvedAt     DateTime? @map("approved_at")
+  
+  // Timestamps
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("discord_location_requests")
 }
