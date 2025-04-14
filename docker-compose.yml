@@ -83,6 +83,7 @@ services:
       - ADMIN_ROLE_ID=${discord_admin_role_id}
       - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
       - DATABASE_URL=${DATABASE_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./discord_bot/handlers:/app/handlers
       - ./discord_bot/modules:/app/modules

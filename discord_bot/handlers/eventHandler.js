@@ -21,7 +21,7 @@ function setupEventHandlers(client, prisma, dbFunctions, config) {
           const replyMethod = interaction.deferred ? interaction.editReply : interaction.reply;
           await replyMethod.call(interaction, { 
             content: 'An error occurred while processing this command.',
-            ephemeral: true 
+            flags: 64 // Use flags instead of ephemeral
           });
         } catch (followupError) {
           console.error('Error sending error response:', followupError);
@@ -41,7 +41,7 @@ function setupEventHandlers(client, prisma, dbFunctions, config) {
         try {
           await interaction.reply({ 
             content: 'An error occurred while processing this button action.',
-            ephemeral: true 
+            flags: 64 // Use flags instead of ephemeral
           });
         } catch (followupError) {
           console.error('Error sending button error response:', followupError);
@@ -70,7 +70,7 @@ function setupEventHandlers(client, prisma, dbFunctions, config) {
           // Always respond to the interaction to prevent it from hanging
           await interaction.reply({ 
             content: 'An error occurred while processing your submission. Please try again later.',
-            ephemeral: true 
+            flags: 64 // Use flags instead of ephemeral
           });
         } catch (followupError) {
           console.error('Failed to send error response for modal:', followupError);
@@ -79,7 +79,7 @@ function setupEventHandlers(client, prisma, dbFunctions, config) {
           try {
             await interaction.followUp({
               content: 'An error occurred while processing your submission. Please try again later.',
-              ephemeral: true
+              flags: 64 // Use flags instead of ephemeral
             });
           } catch (finalError) {
             console.error('Could not send any response for error:', finalError);

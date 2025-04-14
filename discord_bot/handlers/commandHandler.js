@@ -17,7 +17,8 @@ async function handleSlashCommand(interaction, client, prisma, dbFunctions, conf
       
       switch (subcommand) {
         case 'new':
-          await handleRequestNew(interaction, client, prisma, dbFunctions.saveRequest, CHANNEL_ID);
+          // Pass the entire dbFunctions object instead of just saveRequest
+          await handleRequestNew(interaction, client, prisma, dbFunctions, CHANNEL_ID);
           break;
         case 'edit':
           // Fix parameter passing - pass searchLocationsForAutocomplete
@@ -41,7 +42,7 @@ async function handleSlashCommand(interaction, client, prisma, dbFunctions, conf
       if (!hasAdminRole) {
         await interaction.reply({ 
           content: 'You do not have permission to use this command.', 
-          ephemeral: true 
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
       }
@@ -53,7 +54,7 @@ async function handleSlashCommand(interaction, client, prisma, dbFunctions, conf
       // Import locations implementation would go here
       await interaction.reply({ 
         content: 'Import locations functionality is not implemented yet.', 
-        ephemeral: true 
+        flags: 64 // Use flags instead of ephemeral
       });
     }
     // Handle whereis command (accessible to everyone)
@@ -68,7 +69,7 @@ async function handleSlashCommand(interaction, client, prisma, dbFunctions, conf
       const replyMethod = interaction.deferred ? interaction.editReply : interaction.reply;
       await replyMethod.call(interaction, { 
         content: 'An error occurred while processing this command.',
-        ephemeral: true 
+        flags: 64 // Use flags instead of ephemeral
       });
     } catch (followupError) {
       console.error('Error sending error response:', followupError);
@@ -128,7 +129,7 @@ async function handleListRequests(interaction, client, getRequestsByStatus, getA
     }
     
     if (!requests || requests.length === 0) {
-      await interaction.reply({ content: `No ${status} requests found.`, ephemeral: true });
+      await interaction.reply({ content: `No ${status} requests found.`, flags: 64 }); // Use flags
       return;
     }
     
@@ -321,7 +322,7 @@ async function handleAdminCommand(interaction, prisma, dbFunctions, config) {
   if (!interaction.member.roles.cache.has(config.ADMIN_ROLE_ID)) {
     return await interaction.reply({
       content: 'You need admin permissions to use this command.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
   
@@ -334,7 +335,7 @@ async function handleAdminCommand(interaction, prisma, dbFunctions, config) {
   } else {
     await interaction.reply({
       content: `Unknown admin subcommand: ${subcommand}`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }

@@ -629,7 +629,7 @@ async function undoRequest(requestId) {
 }
 
 /**
- * Search for locations to use in autocomplete
+ * Search for locations to use in autocomplete with AI-enhanced matching
  */
 async function searchLocationsForAutocomplete(searchTerm) {
   console.log(`searchLocationsForAutocomplete called with term: ${searchTerm}`);
@@ -662,7 +662,39 @@ async function searchLocationsForAutocomplete(searchTerm) {
       console.log(`Index search: baseName="${baseName}", index=${requestedIndex+1}`);
     }
     
-    // Search for locations matching the name
+    // Try to use AI-enhanced search if the search term is substantial
+    if (baseName.length >= 3) {
+      try {
+        const { enhancedMarkerNameSearchWithContext } = require('./modules/utils');
+        
+        // Get the enhanced matches using the new context-aware function
+        const enhancedMatches = await enhancedMarkerNameSearchWithContext(baseName, prisma, 10);
+        
+        if (enhancedMatches && enhancedMatches.length > 0) {
+          // Fetch the full location data for these matches
+          const placeholders = enhancedMatches.map((_, i) => `$${i + 1}`).join(',');
+          const locations = await prisma.$queryRaw`
+            SELECT id, name, type, description, coordinates, icon
+            FROM "Location" 
+            WHERE name IN (${prisma.raw(placeholders)})
+            ORDER BY 
+              CASE WHEN name ILIKE ${baseName} THEN 0
+                   WHEN name ILIKE ${`${baseName}%`} THEN 1
+                   ELSE 2 
+              END,
+              name ASC 
+            LIMIT 25
+          `;
+          
+          // Process locations the same way as before
+          return processLocationResults(locations, requestedIndex);
+        }
+      } catch (enhancedError) {
+        console.error('Error using enhanced search, falling back to basic search:', enhancedError);
+      }
+    }
+    
+    // Fall back to basic search if AI enhancement fails or for short queries
     const locations = await prisma.$queryRaw`
       SELECT id, name, type, description, coordinates, icon
       FROM "Location" 
@@ -675,51 +707,58 @@ async function searchLocationsForAutocomplete(searchTerm) {
         name ASC 
       LIMIT 25`;
     
-    if (!locations || locations.length === 0) {
-      return [];
-    }
-    
-    // For specific index searches, return the raw locations and let the handler format them
-    if (requestedIndex !== null) {
-      console.log(`Returning locations for index search with index ${requestedIndex+1}`);
-      
-      // Add metadata for index-specific search
-      return locations.map(loc => ({
-        ...loc,
-        requestedIndex,
-        isExactIndex: true
-      }));
-    }
-    
-    // For regular searches, return the raw locations with minimal processing
-    return locations.map(loc => {
-      // Check if multi-coordinate
-      let isMultiCoord = false;
-      let coordCount = 1;
-      
-      try {
-        const coords = loc.coordinates;
-        if (Array.isArray(coords) && 
-            !(coords.length === 2 && typeof coords[0] === 'number') && 
-            coords.length > 0) {
-          isMultiCoord = true;
-          coordCount = coords.length;
-        }
-      } catch (e) {
-        console.error('Error processing coordinates:', e);
-      }
-      
-      // Include the multi-coordinate info but don't modify the base object
-      return {
-        ...loc,
-        isMultiCoord,
-        coordCount
-      };
-    });
+    return processLocationResults(locations, requestedIndex);
   } catch (error) {
     console.error('Error searching locations for autocomplete:', error);
     return []; // Return empty array on error
   }
+}
+
+/**
+ * Helper to process location search results consistently
+ */
+function processLocationResults(locations, requestedIndex) {
+  if (!locations || locations.length === 0) {
+    return [];
+  }
+  
+  // For specific index searches, return the raw locations and let the handler format them
+  if (requestedIndex !== null) {
+    console.log(`Returning locations for index search with index ${requestedIndex+1}`);
+    
+    // Add metadata for index-specific search
+    return locations.map(loc => ({
+      ...loc,
+      requestedIndex,
+      isExactIndex: true
+    }));
+  }
+  
+  // For regular searches, return the raw locations with minimal processing
+  return locations.map(loc => {
+    // Check if multi-coordinate
+    let isMultiCoord = false;
+    let coordCount = 1;
+    
+    try {
+      const coords = loc.coordinates;
+      if (Array.isArray(coords) && 
+          !(coords.length === 2 && typeof coords[0] === 'number') && 
+          coords.length > 0) {
+        isMultiCoord = true;
+        coordCount = coords.length;
+      }
+    } catch (e) {
+      console.error('Error processing coordinates:', e);
+    }
+    
+    // Include the multi-coordinate info but don't modify the base object
+    return {
+      ...loc,
+      isMultiCoord,
+      coordCount
+    };
+  });
 }
 
 /**

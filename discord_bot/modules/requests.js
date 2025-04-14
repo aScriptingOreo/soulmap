@@ -4,67 +4,361 @@ const { getMapVersionInfo, validateCoordinates, formatCoordinates, generateMapLi
 /**
  * Handler for /request new
  */
-async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNEL_ID) {
-  // Get command options
-  const name = interaction.options.getString('name');
-  const coordinates = interaction.options.getString('coordinates');
-  const description = interaction.options.getString('description');
-  const screenshot = interaction.options.getAttachment('screenshot');
+async function handleRequestNew(interaction, client, prisma, dbFunctions, CHANNEL_ID) {
+  // Get name only from the command options
+  const userProvidedName = interaction.options.getString('name');
+  
+  // Don't defer the reply anymore - we need to show a modal
+  let nameToUse = userProvidedName;
+  let matchMessage = '';
+  
+  try {
+    const { enhancedMarkerNameSearchWithContext } = require('./utils');
+    
+    // Get the best match using AI
+    const matches = await enhancedMarkerNameSearchWithContext(userProvidedName, prisma, 1);
+    if (matches && matches.length > 0) {
+      // Found a match - use it
+      nameToUse = matches[0];
+      matchMessage = `Found similar marker: "${nameToUse}"`;
+    } else {
+      // No match found - use the original name
+      matchMessage = `Creating new marker: "${nameToUse}"`;
+    }
+  } catch (error) {
+    console.error('Error in AI name matching:', error);
+    // If there's an error, just use the original name
+    matchMessage = `Creating new marker: "${nameToUse}"`;
+  }
+  
+  // Create a modal to collect additional details from the user
+  // Store only brief essential info in the customId to avoid hitting Discord's 100 char limit
+  const modal = new ModalBuilder()
+    .setCustomId(`new_loc_${Buffer.from(userProvidedName).toString('base64').substring(0, 20)}`)
+    .setTitle(matchMessage); // Use the title to convey the match message instead
+
+  // Add name field pre-filled with suggested or original name
+  const nameInput = new TextInputBuilder()
+    .setCustomId('name')
+    .setLabel('Name')
+    .setStyle(TextInputStyle.Short)
+    .setValue(nameToUse)
+    .setPlaceholder('Location name')
+    .setRequired(true);
+  
+  // Add input fields for coordinates and description
+  const coordsInput = new TextInputBuilder()
+    .setCustomId('coordinates')
+    .setLabel('Coordinates')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('[X, Y] format, can use multiple like [X,Y],[X,Y]')
+    .setRequired(true);
+  
+  const descInput = new TextInputBuilder()
+    .setCustomId('description')
+    .setLabel('Description')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('Describe what this location is and why it\'s important (helps determine type)')
+    .setRequired(true);
+  
+  // Create action rows
+  const nameRow = new ActionRowBuilder().addComponents(nameInput);
+  const coordsRow = new ActionRowBuilder().addComponents(coordsInput);
+  const descRow = new ActionRowBuilder().addComponents(descInput);
+  
+  // Add the components to the modal
+  modal.addComponents(nameRow, coordsRow, descRow);
+  
+  // Show the modal directly - without deferring first
+  await interaction.showModal(modal);
+}
+
+/**
+ * Show disambiguation menu for multiple matches
+ */
+function showDisambiguationMenu(interaction, exactMatch, closeMatches, originalName) {
+  // Create options for the select menu - first the create new option
+  const selectOptions = [
+    {
+      label: `Create new marker: "${originalName}"`,
+      description: 'Create a completely new marker with this name',
+      value: `new_${Buffer.from(originalName).toString('base64')}`
+    }
+  ];
+  
+  // Add options for each matching location
+  closeMatches.forEach(loc => {
+    selectOptions.push({
+      label: `Add to: ${loc.name}`,
+      description: `Add coordinates to this existing marker${loc.isMultiCoord ? ' (multi-point)' : ''}`,
+      value: `add_${loc.id}`
+    });
+  });
+  
+  // Create the select menu
+  const row = new ActionRowBuilder()
+    .addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`loc_disambig_selection`)
+        .setPlaceholder('Select an option or create new marker')
+        .addOptions(selectOptions)
+    );
+  
+  const cancelRow = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('cancel_request')
+        .setLabel('Cancel Request')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  
+  interaction.reply({
+    content: `I found ${closeMatches.length} existing marker(s) with similar names. Would you like to add to one of these or create a new marker?`,
+    components: [row, cancelRow],
+    ephemeral: true
+  });
+}
+
+/**
+ * Handle name confirmation modal submission
+ */
+async function handleNameConfirmationSubmission(interaction, client, prisma, dbFunctions, CHANNEL_ID) {
+  // Get the values from the modal
+  const customId = interaction.customId;
+  const parts = customId.split('_');
+  const originalNameBase64 = parts[3];
+  const suggestedMarkerId = parts[4];
+  
+  const originalName = Buffer.from(originalNameBase64, 'base64').toString();
+  const confirmedName = interaction.fields.getTextInputValue('name');
+  
+  console.log(`Name confirmation: original="${originalName}", confirmed="${confirmedName}", suggestedId=${suggestedMarkerId}`);
+  
+  // Check if the user kept the suggested name or changed it
+  if (confirmedName.toLowerCase() === originalName.toLowerCase() || 
+      await isExactMarkerMatch(dbFunctions, confirmedName, suggestedMarkerId)) {
+    // User confirmed adding to the existing marker
+    // Show a modal to collect coordinates and optional description
+    const modal = new ModalBuilder()
+      .setCustomId(`add_to_existing_${suggestedMarkerId}`)
+      .setTitle(`Add Coordinate to: ${confirmedName}`);
+    
+    // Add input fields for coordinates and description
+    const coordsInput = new TextInputBuilder()
+      .setCustomId('coordinates')
+      .setLabel('New Coordinates')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('[X, Y] format, can use multiple like [X,Y],[X,Y]')
+      .setRequired(true);
+    
+    const descInput = new TextInputBuilder()
+      .setCustomId('description')
+      .setLabel('Updated Description (Optional)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Leave blank to keep existing description')
+      .setRequired(false);
+    
+    // Create action rows
+    const coordsRow = new ActionRowBuilder().addComponents(coordsInput);
+    const descRow = new ActionRowBuilder().addComponents(descInput);
+    
+    // Add the components to the modal
+    modal.addComponents(coordsRow, descRow);
+    
+    await interaction.showModal(modal);
+  } else {
+    // User changed the name - create a new marker
+    const modal = new ModalBuilder()
+      .setCustomId(`new_location_details_${Buffer.from(confirmedName).toString('base64')}`)
+      .setTitle(`New Location: ${confirmedName}`);
+    
+    // Add input fields for coordinates and description
+    const coordsInput = new TextInputBuilder()
+      .setCustomId('coordinates')
+      .setLabel('Coordinates')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('[X, Y] format, can use multiple like [X,Y],[X,Y]')
+      .setRequired(true);
+    
+    const descInput = new TextInputBuilder()
+      .setCustomId('description')
+      .setLabel('Description')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Describe what this location is and why it\'s important (helps determine category)')
+      .setRequired(true); // Make description required again
+    
+    // Create action rows
+    const coordsRow = new ActionRowBuilder().addComponents(coordsInput);
+    const descRow = new ActionRowBuilder().addComponents(descInput);
+    
+    // Add the components to the modal
+    modal.addComponents(coordsRow, descRow);
+    
+    await interaction.showModal(modal);
+  }
+}
+
+/**
+ * Helper function to check if name exactly matches a marker by ID
+ */
+async function isExactMarkerMatch(dbFunctions, name, markerId) {
+  try {
+    const locations = await dbFunctions.searchLocationsForAutocomplete(markerId);
+    const marker = locations.find(loc => loc.id === markerId);
+    
+    if (marker && marker.name.toLowerCase() === name.toLowerCase()) {
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking exact marker match:', error);
+    return false;
+  }
+}
+
+// Add new handler function for the modal submission
+async function handleNewLocationDetailsSubmission(interaction, client, prisma, dbFunctions, CHANNEL_ID) {
+  // Get the values from the modal - simplified customId parsing
+  const userProvidedName = interaction.customId.startsWith('new_loc_') ? 
+    Buffer.from(interaction.customId.split('_')[2], 'base64').toString() : 
+    'Unknown';
+  
+  // Get the actual name from the modal (may be different from original if user edited it)
+  const name = interaction.fields.getTextInputValue('name');
+  const coordinates = interaction.fields.getTextInputValue('coordinates');
+  const description = interaction.fields.getTextInputValue('description');
+  
+  // Now we can defer the reply for processing - use flags instead of ephemeral
+  await interaction.deferReply({ flags: 64 });
+  
+  // Show what action we're taking based on name change
+  const initialResponse = name !== userProvidedName ? 
+    `You changed the name to: "${name}"` : 
+    `Processing request for "${name}"`;
+    
+  await interaction.editReply(initialResponse);
   
   // Validate coordinates format
   if (!validateCoordinates(coordinates)) {
-    return await interaction.reply({ 
-      content: 'Error: Coordinates must be in the format [X, Y] or multiple coordinates like [X, Y], [X, Y]',
-      ephemeral: true 
+    await interaction.editReply({ 
+      content: 'Error: Coordinates must be in the format [X, Y] or multiple coordinates like [X, Y], [X, Y]'
+      // No flags needed for editReply
     });
+    return;
   }
 
   // Format coordinates for display and extract coordinate data
   const { formatted: formattedCoords, coordinates: coordData } = formatCoordinates(coordinates);
   if (!formattedCoords) {
-    return await interaction.reply({ 
-      content: 'Error: Could not parse the coordinates. Please check your input.',
-      ephemeral: true 
+    await interaction.editReply({ 
+      content: 'Error: Could not parse the coordinates. Please check your input.'
+      // No flags needed for editReply
     });
+    return;
   }
   
-  // Check if a location with this name already exists
-  const existingLocation = await prisma.Location.findFirst({
-    where: { 
-      name: {
-        equals: name,
-        mode: 'insensitive'
-      }
-    }
-  });
+  // Determine the marker category using AI prediction
+  const { predictMarkerCategory } = require('./utils');
+  const predictedCategory = await predictMarkerCategory(name, description);
   
-  // If a location with this name exists, show options to user
-  if (existingLocation) {
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`append_${name}_${Buffer.from(coordinates).toString('base64')}`)
-          .setLabel('Add to existing marker')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`rename_${name}_${Buffer.from(coordinates).toString('base64')}`)
-          .setLabel('Create with new name')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId('cancel_request')
-          .setLabel('Cancel')
-          .setStyle(ButtonStyle.Danger)
-      );
+  // Submit the new marker request with predicted category
+  await submitNewMarkerRequest(
+    interaction, 
+    client, 
+    name, 
+    coordinates, 
+    formattedCoords, 
+    coordData, 
+    description,
+    null, // No screenshot since we're using a modal
+    dbFunctions.saveRequest, 
+    CHANNEL_ID,
+    predictedCategory // Pass the predicted category
+  );
+}
+
+// Add handler for disambiguation selection
+async function handleLocationDisambigSelectionResponse(interaction, client, prisma, dbFunctions, CHANNEL_ID) {
+  const selectedValue = interaction.values[0];
+  
+  if (selectedValue.startsWith('new_')) {
+    // User wants to create a new marker
+    const encodedName = selectedValue.split('_')[1];
+    const name = Buffer.from(encodedName, 'base64').toString();
     
-    return await interaction.reply({
-      content: `A marker with the name "${name}" already exists. What would you like to do?`,
-      components: [row],
-      ephemeral: true
-    });
+    // Show the modal to collect details
+    const modal = new ModalBuilder()
+      .setCustomId(`new_location_details_${encodedName}`)
+      .setTitle('New Location Details');
+    
+    // Add input fields for coordinates and description
+    const coordsInput = new TextInputBuilder()
+      .setCustomId('coordinates')
+      .setLabel('Coordinates')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('[X, Y] format, can use multiple like [X,Y],[X,Y]')
+      .setRequired(true);
+    
+    const descInput = new TextInputBuilder()
+      .setCustomId('description')
+      .setLabel('Description')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Describe what this location is and why it\'s important (helps determine category)')
+      .setRequired(true); // Make description required again
+    
+    // Create action rows
+    const coordsRow = new ActionRowBuilder().addComponents(coordsInput);
+    const descRow = new ActionRowBuilder().addComponents(descInput);
+    
+    // Add the components to the modal
+    modal.addComponents(coordsRow, descRow);
+    
+    await interaction.showModal(modal);
+  } 
+  else if (selectedValue.startsWith('add_')) {
+    // User wants to add coordinates to an existing marker
+    const markerId = selectedValue.split('_')[1];
+    
+    // Show a modal to get the coordinates and updated description
+    const modal = new ModalBuilder()
+      .setCustomId(`add_to_existing_${markerId}`)
+      .setTitle('Add Coordinate to Existing Marker');
+    
+    // Add input fields for coordinates and description
+    const coordsInput = new TextInputBuilder()
+      .setCustomId('coordinates')
+      .setLabel('New Coordinates')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('[X, Y] format, can use multiple like [X,Y],[X,Y]')
+      .setRequired(true);
+    
+    const descInput = new TextInputBuilder()
+      .setCustomId('description')
+      .setLabel('Updated Description (Optional)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Leave blank to keep existing description')
+      .setRequired(false);
+    
+    // Create action rows
+    const coordsRow = new ActionRowBuilder().addComponents(coordsInput);
+    const descRow = new ActionRowBuilder().addComponents(descInput);
+    
+    // Add the components to the modal
+    modal.addComponents(coordsRow, descRow);
+    
+    await interaction.showModal(modal);
   }
-  
-  // If no duplicates, proceed with normal request submission
-  await interaction.deferReply({ ephemeral: true });
+}
+
+/**
+ * Submit a new marker request to the channel
+ */
+async function submitNewMarkerRequest(
+  interaction, client, name, coordinatesRaw, formattedCoords, coordData, 
+  description, screenshot, saveRequest, CHANNEL_ID, predictedCategory = 'user_submitted'
+) {
+  // REMOVED: Remove the deferReply since interaction is already deferred in the calling function
+  // await interaction.deferReply({ flags: 64 });
   
   // Generate map links
   const mapLinks = generateMapLinks(coordData);
@@ -78,9 +372,98 @@ async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNE
     .setColor('#0099ff')
     .addFields(
       { name: 'Name', value: name },
+      { name: 'Type', value: predictedCategory, inline: true }, // Changed from 'Category' to 'Type' to match DB schema
       { name: 'Coordinates', value: '```yml\n' + formattedCoords + '\n```' },
       { name: 'Map Links', value: mapLinks },
-      { name: 'Description', value: description }
+      { name: 'Description', value: description || '*(No description provided)*' }
+    )
+    .setFooter({ 
+      text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
+      iconURL: interaction.user.displayAvatarURL() 
+    })
+    .setTimestamp();
+  
+  // Add screenshot if provided
+  if (screenshot) {
+    embed.setImage(screenshot.url);
+  }
+  
+  // Send the embed to the specified channel
+  const channel = client.channels.cache.get(CHANNEL_ID);
+  if (channel) {
+    // Send temporary message first to get the message ID
+    const tempMessage = await channel.send({ content: 'Processing request...' });
+    
+    // Create buttons for the request AFTER tempMessage is defined
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          // Now tempMessage.id is available
+          .setCustomId(`approve_new_${tempMessage.id}`) 
+          .setLabel('✅ Implement')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`dismiss_${interaction.user.id}`) // Keep dismiss as is for now
+          .setLabel('❌ Dismiss')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+    // Update the message with actual content and correct buttons
+    await tempMessage.edit({ content: null, embeds: [embed], components: [row] });
+    
+    // Save request to database with the message ID
+    const screenshotUrl = screenshot ? screenshot.url : null;
+    // Ensure reason is empty string if not provided
+    await saveRequest(tempMessage.id, interaction.user.id, 'new', '', { 
+      newData: JSON.stringify({
+        name,
+        coordinates: coordData,
+        description,
+        type: predictedCategory, // Use the AI predicted category
+        mediaUrl: screenshotUrl ? [screenshotUrl] : undefined
+      })
+    });
+    
+    await interaction.editReply('Your location request has been submitted!');
+  } else {
+    await interaction.editReply('Error: Could not find the specified channel.');
+  }
+}
+
+/**
+ * Submit a coordinate addition request to an existing marker
+ */
+async function submitCoordinateAddRequest(interaction, client, existingMarkerId, coordinatesRaw, formattedCoords, coordData, description, screenshot, dbFunctions, CHANNEL_ID) {
+  // UPDATED: Use flags instead of ephemeral
+  await interaction.deferReply({ flags: 64 });
+  
+  // Fetch the existing marker
+  const locations = await dbFunctions.searchLocationsForAutocomplete(existingMarkerId);
+  const marker = locations.find(loc => loc.id === existingMarkerId);
+  
+  if (!marker) {
+    await interaction.editReply('Error: Could not find the existing marker. It may have been deleted.');
+    return;
+  }
+  
+  // Determine if this is a single-to-multi conversion or just adding to multi
+  const isConversion = !marker.isMultiCoord;
+  
+  // Generate map links
+  const mapLinks = generateMapLinks(coordData);
+
+  // Get version information
+  const versionInfo = getMapVersionInfo();
+  
+  // Create an embed for the request
+  const embed = new EmbedBuilder()
+    .setTitle(`Add Coordinate to ${marker.name}`)
+    .setColor('#4287f5')
+    .addFields(
+      { name: 'Existing Marker', value: marker.name },
+      { name: 'New Coordinates', value: '```yml\n' + formattedCoords + '\n```' },
+      { name: 'Map Links', value: mapLinks },
+      { name: 'Description Update', value: description || 'No changes to description' }
     )
     .setFooter({ 
       text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
@@ -97,7 +480,7 @@ async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNE
   const row = new ActionRowBuilder()
     .addComponents(
       new ButtonBuilder()
-        .setCustomId(`approve_${interaction.user.id}_${Buffer.from(name).toString('base64')}`)
+        .setCustomId(`approve_coord_add_${interaction.user.id}_${existingMarkerId}`)
         .setLabel('✅ Implement')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
@@ -110,18 +493,153 @@ async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNE
   const channel = client.channels.cache.get(CHANNEL_ID);
   if (channel) {
     // Send temporary message first to get the message ID
-    const tempMessage = await channel.send({ content: 'Processing request...' });
+    const tempMessage = await channel.send({ content: 'Processing coordinate addition request...' });
     
     // Update the message with actual content
     await tempMessage.edit({ content: null, embeds: [embed], components: [row] });
     
-    // Save request to database with the message ID
-    const screenshotUrl = screenshot ? screenshot.url : null;
-    saveRequest(tempMessage.id, interaction.user.id, name, coordinates, description, screenshotUrl);
+    // Create the currentData and newData for the edit request
+    const currentData = { ...marker };
+    let newData = { ...marker };
     
-    await interaction.editReply('Your location request has been submitted!');
+    // Update coordinates in newData based on whether this is a conversion or addition
+    if (isConversion) {
+      // Converting from single coordinate to multi-coordinate
+      newData.coordinates = [
+        marker.coordinates, // The original coordinate
+        coordData // The new coordinate
+      ];
+    } else {
+      // Already multi-coordinate, just add the new one
+      newData.coordinates = [
+        ...(Array.isArray(marker.coordinates[0]) ? marker.coordinates : [marker.coordinates]), 
+        ...(Array.isArray(coordData[0]) ? coordData : [coordData])
+      ];
+    }
+    
+    // Update description if provided
+    if (description && description.trim()) {
+      newData.description = description;
+    }
+    
+    // Update mediaUrl if screenshot provided
+    if (screenshot) {
+      const screenshotUrl = screenshot.url;
+      if (marker.mediaUrl) {
+        // If mediaUrl already exists and is an array, add to it
+        if (Array.isArray(marker.mediaUrl)) {
+          newData.mediaUrl = [...marker.mediaUrl, screenshotUrl];
+        } 
+        // If mediaUrl is a string, convert to array
+        else if (typeof marker.mediaUrl === 'string') {
+          newData.mediaUrl = [marker.mediaUrl, screenshotUrl];
+        }
+        // Otherwise just set as new array
+        else {
+          newData.mediaUrl = [screenshotUrl];
+        }
+      } else {
+        // No existing mediaUrl, create new array
+        newData.mediaUrl = [screenshotUrl];
+      }
+    }
+    
+    // Save the edit request
+    await dbFunctions.saveRequest(
+      tempMessage.id, 
+      interaction.user.id, 
+      'edit', 
+      `Adding new coordinates to ${marker.name}`,
+      {
+        currentData,
+        newData,
+        markerId: marker.id,
+        markerName: marker.name
+      }
+    );
+    
+    await interaction.editReply(`Your request to add a coordinate to "${marker.name}" has been submitted!`);
   } else {
     await interaction.editReply('Error: Could not find the specified channel.');
+  }
+}
+
+/**
+ * Handle location disambiguation select menu selection
+ */
+async function handleLocationDisambiguation(interaction, client, prisma, dbFunctions, CHANNEL_ID) {
+  // Parse the selection value
+  const selectedValue = interaction.values[0];
+  const customIdParts = interaction.customId.split('_');
+  
+  // Get the encoded data from the customId
+  const encodedCoordinates = customIdParts[2];
+  const encodedDescription = customIdParts[3];
+  let encodedScreenshot = customIdParts[4];
+  
+  // Decode the data
+  const coordinates = Buffer.from(encodedCoordinates, 'base64').toString();
+  const description = Buffer.from(encodedDescription, 'base64').toString();
+  
+  // Get screenshot from either attachment or encoded URL
+  let screenshot = null;
+  if (interaction.message.attachments.size > 0) {
+    screenshot = interaction.message.attachments.first();
+  } else if (encodedScreenshot) {
+    try {
+      const screenshotUrl = Buffer.from(encodedScreenshot, 'base64').toString();
+      if (screenshotUrl) {
+        screenshot = { url: screenshotUrl };
+      }
+    } catch (error) {
+      console.error('Error decoding screenshot URL:', error);
+    }
+  }
+  
+  // Format coordinates for display and extraction
+  const { formatted: formattedCoords, coordinates: coordData } = formatCoordinates(coordinates);
+  
+  // Handle based on the selected value
+  if (selectedValue.startsWith('new_')) {
+    // User wants to create a new marker
+    const encodedName = selectedValue.split('_')[1];
+    const name = Buffer.from(encodedName, 'base64').toString();
+    
+    // Submit a new marker request
+    await submitNewMarkerRequest(
+      interaction, 
+      client, 
+      name, 
+      coordinates, 
+      formattedCoords, 
+      coordData, 
+      description, 
+      screenshot, 
+      dbFunctions.saveRequest, 
+      CHANNEL_ID
+    );
+  } else if (selectedValue.startsWith('add_')) {
+    // User wants to add coordinates to an existing marker
+    const markerId = selectedValue.split('_')[1];
+    
+    // Submit a coordinate addition request
+    await submitCoordinateAddRequest(
+      interaction, 
+      client, 
+      markerId, 
+      coordinates, 
+      formattedCoords, 
+      coordData, 
+      description, 
+      screenshot, 
+      dbFunctions, 
+      CHANNEL_ID
+    );
+  } else {
+    await interaction.reply({
+      content: 'Invalid selection. Please try submitting your request again.',
+      flags: 64 // Use flags instead of ephemeral
+    });
   }
 }
 
@@ -130,7 +648,7 @@ async function handleRequestNew(interaction, client, prisma, saveRequest, CHANNE
  */
 async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomplete) {
   const markerName = interaction.options.getString('name');
-  
+  // Send the embed to the specified channel
   try {
     // Get marker info from the database
     const locations = await searchLocationsForAutocomplete(markerName);
@@ -149,18 +667,17 @@ async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomp
     if (!marker) {
       await interaction.reply({ 
         content: `Marker "${markerName}" not found.`,
-        ephemeral: true 
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
-
+    
     // Check if this is a multi-coordinate marker
     let isMultiCoord = false;
     let coordCount = 1;
     
     try {
       const coords = marker.coordinates;
-      
       if (Array.isArray(coords)) {
         if (coords.length === 2 && typeof coords[0] === 'number') {
           // Single coordinate pair
@@ -207,7 +724,7 @@ async function handleRequestEdit(interaction, prisma, searchLocationsForAutocomp
     console.error('Error in handleRequestEdit:', error);
     await interaction.reply({
       content: 'An error occurred while retrieving marker information.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }
@@ -224,7 +741,7 @@ async function showMarkerEditOptions(interaction, marker, coordIndex) {
       { name: 'Type', value: marker.type || 'Unknown', inline: true },
       { name: 'ID', value: marker.id || 'Unknown', inline: true }
     );
-
+  
   // Add description if available
   if (marker.description) {
     embed.addFields({ 
@@ -234,14 +751,13 @@ async function showMarkerEditOptions(interaction, marker, coordIndex) {
         marker.description 
     });
   }
-
+  
   // Process coordinates for display
   let isMultiCoord = false;
   let coordCount = 1;
   
   try {
     const coords = marker.coordinates;
-    
     // Handle different coordinate formats
     if (Array.isArray(coords)) {
       if (coords.length === 2 && typeof coords[0] === 'number') {
@@ -252,7 +768,6 @@ async function showMarkerEditOptions(interaction, marker, coordIndex) {
         // Multiple coordinates
         isMultiCoord = true;
         coordCount = coords.length;
-        
         if (coordIndex !== undefined && coordIndex !== '*') {
           // Show only the selected coordinate
           const idx = parseInt(coordIndex);
@@ -369,7 +884,7 @@ async function showMarkerEditOptions(interaction, marker, coordIndex) {
              (coordIndex !== undefined ? ` (Coordinate #${parseInt(coordIndex) + 1})` : 
               (coordIndex === '*' ? " (All metadata)" : ".")),
     components: components,
-    ephemeral: true
+    flags: 64 // Use flags instead of ephemeral
   });
 }
 
@@ -386,7 +901,7 @@ async function handleRequestRemove(interaction, prisma) {
   if (coordIndex === '*') {
     await interaction.reply({ 
       content: 'You cannot use the wildcard (*) in removal requests. Please specify a specific coordinate to remove.',
-      ephemeral: true 
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -399,7 +914,7 @@ async function handleRequestRemove(interaction, prisma) {
   if (!marker) {
     await interaction.reply({ 
       content: `Marker "${markerName}" not found.`,
-      ephemeral: true 
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -504,5 +1019,11 @@ module.exports = {
   handleRequestRemove,
   safeMessageFetch,
   syncDatabase,
-  showMarkerEditOptions
+  showMarkerEditOptions,
+  handleLocationDisambiguation,
+  submitNewMarkerRequest,
+  submitCoordinateAddRequest,
+  handleNewLocationDetailsSubmission,
+  handleLocationDisambigSelectionResponse,
+  handleNameConfirmationSubmission
 };

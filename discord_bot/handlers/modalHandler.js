@@ -1,44 +1,115 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { validateCoordinates, formatCoordinates, generateEditDiff } = require('../modules/utils');
+const { 
+  handleNewLocationDetailsSubmission,
+  handleNameConfirmationSubmission
+} = require('../modules/requests');
 
 /**
  * Handle modal submissions
  */
 async function handleModalSubmit(interaction, prisma, dbFunctions) {
-  const customId = interaction.customId;
-  console.log(`Handling modal submission: ${customId}`);
-
   try {
+    console.log(`Modal submission: ${interaction.customId}`);
+    const client = interaction.client; // Get client from interaction
+    const CHANNEL_ID = process.env.CHANNEL_ID;
+    
+    // Handle location detail submissions - use more concise prefix match
+    if (interaction.customId.startsWith('new_loc_')) {
+      await handleNewLocationDetailsSubmission(interaction, client, prisma, dbFunctions, CHANNEL_ID);
+    }
+    // Handle name confirmation modal (for partial matches)
+    else if (interaction.customId.startsWith('confirm_name_match_')) {
+      const { handleNameConfirmationSubmission } = require('../modules/requests');
+      
+      await handleNameConfirmationSubmission(interaction, client, prisma, dbFunctions, CHANNEL_ID);
+    }
+    // Handle new location details submission
+    else if (interaction.customId.startsWith('new_location_details_')) {
+      const { handleNewLocationDetailsSubmission } = require('../modules/requests');
+      
+      await handleNewLocationDetailsSubmission(interaction, client, prisma, dbFunctions, CHANNEL_ID);
+    }
+    // Handle add to existing location submission
+    else if (interaction.customId.startsWith('add_to_existing_')) {
+      const markerId = interaction.customId.split('_')[3];
+      const coordinates = interaction.fields.getTextInputValue('coordinates');
+      const description = interaction.fields.getTextInputValue('description') || ''; // Handle empty description
+      
+      const { validateCoordinates, formatCoordinates } = require('../modules/utils');
+      const { submitCoordinateAddRequest } = require('../modules/requests');
+      
+      // Validate coordinates format
+      if (!validateCoordinates(coordinates)) {
+        await interaction.reply({ 
+          content: 'Error: Coordinates must be in the format [X, Y] or multiple coordinates like [X, Y], [X, Y]',
+          flags: 64 // Use flags instead of ephemeral
+        });
+        return;
+      }
+      
+      // Format coordinates for display and extract coordinate data
+      const { formatted: formattedCoords, coordinates: coordData } = formatCoordinates(coordinates);
+      if (!formattedCoords) {
+        await interaction.reply({ 
+          content: 'Error: Could not parse the coordinates. Please check your input.',
+          flags: 64 // Use flags instead of ephemeral
+        });
+        return;
+      }
+      
+      await submitCoordinateAddRequest(
+        interaction, 
+        client, 
+        markerId, 
+        coordinates, 
+        formattedCoords, 
+        coordData, 
+        description, 
+        null, // No screenshot since we're using a modal
+        dbFunctions, 
+        CHANNEL_ID
+      );
+    }
     // Handle coordinate selection modal
-    if (customId.startsWith('coord_select_modal_')) {
+    else if (interaction.customId.startsWith('coord_select_modal_')) {
       await handleCoordinateSelection(interaction, prisma, dbFunctions);
     }
     // Handle edit submission modals
-    else if (customId.startsWith('submit_reason_')) {
+    else if (interaction.customId.startsWith('submit_reason_')) {
       await handleSubmitReason(interaction, prisma, dbFunctions);
     }
     // Handle field edit modals
-    else if (customId.startsWith('req_edit_')) {
+    else if (interaction.customId.startsWith('req_edit_')) {
       await handleRequestEditField(interaction, prisma, dbFunctions);
     }
     // Handle denial reason modals
-    else if (customId.startsWith('deny_reason_')) {
+    else if (interaction.customId.startsWith('deny_reason_')) {
       await handleDenyReason(interaction, prisma, dbFunctions);
     }
     // Handle other types of modals
     else {
-      console.warn(`Unhandled modal submission: ${customId}`);
+      console.warn(`Unhandled modal submission: ${interaction.customId}`);
       await interaction.reply({
         content: 'This type of submission is not yet implemented.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
     }
   } catch (error) {
-    console.error(`Error handling modal submission ${customId}:`, error);
-    await interaction.reply({
-      content: `An error occurred: ${error.message}`,
-      ephemeral: true
-    });
+    console.error('Error handling modal submission:', error);
+    try {
+      // Handle different response states
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply({ 
+          content: 'An error occurred while processing your submission.',
+          flags: 64 // Using flags instead of ephemeral: true
+        });
+      } else if (interaction.deferred) {
+        await interaction.editReply('An error occurred while processing your submission.');
+      }
+    } catch (replyError) {
+      console.error('Error sending modal error response:', replyError);
+    }
   }
 }
 
@@ -63,7 +134,7 @@ async function handleCoordinateSelection(interaction, prisma, dbFunctions) {
     if (isNaN(parsedIndex) || parsedIndex < 1) {
       await interaction.reply({
         content: 'Invalid coordinate number. Please enter a positive number or *.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -77,7 +148,7 @@ async function handleCoordinateSelection(interaction, prisma, dbFunctions) {
   if (!marker) {
     await interaction.reply({
       content: 'Marker not found. It may have been deleted.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -90,7 +161,7 @@ async function handleCoordinateSelection(interaction, prisma, dbFunctions) {
       if (!Array.isArray(coords) || idx < 0 || idx >= coords.length) {
         await interaction.reply({
           content: `Invalid coordinate index. Please choose a number between 1 and ${coords.length} or *`,
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
       }
@@ -98,7 +169,7 @@ async function handleCoordinateSelection(interaction, prisma, dbFunctions) {
       console.error('Error validating coordinate index:', e);
       await interaction.reply({
         content: 'Error validating coordinate index.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -139,7 +210,7 @@ async function handleRequestEditField(interaction, prisma, dbFunctions) {
     if (!marker) {
       await interaction.reply({
         content: 'Error: Marker not found in the database.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -165,7 +236,7 @@ async function handleRequestEditField(interaction, prisma, dbFunctions) {
       default:
         await interaction.reply({
           content: `Editing field "${field}" is not supported.`,
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
     }
@@ -220,7 +291,7 @@ async function handleRequestEditField(interaction, prisma, dbFunctions) {
       // If update fails, reply with a new message
       await interaction.reply({
         content: `Changes saved but couldn't update display. Use the select menu above to continue editing.`,
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
     }
     
@@ -228,7 +299,7 @@ async function handleRequestEditField(interaction, prisma, dbFunctions) {
     console.error(`Error handling field edit:`, error);
     await interaction.reply({
       content: `An error occurred while processing your edit: ${error.message}`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }
@@ -355,8 +426,8 @@ async function handleSubmitReason(interaction, prisma, dbFunctions) {
   console.log(`Submit reason modal: markerId=${markerId}, userId=${userId}`);
   
   try {
-    // Defer reply while we process
-    await interaction.deferReply({ ephemeral: true });
+    // Defer reply while we process - use flags
+    await interaction.deferReply({ flags: 64 });
     
     // Create a new message in the requests channel
     const CHANNEL_ID = process.env.CHANNEL_ID;
@@ -467,7 +538,7 @@ async function handleSubmitReason(interaction, prisma, dbFunctions) {
       if (interaction.deferred) {
         await interaction.editReply(`Error: ${error.message}`);
       } else {
-        await interaction.reply({ content: `Error: ${error.message}`, ephemeral: true });
+        await interaction.reply({ content: `Error: ${error.message}`, flags: 64 }); // Use flags
       }
     } catch (replyError) {
       console.error('Error replying to interaction:', replyError);
@@ -492,7 +563,7 @@ async function handleDenyReason(interaction, prisma, dbFunctions) {
     if (!request) {
       await interaction.reply({
         content: 'Request not found in database.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -547,14 +618,14 @@ async function handleDenyReason(interaction, prisma, dbFunctions) {
     // Reply to the interaction - NO DMs
     await interaction.reply({
       content: `❌ Edit request has been denied.`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     
   } catch (error) {
     console.error('Error denying edit request:', error);
     await interaction.reply({
       content: `Error denying edit request: ${error.message}`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }

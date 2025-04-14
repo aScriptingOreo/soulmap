@@ -1,15 +1,29 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
 const { generateEditDiff, formatStoredCoordinatesToString } = require('../modules/utils');
+const { updateLeaderboard } = require('../modules/leaderboard'); // Import leaderboard updater
 
 /**
  * Handle button interactions
  */
 async function handleButtonInteraction(interaction, client, prisma, dbFunctions, config) {
-  console.log(`Button interaction: ${interaction.customId}`);
+  const customId = interaction.customId;
+  console.log(`Button interaction: ${customId}`);
   
   try {
+    // Handle approve new request button
+    if (interaction.customId.startsWith('approve_new_')) {
+      // Check for admin role
+      if (!interaction.member.roles.cache.has(config.ADMIN_ROLE_ID)) {
+        await interaction.reply({
+          content: 'You need admin permissions to approve requests.',
+          flags: 64 // Use flags instead of ephemeral
+        });
+        return;
+      }
+      await handleApproveNew(interaction, prisma, dbFunctions, client, config); // Pass client and config
+    }
     // Handle submit edits button
-    if (interaction.customId.startsWith('submit_edits_')) {
+    else if (interaction.customId.startsWith('submit_edits_')) {
       await handleSubmitEdits(interaction, client, prisma, dbFunctions, config);
     }
     // Handle cancel edit session button - FIX: Add both possible button IDs
@@ -26,7 +40,7 @@ async function handleButtonInteraction(interaction, client, prisma, dbFunctions,
       if (!interaction.member.roles.cache.has(config.ADMIN_ROLE_ID)) {
         await interaction.reply({
           content: 'You need admin permissions to approve requests.',
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
       }
@@ -38,7 +52,7 @@ async function handleButtonInteraction(interaction, client, prisma, dbFunctions,
       if (!interaction.member.roles.cache.has(config.ADMIN_ROLE_ID)) {
         await interaction.reply({
           content: 'You need admin permissions to modify edit requests.',
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
       }
@@ -50,27 +64,100 @@ async function handleButtonInteraction(interaction, client, prisma, dbFunctions,
       if (!interaction.member.roles.cache.has(config.ADMIN_ROLE_ID)) {
         await interaction.reply({
           content: 'You need admin permissions to deny requests.',
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
         return;
       }
       await handleDenyEdit(interaction, prisma, dbFunctions);
+    }
+    // Handle cancel request button
+    else if (interaction.customId === 'cancel_request') {
+      await interaction.update({ 
+        content: 'Request cancelled.', 
+        components: [] 
+      });
+      return;
+    }
+    // Handle dismiss button (format: dismiss_userId)
+    else if (interaction.customId.startsWith('dismiss_')) {
+      const parts = interaction.customId.split('_');
+      const requesterId = parts[1];
+      
+      // Check if user has permission to dismiss
+      if (!hasPermissionForRequest(interaction, requesterId)) {
+        await interaction.reply({
+          content: 'You don\'t have permission to dismiss this request.',
+          flags: 64 // Use flags instead of ephemeral
+        });
+        return;
+      }
+
+      // Get the original embed
+      const message = interaction.message;
+      const originalEmbed = message.embeds[0];
+      
+      // Create updated embed with dismissal status
+      const updatedEmbed = EmbedBuilder.from(originalEmbed)
+        .setColor('#FF0000')
+        .setTitle(`❌ DISMISSED: ${originalEmbed.title}`)
+        .addFields({
+          name: 'Dismissed By',
+          value: `<@${interaction.user.id}>`,
+          inline: true
+        })
+        .addFields({
+          name: 'Dismissed At',
+          value: `<t:${Math.floor(Date.now()/1000)}:F>`,
+          inline: true
+        });
+      
+      // Update the message to show dismissed state
+      await interaction.message.edit({
+        content: null, // Remove any content text
+        embeds: [updatedEmbed],
+        components: [] // Remove all buttons
+      });
+      
+      // Let the user know it was successful
+      await interaction.reply({
+        content: 'Request dismissed.',
+        flags: 64 // Use flags instead of ephemeral
+      });
+      
+      // If there's a message ID, update the database status
+      if (interaction.message.id) {
+        try {
+          await dbFunctions.updateRequestStatus(interaction.message.id, 'dismissed');
+        } catch (dbError) {
+          console.error('Error updating request status in database:', dbError);
+        }
+      }
+      
+      return;
     }
     // Other button handlers
     else {
       console.log(`Unhandled button type: ${interaction.customId}`);
       await interaction.reply({
         content: 'This action is not implemented yet.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
     }
   } catch (error) {
     console.error('Error handling button interaction:', error);
     try {
-      await interaction.reply({
-        content: `An error occurred: ${error.message}`,
-        ephemeral: true
-      });
+      // Check if already replied or deferred before attempting to reply
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: `An error occurred: ${error.message}`,
+          flags: 64 // Use flags instead of ephemeral
+        });
+      } else {
+        await interaction.followUp({
+          content: `An error occurred: ${error.message}`,
+          flags: 64 // Use flags instead of ephemeral
+        });
+      }
     } catch (replyError) {
       console.error('Could not reply to button interaction:', replyError);
     }
@@ -91,7 +178,7 @@ async function handleSubmitEdits(interaction, client, prisma, dbFunctions, confi
   if (!session || !session.edits || Object.keys(session.edits).length === 0) {
     await interaction.reply({
       content: 'No edits found to submit.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -152,7 +239,7 @@ async function handleEditMore(interaction, prisma, dbFunctions) {
   if (!marker) {
     await interaction.reply({
       content: 'Marker not found. It may have been deleted.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -283,7 +370,7 @@ async function handleCancelEditSession(interaction, prisma, dbFunctions) {
     console.error('Error cancelling edit session:', error);
     await interaction.reply({
       content: 'Error cancelling edit session.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }
@@ -302,7 +389,7 @@ async function handleModifyEdit(interaction, prisma, dbFunctions) {
     if (!request) {
       await interaction.reply({
         content: 'Edit request not found in database. It may have been deleted.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -313,7 +400,7 @@ async function handleModifyEdit(interaction, prisma, dbFunctions) {
     if (!markerId) {
       await interaction.reply({
         content: 'Error: No marker ID found in the request data.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -327,7 +414,7 @@ async function handleModifyEdit(interaction, prisma, dbFunctions) {
     if (!editSession) {
       await interaction.reply({
         content: 'Failed to create edit session from the request data.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -341,7 +428,7 @@ async function handleModifyEdit(interaction, prisma, dbFunctions) {
     if (!marker) {
       await interaction.reply({
         content: 'The marker to be edited no longer exists in the database.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -418,13 +505,13 @@ async function handleModifyEdit(interaction, prisma, dbFunctions) {
     await interaction.reply({
       embeds: [embed],
       components: components,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   } catch (error) {
     console.error('Error in handleModifyEdit:', error);
     await interaction.reply({
       content: `An error occurred: ${error.message}`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
   }
 }
@@ -658,6 +745,260 @@ async function handleApproveEdit(interaction, prisma, dbFunctions) {
 }
 
 /**
+ * Handle approve new location request button (for admins)
+ */
+async function handleApproveNew(interaction, prisma, dbFunctions, client, config) {
+  const messageId = interaction.customId.split('_')[2];
+  console.log(`Approving new location request in message: ${messageId}`);
+
+  try {
+    // Defer the reply while processing
+    await interaction.deferReply({ flags: 64 });
+
+    // Fetch the request from the database
+    const request = await dbFunctions.getRequestByMessageId(messageId);
+
+    if (!request) {
+      await interaction.editReply('Request not found in database.');
+      return;
+    }
+
+    if (request.request_type !== 'new' || request.status !== 'pending') {
+      await interaction.editReply(`Request is not a pending 'new' request (Status: ${request.status}, Type: ${request.request_type}).`);
+      return;
+    }
+
+    // Parse newData
+    let newData;
+    try {
+      newData = JSON.parse(request.new_data);
+      if (!newData || typeof newData !== 'object') throw new Error('newData is not a valid object.');
+    } catch (error) {
+      console.error('Error parsing newData JSON:', error);
+      await interaction.editReply('Error parsing request data. Cannot implement.');
+      return;
+    }
+
+    // --- Data Validation ---
+    if (!newData.name || !newData.coordinates || !newData.description || !newData.type) {
+      await interaction.editReply('Error: Request data is incomplete (missing name, coordinates, description, or type). Cannot implement.');
+      return;
+    }
+
+    // --- Check for Existing Location (Exact Name Match) ---
+    const existingLocations = await dbFunctions.searchLocationsForAutocomplete(newData.name);
+    const exactMatch = existingLocations.find(loc => loc.name.toLowerCase() === newData.name.toLowerCase());
+
+    let implementationMessage = ''; // To store the final success message
+
+    if (exactMatch) {
+      // --- Merge/Update Existing Location ---
+      console.log(`Found exact match (ID: ${exactMatch.id}). Merging new data into existing location.`);
+      implementationMessage = `✅ Merged new data into existing location "${exactMatch.name}".`;
+
+      const markerId = exactMatch.id;
+      let updateData = {};
+
+      // Combine Coordinates
+      const existingCoords = exactMatch.coordinates;
+      const newCoords = newData.coordinates; // Already parsed array/object from submitNewMarkerRequest
+      let combinedCoords;
+
+      const isExistingMulti = Array.isArray(existingCoords) && Array.isArray(existingCoords[0]);
+      const isNewMulti = Array.isArray(newCoords) && Array.isArray(newCoords[0]);
+
+      if (!isExistingMulti) {
+        // Convert existing single coord to multi-coord array
+        combinedCoords = [existingCoords];
+      } else {
+        combinedCoords = [...existingCoords];
+      }
+
+      if (!isNewMulti) {
+        // Add new single coord
+        combinedCoords.push(newCoords);
+      } else {
+        // Add new multiple coords
+        combinedCoords.push(...newCoords);
+      }
+      updateData.coordinates = combinedCoords;
+
+      // Update Description if new one is provided and different
+      if (newData.description && newData.description !== exactMatch.description) {
+        updateData.description = newData.description;
+        console.log(`Updating description for ${markerId}`);
+      }
+
+      // Update Type if new one is provided and different
+      if (newData.type && newData.type !== exactMatch.type) {
+        updateData.type = newData.type;
+        console.log(`Updating type to ${newData.type} for ${markerId}`);
+      }
+
+      // Merge Media URLs
+      let combinedMediaUrls = Array.isArray(exactMatch.mediaUrl) ? [...exactMatch.mediaUrl] : (exactMatch.mediaUrl ? [exactMatch.mediaUrl] : []);
+      if (newData.mediaUrl) {
+        const newUrls = Array.isArray(newData.mediaUrl) ? newData.mediaUrl : [newData.mediaUrl];
+        newUrls.forEach(url => {
+          if (!combinedMediaUrls.includes(url)) {
+            combinedMediaUrls.push(url);
+          }
+        });
+      }
+      if (combinedMediaUrls.length > 0 && JSON.stringify(combinedMediaUrls) !== JSON.stringify(exactMatch.mediaUrl)) {
+         updateData.mediaUrl = combinedMediaUrls;
+         console.log(`Updating mediaUrl for ${markerId}`);
+      }
+
+      // Add metadata fields
+      const now = new Date();
+      updateData.lastModified = now;
+      updateData.approvedBy = interaction.user.id; // Keep track of who approved this merge
+      updateData.updatedAt = now;
+
+      // --- Database Update ---
+      if (Object.keys(updateData).length > 0) {
+        const setClauseParts = [];
+        const queryParams = [];
+
+        for (const [key, value] of Object.entries(updateData)) {
+          const paramIndex = queryParams.length + 1;
+          if (['coordinates', 'mediaUrl', 'exactCoordinates'].includes(key)) {
+            setClauseParts.push(`"${key}" = $${paramIndex}::jsonb`);
+            queryParams.push(JSON.stringify(value));
+          } else if (['lastModified', 'updatedAt'].includes(key) && value instanceof Date) {
+            setClauseParts.push(`"${key}" = $${paramIndex}::timestamp`);
+            queryParams.push(value.toISOString());
+          } else {
+            setClauseParts.push(`"${key}" = $${paramIndex}`);
+            queryParams.push(value);
+          }
+        }
+        queryParams.push(markerId); // For the WHERE clause
+
+        const query = `UPDATE "Location" SET ${setClauseParts.join(', ')} WHERE id = $${queryParams.length}`;
+        console.log('Executing UPDATE query:', query);
+        await prisma.$executeRawUnsafe(query, ...queryParams);
+        console.log(`Location ${markerId} updated successfully.`);
+      } else {
+        console.log(`No actual changes detected for merge into ${markerId}.`);
+        implementationMessage = `ℹ️ No new data needed merging into existing location "${exactMatch.name}".`;
+      }
+
+    } else {
+      // --- Create New Location ---
+      console.log(`No exact match found. Creating new location "${newData.name}".`);
+      implementationMessage = `✅ New location "${newData.name}" has been implemented.`;
+
+      // Prepare Data for Insertion
+      const insertData = {
+        name: newData.name,
+        description: newData.description,
+        type: newData.type,
+        coordinates: newData.coordinates, // Assumes coordinates are already correctly formatted JSON/array
+        icon: newData.icon || null,
+        iconSize: newData.iconSize || null,
+        iconColor: newData.iconColor || null,
+        mediaUrl: newData.mediaUrl || null, // Assumes mediaUrl is array or null
+        radius: newData.radius || null,
+        lore: newData.lore || null,
+        spoilers: newData.spoilers || false,
+        noCluster: newData.noCluster || false,
+        exactCoordinates: newData.exactCoordinates || null,
+        approvedBy: interaction.user.id,
+        lastModified: new Date(),
+        createdAt: new Date(), // Set createdAt on initial creation
+        updatedAt: new Date()
+      };
+
+      // Database Insertion
+      const columns = Object.keys(insertData).map(k => `"${k}"`).join(', ');
+      const values = Object.values(insertData);
+
+      const queryParams = values.map((value, index) => {
+        const key = Object.keys(insertData)[index];
+        if (['coordinates', 'mediaUrl', 'exactCoordinates'].includes(key) && typeof value === 'object' && value !== null) {
+          return JSON.stringify(value);
+        }
+        if (['lastModified', 'createdAt', 'updatedAt'].includes(key) && value instanceof Date) {
+          return value.toISOString();
+        }
+        return value;
+      });
+
+      const setClauseParts = Object.keys(insertData).map((key, index) => {
+          const paramIndex = index + 1;
+          if (['coordinates', 'mediaUrl', 'exactCoordinates'].includes(key)) {
+              return `$${paramIndex}::jsonb`;
+          }
+          if (['lastModified', 'createdAt', 'updatedAt'].includes(key)) {
+              return `$${paramIndex}::timestamp`;
+          }
+          return `$${paramIndex}`;
+      });
+      const insertQuery = `INSERT INTO "Location" (${columns}) VALUES (${setClauseParts.join(', ')})`;
+
+      console.log('Executing INSERT query:', insertQuery);
+      await prisma.$executeRawUnsafe(insertQuery, ...queryParams);
+      console.log('New location created successfully');
+    }
+
+    // --- Update Request Status (Common for both merge and new) ---
+    await prisma.discordLocationRequest.update({
+      where: { messageId: messageId },
+      data: {
+        status: 'implemented',
+        approvedBy: interaction.user.id,
+        approvedAt: new Date()
+      }
+    });
+    console.log('Request status updated to implemented');
+
+    // --- Notify Web App ---
+    await dbFunctions.notifyDatabaseChange();
+
+    // --- Update Leaderboard ---
+    await updateLeaderboard(client, dbFunctions.getContributorLeaderboard,
+                          dbFunctions.getLeaderboardInfo, dbFunctions.setLeaderboardInfo,
+                          config.LEADERBOARD_CHANNEL_ID);
+
+    // --- Update Discord Message ---
+    try {
+      const message = interaction.message;
+      const originalEmbed = message.embeds[0];
+      const updatedEmbed = EmbedBuilder.from(originalEmbed)
+        .setColor('#00FF00') // Green for approved
+        .setTitle(`✅ IMPLEMENTED: ${originalEmbed.title}`)
+        .addFields(
+          { name: 'Implemented By', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'Implemented At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+        );
+      await message.edit({ embeds: [updatedEmbed], components: [] }); // Remove buttons
+      console.log('Message updated to show implementation');
+    } catch (messageError) {
+      console.error('Error updating message:', messageError);
+    }
+
+    // --- Final Reply ---
+    await interaction.editReply(implementationMessage); // Use the dynamic message
+
+  } catch (error) {
+    console.error('Error approving new location request:', error);
+    // Ensure we reply even if an error occurs mid-process
+    // Check if interaction is still editable before trying to editReply
+    if (interaction.editable) {
+        try {
+            await interaction.editReply(`Error approving request: ${error.message}`);
+        } catch (replyError) {
+            console.error("Failed to send error reply:", replyError);
+        }
+    } else {
+        console.error("Interaction no longer editable, cannot send error reply.");
+    }
+  }
+}
+
+/**
  * Format coordinates for storage in database
  * Handles various input formats and ensures proper structure
  */
@@ -835,7 +1176,7 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
     console.error('Error fetching request:', error);
     await interaction.reply({
       content: 'Error retrieving request data.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -843,7 +1184,7 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
   if (!request) {
     await interaction.reply({
       content: 'Request not found.',
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -870,7 +1211,7 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
   if (!fieldData) {
     await interaction.reply({
       content: `Field ${fieldToEdit} not found in edit data.`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }
@@ -896,6 +1237,25 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
   
   // Show the modal
   await interaction.showModal(modal);
+}
+
+/**
+ * Check if user has permission for a request action
+ */
+function hasPermissionForRequest(interaction, requesterId) {
+  // If this is the requester, they can cancel their own request
+  if (interaction.user.id === requesterId) {
+    return true;
+  }
+  
+  // If they have the admin role, they can handle any request
+  const member = interaction.member;
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  if (member && adminRoleId && member.roles.cache.has(adminRoleId)) {
+    return true;
+  }
+  
+  return false;
 }
 
 module.exports = {

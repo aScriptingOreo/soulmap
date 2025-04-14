@@ -10,8 +10,42 @@ async function handleSelectMenuInteraction(interaction, prisma, dbFunctions) {
     // Log prisma object to verify it's defined
     console.log('Prisma object received in selectMenuHandler:', prisma ? 'defined' : 'undefined');
     
+    // Handle location disambiguation simple selection
+    if (interaction.customId === 'loc_disambig_selection') {
+      try {
+        const { handleLocationDisambigSelectionResponse } = require('../modules/requests');
+        // Need to extract the client and CHANNEL_ID from config
+        const client = interaction.client;
+        const CHANNEL_ID = process.env.CHANNEL_ID;
+        
+        await handleLocationDisambigSelectionResponse(interaction, client, prisma, dbFunctions, CHANNEL_ID);
+      } catch (error) {
+        console.error('Error handling location disambiguation selection:', error);
+        await interaction.update({
+          content: `Error processing your selection: ${error.message}`,
+          components: []
+        });
+      }
+    }
+    // Handle original complex location disambiguation
+    else if (interaction.customId.startsWith('loc_disambig_')) {
+      try {
+        const { handleLocationDisambiguation } = require('../modules/requests');
+        // Need to extract the client and CHANNEL_ID from config
+        const client = interaction.client;
+        const CHANNEL_ID = process.env.CHANNEL_ID;
+        
+        await handleLocationDisambiguation(interaction, client, prisma, dbFunctions, CHANNEL_ID);
+      } catch (error) {
+        console.error('Error handling location disambiguation:', error);
+        await interaction.update({
+          content: `Error processing your selection: ${error.message}`,
+          components: []
+        });
+      }
+    }
     // Handle coordinate selection for admin editing
-    if (interaction.customId.startsWith('select_coord_') && !interaction.customId.includes('req_')) {
+    else if (interaction.customId.startsWith('select_coord_') && !interaction.customId.includes('req_')) {
       try {
         const markerId = interaction.customId.split('_')[2];
         const selectedValue = interaction.values[0]; // Get the selected coordinate index
@@ -190,7 +224,7 @@ async function handleSelectMenuInteraction(interaction, prisma, dbFunctions) {
       try {
         await interaction.reply({
           content: `An error occurred: ${error.message}`,
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         });
       } catch (replyError) {
         console.error('Could not respond to interaction:', replyError);
@@ -225,7 +259,7 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
     if (!newSession || !newSession.edits || Object.keys(newSession.edits).length === 0) {
       await interaction.reply({
         content: 'Failed to create edit session from request data.',
-        ephemeral: true
+        flags: 64 // Use flags instead of ephemeral
       });
       return;
     }
@@ -238,7 +272,7 @@ async function handleAdminEditField(interaction, prisma, dbFunctions) {
   if (!fieldData) {
     await interaction.reply({
       content: `Field ${fieldToEdit} not found in edit data.`,
-      ephemeral: true
+      flags: 64 // Use flags instead of ephemeral
     });
     return;
   }

@@ -23,25 +23,9 @@ async function registerCommands(client, token) {
                 description: 'Name for the location',
                 type: ApplicationCommandOptionType.String,
                 required: true
-              },
-              {
-                name: 'coordinates',
-                description: 'Coordinates in [X, Y] format, can use multiple like [X,Y],[X,Y]',
-                type: ApplicationCommandOptionType.String,
-                required: true
-              },
-              {
-                name: 'description',
-                description: 'Brief description of the location/marker',
-                type: ApplicationCommandOptionType.String,
-                required: true
-              },
-              {
-                name: 'screenshot',
-                description: 'Optional screenshot of the location',
-                type: ApplicationCommandOptionType.Attachment,
-                required: false
               }
+              // Removed coordinates, description, and screenshot options
+              // These will be requested after the initial disambiguation step
             ]
           },
           {
