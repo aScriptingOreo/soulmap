@@ -126,14 +126,14 @@ function generateMapLinks(coordinates) {
       if (coordinates.length === 2 && typeof coordinates[0] === 'number') {
         // Single coordinate pair
         const [x, y] = coordinates;
-        links.push(`[View on map](https://soulmap.avakot.org/?coord=${x},${y})`);
+        links.push(`[View on map](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
       } else if (coordinates.length > 0) {
         // Multiple coordinates - get first 5 to avoid cluttering
         const maxCoords = Math.min(coordinates.length, 5);
         for (let i = 0; i < maxCoords; i++) {
           if (Array.isArray(coordinates[i]) && coordinates[i].length === 2) {
             const [x, y] = coordinates[i];
-            links.push(`[Point #${i+1}](https://soulmap.avakot.org/?coord=${x},${y})`);
+            links.push(`[Point #${i+1}](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
           }
         }
         

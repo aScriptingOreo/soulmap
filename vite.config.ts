@@ -159,7 +159,7 @@ export default defineConfig({
     // Allow requests from the specified host when running behind a reverse proxy
     host: '0.0.0.0', // Listen on all network interfaces
     port: clientPort, // Use CLIENT_PORT from env
-    allowedHosts: ['soulmap.avakot.org']
+    allowedHosts: ['dev.soulmap.7thseraph.org']
   },
   assetsInclude: ['**/*.png', '**/*.svg']
 });
