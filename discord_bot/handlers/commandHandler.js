@@ -228,12 +228,12 @@ async function handleWhereIs(interaction, searchLocationsForAutocomplete) {
           if (coords.length === 2 && typeof coords[0] === 'number') {
             // This is a single coordinate pair
             const [x, y] = coords;
-            coordinateLinks.push(`[View on map](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+            coordinateLinks.push(`[View on map](https://soulmap.avakot.org/?coord=${x},${y})`);
           } else if (specificIndex >= 0 && specificIndex < coords.length && 
                      Array.isArray(coords[specificIndex]) && coords[specificIndex].length === 2) {
             // This is a multi-coordinate location, get specific point
             const [x, y] = coords[specificIndex];
-            coordinateLinks.push(`[View point #${specificIndex+1} on map](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+            coordinateLinks.push(`[View point #${specificIndex+1} on map](https://soulmap.avakot.org/?coord=${x},${y})`);
           }
         }
       } else {
@@ -242,14 +242,14 @@ async function handleWhereIs(interaction, searchLocationsForAutocomplete) {
           if (coords.length === 2 && typeof coords[0] === 'number') {
             // Single coordinate pair
             const [x, y] = coords;
-            coordinateLinks.push(`[View on map](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+            coordinateLinks.push(`[View on map](https://soulmap.avakot.org/?coord=${x},${y})`);
           } else if (coords.length > 0) {
             // Multiple coordinates - get first 5 to avoid cluttering the response
             const maxCoords = Math.min(coords.length, 5);
             for (let i = 0; i < maxCoords; i++) {
               if (Array.isArray(coords[i]) && coords[i].length === 2) {
                 const [x, y] = coords[i];
-                coordinateLinks.push(`[Point #${i+1}](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+                coordinateLinks.push(`[Point #${i+1}](https://soulmap.avakot.org/?coord=${x},${y})`);
               }
             }
             
@@ -265,14 +265,14 @@ async function handleWhereIs(interaction, searchLocationsForAutocomplete) {
               // Handle like above
               if (parsedCoords.length === 2 && typeof parsedCoords[0] === 'number') {
                 const [x, y] = parsedCoords;
-                coordinateLinks.push(`[View on map](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+                coordinateLinks.push(`[View on map](https://soulmap.avakot.org/?coord=${x},${y})`);
               } else {
                 // Multiple coordinates - get first 5
                 const maxCoords = Math.min(parsedCoords.length, 5);
                 for (let i = 0; i < maxCoords; i++) {
                   if (Array.isArray(parsedCoords[i]) && parsedCoords[i].length === 2) {
                     const [x, y] = parsedCoords[i];
-                    coordinateLinks.push(`[Point #${i+1}](https://dev.soulmap.7thseraph.org/?coord=${x},${y})`);
+                    coordinateLinks.push(`[Point #${i+1}](https://soulmap.avakot.org/?coord=${x},${y})`);
                   }
                 }
                 

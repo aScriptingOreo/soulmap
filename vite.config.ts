@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   // Get environment variables with fallbacks
   const clientPort = parseInt(env.CLIENT_PORT || '15174');
   const serverPort = parseInt(env.SERVER_PORT || '3000');
-  const domain = env.DOMAIN || 'dev.soulmap.7thseraph.org';
+  const domain = env.DOMAIN || 'soulmap.avakot.org';
   
   console.log('Environment configuration:');
   console.log(`- Domain: ${domain}`);
@@ -136,7 +136,7 @@ export default defineConfig(({ mode }) => {
       // Add allowed hosts explicitly using domain from env
       allowedHosts: [
         domain,
-        env.API_DOMAIN || 'devapi.soulmap.7thseraph.org',
+        env.API_DOMAIN,
         'localhost',
         '127.0.0.1'
       ],
