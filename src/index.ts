@@ -1,4 +1,9 @@
-// src/index.ts
+import 'leaflet/dist/leaflet.css';
+import './styles/main.css';
+import './styles/MarkerCluster.css';
+import './styles/MarkerCluster.Default.css';
+import './styles/leaflet.css';
+
 import { marked } from 'marked';
 import { loadLocations, clearLocationsCache, setupDatabaseChangeListener, LOCATION_UPDATE_EVENT } from './loader';
 import { initializeMap, updateMetaTags, getMap, refreshMapMarkers } from './map';
@@ -7,6 +12,8 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 import type { VersionInfo } from './types';
 import mapVersion from './mapversion.yml';
 import { navigateToLocation, navigateToCoordinates, generateLocationHash } from './search';
+import { DevelopmentOverlay } from './devOverlay';
+import analytics from './analytics';
 
 // Flag to detect if we're running in offline mode - use 'let' instead of 'const' to allow reassignment
 let isOfflineMode = window.location.search.includes('offline=true') || 
@@ -255,6 +262,18 @@ async function initMain() {
       console.log('Internet connection lost. Switched to offline mode.');
       isOfflineMode = true;
     });
+
+    // Log initialization complete
+    console.log('Application initialized successfully');
+    
+    // Track page view in analytics - with error handling
+    try {
+      if (analytics && typeof analytics.trackPageView === 'function') {
+        analytics.trackPageView('map');
+      }
+    } catch (error) {
+      console.warn('Error tracking page view:', error);
+    }
     
   } catch (error) {
     console.error('Failed to load locations:', error);
@@ -495,3 +514,149 @@ window.addEventListener('unhandledrejection', (event) => {
     console.error('Stack trace:', event.reason.stack);
   }
 });
+
+// Set up initial state
+window.isHandlingHistoryNavigation = false;
+
+// Listen for hard refresh detection
+document.addEventListener('DOMContentLoaded', () => {
+  // Check if this was a hard refresh
+  const navEntries = performance.getEntriesByType('navigation');
+  const isHardRefresh = navEntries.length > 0 && 
+    (navEntries[0] as any).type === 'reload' && 
+    (navEntries[0] as any).loadType === 'hard';
+  
+  if (isHardRefresh) {
+    console.log('Hard refresh detected (Ctrl+F5) - will reload all data');
+  }
+});
+
+// Main application initialization
+async function initializeApplication() {
+  try {
+    // Get query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Check for debug mode
+    window.isDebugEnabled = urlParams.has('debug') || localStorage.getItem('debug_mode') === 'true';
+    
+    // Load locations - this now includes hash verification
+    const locations = await loadLocations();
+    console.log(`Loaded ${locations.length} locations`);
+    
+    // Initialize map with locations
+    const map = await initializeMap(locations, window.isDebugEnabled);
+    
+    // Set up URL navigation handlers
+    window.handleInternalLink = (url: URL) => {
+      const urlParams = new URLSearchParams(url.search);
+      const locParam = urlParams.get('loc');
+      const coordParam = urlParams.get('coord');
+      
+      window.isHandlingHistoryNavigation = true;
+      
+      try {
+        if (locParam && window.navigateToLocation) {
+          const indexParam = urlParams.get('index');
+          const index = indexParam ? parseInt(indexParam, 10) - 1 : undefined;
+          window.navigateToLocation(locParam, index);
+        } else if (coordParam && window.navigateToCoordinates) {
+          const [x, y] = coordParam.split(',').map(Number);
+          if (!isNaN(x) && !isNaN(y)) {
+            window.navigateToCoordinates([x, y]);
+          }
+        }
+      } finally {
+        // Reset the flag after navigation
+        setTimeout(() => {
+          window.isHandlingHistoryNavigation = false;
+        }, 200);
+      }
+    };
+    
+    // Set up database change listener to listen for real-time updates
+    const cleanup = await setupDatabaseChangeListener(async () => {
+      // This is the callback for when a database change is detected
+      console.log('Database change detected via SSE');
+    });
+    
+    // Add debug overlay if needed
+    if (window.isDebugEnabled && map) {
+      new DevelopmentOverlay(map);
+    }
+    
+    // Expose utility functions for refreshing and clearing caches
+    window.clearCaches = async () => {
+      await clearLocationsCache();
+      await clearTileCache();
+      console.log('All caches cleared');
+      
+      // Show notification
+      const notification = document.createElement('div');
+      notification.className = 'database-update-notification';
+      notification.textContent = 'All caches cleared';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
+    };
+    
+    window.refreshMapData = async () => {
+      try {
+        // Clear only locations cache to force a refresh
+        await clearLocationsCache();
+        
+        // Load fresh locations
+        const freshLocations = await loadLocations();
+        
+        // Update map markers
+        await refreshMapMarkers(freshLocations);
+        
+        console.log('Map data refreshed successfully');
+        
+        // Show notification
+        const notification = document.createElement('div');
+        notification.className = 'database-update-notification';
+        notification.textContent = 'Map data refreshed';
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 3000);
+        
+        return true;
+      } catch (error) {
+        console.error('Error refreshing map data:', error);
+        return false;
+      }
+    };
+    
+    // Log initialization complete
+    console.log('Application initialized successfully');
+    
+    // Track page view in analytics - with error handling
+    try {
+      if (analytics && typeof analytics.trackPageView === 'function') {
+        analytics.trackPageView('map');
+      }
+    } catch (error) {
+      console.warn('Error tracking page view:', error);
+    }
+    
+  } catch (error) {
+    console.error('Error initializing application:', error);
+    
+    // Show error to user
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'fatal-error';
+    errorDiv.innerHTML = `
+      <h2>Application Error</h2>
+      <p>There was an error initializing the application. Please try refreshing the page.</p>
+      <pre>${error.message}</pre>
+      <button id="refresh-btn">Refresh Page</button>
+    `;
+    document.body.appendChild(errorDiv);
+    
+    document.getElementById('refresh-btn')?.addEventListener('click', () => {
+      window.location.reload();
+    });
+  }
+}
+
+// Start the application
+initializeApplication();
