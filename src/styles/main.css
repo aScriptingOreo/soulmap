@@ -2910,47 +2910,29 @@ background: rgba(255, 255, 255, 0.2);
 
 .database-update-notification {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(33, 150, 243, 0.9);
+  top: 15px;
+  left: 15px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 12px 24px;
   border-radius: 4px;
-  z-index: 9999;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  animation: slide-in 0.3s ease-out;
-}
-
-.database-update-notification.fade-out {
-  animation: fade-out 1s ease-out forwards;
-}
-
-@keyframes slide-in {
-  0% { transform: translateX(100%); opacity: 0; }
-  100% { transform: translateX(0); opacity: 1; }
-}
-
-@keyframes fade-out {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* Database update notification */
-.database-update-notification {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(59, 130, 246, 0.9);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  z-index: 2000;
-  font-size: 14px;
-  text-align: center;
-  transition: opacity 0.3s ease;
+  font-size: 0.9em;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity 0.3s, transform 0.3s;
   pointer-events: none;
+}
+
+.database-update-notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.database-update-notification.hide {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 
 .database-update-notification.low-priority {

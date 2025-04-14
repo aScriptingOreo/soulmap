@@ -64,9 +64,20 @@ function trackEvent(eventName: string, eventParams: Record<string, any> = {}) {
   }
 }
 
+// Add the missing trackLocationView function
+function trackLocationView(locationName: string, locationType: string, coordinates: [number, number]) {
+  trackEvent('location_view', {
+    name: locationName,
+    type: locationType,
+    coordinates: coordinates,
+    timestamp: Date.now()
+  });
+}
+
 // Export a default object with all methods
 export default {
   trackPageView,
   trackSearch,
-  trackEvent
+  trackEvent,
+  trackLocationView
 };

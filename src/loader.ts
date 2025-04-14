@@ -514,24 +514,54 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
   }
 }
 
-// Modified function to include custom message
+// Modified function to include custom message with top-left positioning and animation
+// Use !important to ensure our styles take precedence
 function showDatabaseUpdateNotification(message: string = 'Map data updated') {
   // Create notification element
   const notification = document.createElement('div');
   notification.className = 'database-update-notification low-priority';
   notification.textContent = message;
-  notification.style.cssText = 'opacity: 0.7; font-size: 0.8em; padding: 5px 10px;';
+  
+  // Add a unique class to avoid conflicts with other CSS
+  notification.classList.add('top-left-notification');
+  
+  // Update styling for top-left positioning and slide-in animation
+  // Use !important to override any conflicting styles
+  notification.style.cssText = `
+    position: fixed !important;
+    top: 15px !important;
+    left: 15px !important;
+    padding: 8px 12px !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: white !important;
+    border-radius: 4px !important;
+    font-size: 0.9em !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+    z-index: 1000 !important;
+    opacity: 0 !important;
+    transform: translateY(-20px) !important;
+    transition: opacity 0.3s, transform 0.3s !important;
+  `;
   
   // Add to document
   document.body.appendChild(notification);
   
-  // Remove after a short delay
+  // Trigger animation after a small delay (needed for the transition to work)
   setTimeout(() => {
-    notification.classList.add('fade-out');
+    notification.style.opacity = '1 !important';
+    notification.style.transform = 'translateY(0) !important';
+  }, 10);
+  
+  // Remove after a delay with exit animation
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transform = 'translateY(-20px)';
+    
+    // Remove from DOM after animation completes
     setTimeout(() => {
       notification.remove();
-    }, 500);
-  }, 2000);
+    }, 300);
+  }, 3000);
 }
 
 // Function to update the locations cache
