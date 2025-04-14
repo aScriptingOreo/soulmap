@@ -9,6 +9,12 @@ Avakot needs players that are willing to help with data gathering inside the gam
 None of this would've been possible without @Remico, our main contributor for the P9 updates, all the new main locations and world trees were catalogued by her!
 
 # Changelog 
+1.0.1
+- Patch 1.0.1 is here and it's pretty cool
+- We can now update the map live, without you having to press F5
+- Pressing Ctrl + F5 will force reload the markers(Ctrl + R also works)
+- Everything is faster, by a nice 110%(give or take)
+
 1.0.0
 - It's official, this is the "release" of soulmap!
 - Decoupled the client from the server in 1.0

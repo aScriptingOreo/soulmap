@@ -3,11 +3,11 @@ networks:
     external: true
 
 services:
-  devsoulmap:
+  soulmap:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: devsoulmap
+    container_name: soulmap
     command: bun dev
     volumes:
       - .:/app
@@ -28,30 +28,53 @@ services:
       - default
     restart: always
     labels:
-      # Enable Traefik
+      # Basic Traefik config - just expose the Vite dev server
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
       
-      # Single service for the domain - all requests to the client
-      - "traefik.http.services.devsoulmap.loadbalancer.server.port=${CLIENT_PORT}"
+      # Single service for the Vite dev server
+      - "traefik.http.services.soulmap.loadbalancer.server.port=${CLIENT_PORT}"
       
-      # Frontend for both HTTP and HTTPS
-      - "traefik.http.routers.devsoulmap.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.devsoulmap.entrypoints=http,https"
-      - "traefik.http.routers.devsoulmap.tls=true"
-      - "traefik.http.routers.devsoulmap.tls.certresolver=letsencrypt"
-      
-      # Fix for websocket connections
-      - "traefik.http.middlewares.websocket.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.websocket.headers.customrequestheaders.X-Forwarded-Host=${DOMAIN}"
-      - "traefik.http.routers.devsoulmap.middlewares=websocket"
+      # Simple HTTP router - no SSL, no redirects
+      - "traefik.http.routers.soulmap.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.soulmap.entrypoints=http"
     depends_on:
-      devsm-pg:
+      sm-pg:
         condition: service_healthy
   
-  devsm-pg:
+  soulmapbot:
+    build:
+      context: ./discord_bot/
+      dockerfile: Dockerfile
+    command: npm run dev
+    container_name: soulmapbot
+    environment:
+      - DISCORD_TOKEN=${discord_bot_token}
+      - CHANNEL_ID=${discord_channel_id}
+      - ADMIN_ROLE_ID=${discord_admin_role_id}
+      - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
+      - DATABASE_URL=${DATABASE_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./discord_bot/handlers:/app/handlers
+      - ./discord_bot/modules:/app/modules
+      - ./discord_bot/classes:/app/classes
+
+      - ./discord_bot/index.js:/app/index.js
+      - ./discord_bot/database.js:/app/database.js
+      - ./discord_bot/schema.prisma:/app/schema.prisma
+      - ./discord_bot/package.json:/app/package.json
+      - ./src/mapversion.yml:/app/src/mapversion.yml
+    restart: always
+    networks:
+      - default
+    depends_on:
+      sm-pg:
+        condition: service_healthy
+
+  sm-pg:
     image: postgres:latest
-    container_name: devsoulmap-postgres
+    container_name: soulmap-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -59,7 +82,7 @@ services:
     volumes:
       - ./database:/var/lib/postgresql/data
     ports:
-      - "15432:5432"  # PostgreSQL port
+      - "5432:5432"  # PostgreSQL port
     networks:
       - default
     restart: always

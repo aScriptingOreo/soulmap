@@ -1,150 +1,131 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import yaml from '@rollup/plugin-yaml';
 import glob from 'vite-plugin-glob';
 import path from 'path';
+import fs from 'fs';
 
-export default defineConfig(({ mode }) => {
-  // Load env variables
-  const env = loadEnv(mode, process.cwd(), '');
+// Load environment variables directly to ensure they're available
+const envFile = fs.readFileSync(path.resolve(__dirname, '.env'), 'utf-8');
+const env = {};
+envFile.split('\n').forEach(line => {
+  // Skip comments and empty lines
+  if (line.trim().startsWith('#') || !line.trim()) return;
   
-  // Get environment variables with fallbacks
-  const clientPort = parseInt(env.CLIENT_PORT || '15174');
-  const serverPort = parseInt(env.SERVER_PORT || '3000');
-  const domain = env.DOMAIN || 'soulmap.avakot.org';
+  const [key, value] = line.split('=');
+  if (key && value) {
+    env[key.trim()] = value.trim().replace(/^["'](.*)["']$/, '$1');
+  }
+});
+
+// Get environment variables with fallbacks
+const clientPort = parseInt(process.env.CLIENT_PORT || env.CLIENT_PORT || '5173');
+const serverPort = parseInt(process.env.SERVER_PORT || env.SERVER_PORT || '3715');
+const domain = process.env.DOMAIN || env.DOMAIN || 'soulmap.avakot.org';
+
+console.log('=== Environment Configuration ===');
+console.log(`Domain: ${domain}`);
+console.log(`Client Port: ${clientPort}`);
+console.log(`Server Port: ${serverPort}`);
+console.log(`DATABASE_URL: ${!!process.env.DATABASE_URL || !!env.DATABASE_URL}`);
+console.log(`ENV LOADING METHOD: Manual parser`);
+
+export default defineConfig({
+  // Set base to root path
+  base: '/',
   
-  console.log('Environment configuration:');
-  console.log(`- Domain: ${domain}`);
-  console.log(`- Client Port: ${clientPort}`);
-  console.log(`- Server Port: ${serverPort}`);
-  console.log(`- API Base URL: ${env.VITE_API_BASE_URL || '/api'}`);
+  // Keep the root in src
+  root: path.resolve(__dirname, 'src'),
+  publicDir: '../res',
   
-  // Determine if we're in a secure context
-  const isSecure = domain.startsWith('https://') || 
-                  (!domain.startsWith('http://') && !domain.includes('localhost'));
+  build: {
+    outDir: '../dist',
+    emptyOutDir: true,
+    copyPublicDir: true,
+  },
   
-  return {
-    root: path.resolve(__dirname, 'src'),
-    publicDir: '../res',
-    build: {
-      outDir: '../dist',  // Output to dist directory in project root
-      emptyOutDir: true,
-      copyPublicDir: true,
-      rollupOptions: {
-        input: {
-          main: path.resolve(__dirname, 'src/index.html')
-        }
-      }
-    },
-    plugins: [
-      yaml({
-        include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
-      }),
-      glob(),
-      {
-        // Development server middleware for debugging - critical for troubleshooting
-        name: 'debug-middleware',
-        configureServer(server) {
-          // Add middleware that logs requests for troubleshooting
-          server.middlewares.use((req, res, next) => {
-            console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-            next();
-          });
-        }
-      },
-      {
-        // Improved cache control handling
-        name: 'svg-cache-control',
-        configureServer(server) {
-          server.middlewares.use((req, res, next) => {
-            // Set cache headers for static assets
-            if (req.url?.endsWith('.svg') || req.url?.endsWith('.png')) {
-              res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-            }
-            next();
-          });
-        }
-      }
-    ],
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, 'src')
-      }
-    },
-    server: {
-      fs: {
-        allow: ['..']
-      },
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-        'Access-Control-Allow-Headers': 'X-Requested-With, Content-Type, Authorization'
-      },
-      // Simplified proxy configuration using server port from env
-      proxy: {
-        '/api': {
-          target: `http://localhost:${serverPort}`,
-          changeOrigin: true,
-          // Don't rewrite paths - server expects /api prefix now
-          rewrite: (path) => path,
-          configure: (proxy) => {
-            // Increase timeouts
-            proxy.options.timeout = 120000; // 2 minutes
-            proxy.options.proxyTimeout = 120000; // 2 minutes
-            
-            // Add debug logging for proxy requests
-            proxy.on('proxyReq', (proxyReq, req) => {
-              console.log(`Proxying request: ${req.method} ${req.url} -> ${proxyReq.path}`);
-            });
-            
-            proxy.on('error', (err, req, res) => {
-              console.error('Proxy error:', err);
-              if (!res.headersSent) {
-                res.writeHead(502, {
-                  'Content-Type': 'application/json'
-                });
-                res.end(JSON.stringify({
-                  error: 'Proxy error',
-                  message: err.message
-                }));
-              }
-            });
-          }
-        }
-      },
-      host: '0.0.0.0',
-      port: clientPort,
-      strictPort: true,
-      hmr: {
-        // Fix WebSocket connection issues
-        host: domain.replace(/^https?:\/\//, ''), // Strip protocol if present
-        clientPort: isSecure ? 443 : clientPort, // Use 443 for secure connections
-        protocol: isSecure ? 'wss' : 'ws', // Use secure WebSockets if domain uses HTTPS
-        timeout: 120000,
-        path: '/ws',
+  plugins: [
+    yaml({
+      include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
+    }),
+    glob(),
+    {
+      name: 'spa-fallback',
+      configureServer(server) {
+        // Log requests for debugging
+        server.middlewares.use((req, res, next) => {
+          console.log(`[Request] ${req.method} ${req.url}`);
+          next();
+        });
         
-        // Add a custom function to handle WebSocket connection options
-        webSocketServer: {
-          options: {
-            // Prevent automatic upgrade to wss when behind HTTPS proxy
-            secure: false,
-            // Don't verify client cert
-            rejectUnauthorized: false
+        // SPA fallback for HTML5 routing
+        server.middlewares.use((req, res, next) => {
+          if (req.url && 
+              !req.url.includes('.') && 
+              !req.url.startsWith('/api') &&
+              !req.url.startsWith('/@')) {
+            console.log(`[SPA] Redirecting ${req.url} to /index.html`);
+            req.url = '/index.html';
           }
+          next();
+        });
+      }
+    }
+  ],
+  
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src')
+    }
+  },
+  
+  server: {
+    fs: {
+      allow: ['..']
+    },
+    
+    // Basic server config
+    host: '0.0.0.0',
+    port: clientPort,
+    strictPort: true,
+    
+    // Critical: Properly proxy API requests to the internal server
+    proxy: {
+      '/api': {
+        target: `http://localhost:${serverPort}`,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path,
+        configure: (proxy) => {
+          // Add debugging
+          proxy.on('proxyReq', (proxyReq, req) => {
+            console.log(`[API Proxy] ${req.method} ${req.url} -> ${proxyReq.path}`);
+          });
+          
+          proxy.on('error', (err, req, res) => {
+            console.error('[API Proxy Error]', err);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));
+            }
+          });
         }
-      },
-      // Add allowed hosts explicitly using domain from env
-      allowedHosts: [
-        domain,
-        env.API_DOMAIN,
-        'localhost',
-        '127.0.0.1'
-      ],
-      watch: {
-        usePolling: true,
-        interval: 1000
       }
     },
-    assetsInclude: ['**/*.png', '**/*.svg']
-  };
+    
+    // Disable HMR to avoid client errors
+    hmr: false,
+    
+    // Explicitly allow the domain
+    allowedHosts: [domain, 'localhost', '127.0.0.1', 'soulmap.avakot.org'],
+    
+    // Accept any host to avoid CORS issues
+    cors: true,
+    origin: '*',
+    
+    // Just to be extra sure
+    headers: {
+      'Access-Control-Allow-Origin': '*'
+    }
+  }
 });
