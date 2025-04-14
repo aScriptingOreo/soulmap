@@ -3,11 +3,11 @@ networks:
     external: true
 
 services:
-  soulmap:
+  devsoulmap:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: soulmap
+    container_name: devsoulmap
     command: bun dev
     volumes:
       - .:/app
@@ -32,78 +32,78 @@ services:
       - traefik.enable=true
       
       # --- Client Routers (Handles UI on root path) ---
-      - traefik.http.routers.soulmap-nossl.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.soulmap-nossl.entrypoints=http
-      - traefik.http.routers.soulmap-nossl.service=soulmap-client-svc # Use client service
+      - traefik.http.routers.devsoulmap-nossl.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.devsoulmap-nossl.entrypoints=http
+      - traefik.http.routers.devsoulmap-nossl.service=devsoulmap-client-svc # Use client service
       
-      - traefik.http.routers.soulmap-ssl.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.soulmap-ssl.entrypoints=https
-      - traefik.http.routers.soulmap-ssl.tls=true
-      - traefik.http.routers.soulmap-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.soulmap-ssl.service=soulmap-client-svc # Use client service
+      - traefik.http.routers.devsoulmap-ssl.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.devsoulmap-ssl.entrypoints=https
+      - traefik.http.routers.devsoulmap-ssl.tls=true
+      - traefik.http.routers.devsoulmap-ssl.tls.certresolver=letsencrypt
+      - traefik.http.routers.devsoulmap-ssl.service=devsoulmap-client-svc # Use client service
 
       # --- Client Service (Points to Vite/Client Port) ---
-      - traefik.http.services.soulmap-client-svc.loadbalancer.server.port=${CLIENT_PORT}
+      - traefik.http.services.devsoulmap-client-svc.loadbalancer.server.port=${CLIENT_PORT}
 
       # --- API Routers (Handles API subdomain) ---
       # Use API_DOMAIN, remove PathPrefix and middleware
-      - traefik.http.routers.soulmap-api-nossl.rule=Host(`${API_DOMAIN}`) 
-      - traefik.http.routers.soulmap-api-nossl.entrypoints=http
-      - traefik.http.routers.soulmap-api-nossl.service=soulmap-api-svc # Use API service
-      # - traefik.http.routers.soulmap-api-nossl.middlewares=strip-api-prefix # Removed
+      - traefik.http.routers.devsoulmap-api-nossl.rule=Host(`${API_DOMAIN}`) 
+      - traefik.http.routers.devsoulmap-api-nossl.entrypoints=http
+      - traefik.http.routers.devsoulmap-api-nossl.service=devsoulmap-api-svc # Use API service
+      # - traefik.http.routers.devsoulmap-api-nossl.middlewares=strip-api-prefix # Removed
 
       # Use API_DOMAIN, remove PathPrefix and middleware
-      - traefik.http.routers.soulmap-api-ssl.rule=Host(`${API_DOMAIN}`) 
-      - traefik.http.routers.soulmap-api-ssl.entrypoints=https
-      - traefik.http.routers.soulmap-api-ssl.tls=true
-      - traefik.http.routers.soulmap-api-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.soulmap-api-ssl.service=soulmap-api-svc # Use API service
-      # - traefik.http.routers.soulmap-api-ssl.middlewares=strip-api-prefix # Removed
+      - traefik.http.routers.devsoulmap-api-ssl.rule=Host(`${API_DOMAIN}`) 
+      - traefik.http.routers.devsoulmap-api-ssl.entrypoints=https
+      - traefik.http.routers.devsoulmap-api-ssl.tls=true
+      - traefik.http.routers.devsoulmap-api-ssl.tls.certresolver=letsencrypt
+      - traefik.http.routers.devsoulmap-api-ssl.service=devsoulmap-api-svc # Use API service
+      # - traefik.http.routers.devsoulmap-api-ssl.middlewares=strip-api-prefix # Removed
 
       # --- API Service (Points to Backend/Server Port) ---
-      - traefik.http.services.soulmap-api-svc.loadbalancer.server.port=${SERVER_PORT}
+      - traefik.http.services.devsoulmap-api-svc.loadbalancer.server.port=${SERVER_PORT}
 
       # --- Middleware (Strips /api prefix) ---
       # This middleware is no longer needed for the API service
       # - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
 
     depends_on:
-      sm-pg:
+      devsm-pg:
         condition: service_healthy
   
-  soulmapbot:
-    build:
-      context: ./discord_bot/
-      dockerfile: Dockerfile
-    command: npm run dev
-    container_name: soulmapbot
-    environment:
-      - DISCORD_TOKEN=${discord_bot_token}
-      - CHANNEL_ID=${discord_channel_id}
-      - ADMIN_ROLE_ID=${discord_admin_role_id}
-      - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
-      - DATABASE_URL=${DATABASE_URL}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    volumes:
-      - ./discord_bot/handlers:/app/handlers
-      - ./discord_bot/modules:/app/modules
-      - ./discord_bot/classes:/app/classes
-
-      - ./discord_bot/index.js:/app/index.js
-      - ./discord_bot/database.js:/app/database.js
-      - ./discord_bot/schema.prisma:/app/schema.prisma
-      - ./discord_bot/package.json:/app/package.json
-      - ./src/mapversion.yml:/app/src/mapversion.yml
-    restart: always
-    networks:
-      - default
-    depends_on:
-      sm-pg:
-        condition: service_healthy
+  #devsoulmapbot:
+  #  build:
+  #    context: ./discord_bot/
+  #    dockerfile: Dockerfile
+  #  command: npm run dev
+  #  container_name: soulmapbot
+  #  environment:
+  #    - DISCORD_TOKEN=${discord_bot_token}
+  #    - CHANNEL_ID=${discord_channel_id}
+  #    - ADMIN_ROLE_ID=${discord_admin_role_id}
+  #    - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
+  #    - DATABASE_URL=${DATABASE_URL}
+  #    - GEMINI_API_KEY=${GEMINI_API_KEY}
+  #  volumes:
+  #    - ./discord_bot/handlers:/app/handlers
+  #    - ./discord_bot/modules:/app/modules
+  #    - ./discord_bot/classes:/app/classes
+#
+  #    - ./discord_bot/index.js:/app/index.js
+  #    - ./discord_bot/database.js:/app/database.js
+  #    - ./discord_bot/schema.prisma:/app/schema.prisma
+  #    - ./discord_bot/package.json:/app/package.json
+  #    - ./src/mapversion.yml:/app/src/mapversion.yml
+  #  restart: always
+  #  networks:
+  #    - default
+  #  depends_on:
+  #    sm-pg:
+  #      condition: service_healthy
   
-  sm-pg:
+  devsm-pg:
     image: postgres:latest
-    container_name: soulmap-postgres
+    container_name: devsoulmap-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -111,7 +111,7 @@ services:
     volumes:
       - ./database:/var/lib/postgresql/data
     ports:
-      - "5432:5432"  # PostgreSQL port
+      - "15432:5432"  # PostgreSQL port
     networks:
       - default
     restart: always
