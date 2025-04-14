@@ -14,92 +14,40 @@ services:
       - /app/node_modules
       - /app/dist
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - DATABASE_URL=${DATABASE_URL}
       - CLIENT_PORT=${CLIENT_PORT}
       - SERVER_PORT=${SERVER_PORT}
-      - DOMAIN=${DOMAIN} # Pass domain to container if needed later
-      - API_DOMAIN=${API_DOMAIN} # Pass API domain
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL} # Pass API base URL for client
+      - DOMAIN=${DOMAIN}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     ports:
-      - "${CLIENT_PORT}:${CLIENT_PORT}"  # Client port
-      # - "${SERVER_PORT}:${SERVER_PORT}" # API port - Removed, Traefik handles this
+      - "${CLIENT_PORT}:${CLIENT_PORT}"
+      - "${SERVER_PORT}:${SERVER_PORT}"
     networks:
       - proxy
       - default
     restart: always
     labels:
-      - traefik.enable=true
+      # Enable Traefik
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       
-      # --- Client Routers (Handles UI on root path) ---
-      - traefik.http.routers.devsoulmap-nossl.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.devsoulmap-nossl.entrypoints=http
-      - traefik.http.routers.devsoulmap-nossl.service=devsoulmap-client-svc # Use client service
+      # Single service for the domain - all requests to the client
+      - "traefik.http.services.devsoulmap.loadbalancer.server.port=${CLIENT_PORT}"
       
-      - traefik.http.routers.devsoulmap-ssl.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.devsoulmap-ssl.entrypoints=https
-      - traefik.http.routers.devsoulmap-ssl.tls=true
-      - traefik.http.routers.devsoulmap-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.devsoulmap-ssl.service=devsoulmap-client-svc # Use client service
-
-      # --- Client Service (Points to Vite/Client Port) ---
-      - traefik.http.services.devsoulmap-client-svc.loadbalancer.server.port=${CLIENT_PORT}
-
-      # --- API Routers (Handles API subdomain) ---
-      # Use API_DOMAIN, remove PathPrefix and middleware
-      - traefik.http.routers.devsoulmap-api-nossl.rule=Host(`${API_DOMAIN}`) 
-      - traefik.http.routers.devsoulmap-api-nossl.entrypoints=http
-      - traefik.http.routers.devsoulmap-api-nossl.service=devsoulmap-api-svc # Use API service
-      # - traefik.http.routers.devsoulmap-api-nossl.middlewares=strip-api-prefix # Removed
-
-      # Use API_DOMAIN, remove PathPrefix and middleware
-      - traefik.http.routers.devsoulmap-api-ssl.rule=Host(`${API_DOMAIN}`) 
-      - traefik.http.routers.devsoulmap-api-ssl.entrypoints=https
-      - traefik.http.routers.devsoulmap-api-ssl.tls=true
-      - traefik.http.routers.devsoulmap-api-ssl.tls.certresolver=letsencrypt
-      - traefik.http.routers.devsoulmap-api-ssl.service=devsoulmap-api-svc # Use API service
-      # - traefik.http.routers.devsoulmap-api-ssl.middlewares=strip-api-prefix # Removed
-
-      # --- API Service (Points to Backend/Server Port) ---
-      - traefik.http.services.devsoulmap-api-svc.loadbalancer.server.port=${SERVER_PORT}
-
-      # --- Middleware (Strips /api prefix) ---
-      # This middleware is no longer needed for the API service
-      # - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
-
+      # Frontend for both HTTP and HTTPS
+      - "traefik.http.routers.devsoulmap.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.devsoulmap.entrypoints=http,https"
+      - "traefik.http.routers.devsoulmap.tls=true"
+      - "traefik.http.routers.devsoulmap.tls.certresolver=letsencrypt"
+      
+      # Fix for websocket connections
+      - "traefik.http.middlewares.websocket.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.websocket.headers.customrequestheaders.X-Forwarded-Host=${DOMAIN}"
+      - "traefik.http.routers.devsoulmap.middlewares=websocket"
     depends_on:
       devsm-pg:
         condition: service_healthy
-  
-  #devsoulmapbot:
-  #  build:
-  #    context: ./discord_bot/
-  #    dockerfile: Dockerfile
-  #  command: npm run dev
-  #  container_name: soulmapbot
-  #  environment:
-  #    - DISCORD_TOKEN=${discord_bot_token}
-  #    - CHANNEL_ID=${discord_channel_id}
-  #    - ADMIN_ROLE_ID=${discord_admin_role_id}
-  #    - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
-  #    - DATABASE_URL=${DATABASE_URL}
-  #    - GEMINI_API_KEY=${GEMINI_API_KEY}
-  #  volumes:
-  #    - ./discord_bot/handlers:/app/handlers
-  #    - ./discord_bot/modules:/app/modules
-  #    - ./discord_bot/classes:/app/classes
-#
-  #    - ./discord_bot/index.js:/app/index.js
-  #    - ./discord_bot/database.js:/app/database.js
-  #    - ./discord_bot/schema.prisma:/app/schema.prisma
-  #    - ./discord_bot/package.json:/app/package.json
-  #    - ./src/mapversion.yml:/app/src/mapversion.yml
-  #  restart: always
-  #  networks:
-  #    - default
-  #  depends_on:
-  #    sm-pg:
-  #      condition: service_healthy
   
   devsm-pg:
     image: postgres:latest
@@ -116,7 +64,7 @@ services:
       - default
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]  # Use POSTGRES_USER instead of hardcoded "postgres"
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -1,165 +1,150 @@
-// vite.config.ts
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'path';
 import yaml from '@rollup/plugin-yaml';
 import glob from 'vite-plugin-glob';
-import fs from 'fs';
 import path from 'path';
 
-// Read ports from environment variables, providing defaults
-const clientPort = parseInt(process.env.CLIENT_PORT || '5173');
-
-export default defineConfig({
-  root: path.resolve(__dirname, 'src'),  // Set root to src directory
-  publicDir: '../res', // Set public directory relative to root
-  build: {
-    outDir: '../dist',  // Output to dist directory in project root
-    emptyOutDir: true,
-    copyPublicDir: true,
-    rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'src/index.html')
-      }
-    }
-  },
-  plugins: [
-    yaml({
-      include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
-    }),
-    glob(),
-    {
-      // Add this plugin to handle icon caching
-      name: 'svg-cache-control',
-      configureServer(server) {
-        // Add cache headers for SVG files
-        server.middlewares.use((req, res, next) => {
-          if (req.url?.endsWith('.svg')) {
-            // Set cache headers for SVG files - 1 week cache
-            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-          }
-          next();
-        });
+export default defineConfig(({ mode }) => {
+  // Load env variables
+  const env = loadEnv(mode, process.cwd(), '');
+  
+  // Get environment variables with fallbacks
+  const clientPort = parseInt(env.CLIENT_PORT || '15174');
+  const serverPort = parseInt(env.SERVER_PORT || '3000');
+  const domain = env.DOMAIN || 'dev.soulmap.7thseraph.org';
+  
+  console.log('Environment configuration:');
+  console.log(`- Domain: ${domain}`);
+  console.log(`- Client Port: ${clientPort}`);
+  console.log(`- Server Port: ${serverPort}`);
+  console.log(`- API Base URL: ${env.VITE_API_BASE_URL || '/api'}`);
+  
+  // Determine if we're in a secure context
+  const isSecure = domain.startsWith('https://') || 
+                  (!domain.startsWith('http://') && !domain.includes('localhost'));
+  
+  return {
+    root: path.resolve(__dirname, 'src'),
+    publicDir: '../res',
+    build: {
+      outDir: '../dist',  // Output to dist directory in project root
+      emptyOutDir: true,
+      copyPublicDir: true,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'src/index.html')
+        }
       }
     },
-    {
-      // Development server middleware to provide file metadata through API
-      name: 'file-metadata-middleware',
-      configureServer(server) {
-        server.middlewares.use('/api/file-metadata', (req, res) => {
-          const baseDir = process.cwd();
-          const locationsDir = path.join(baseDir, 'src/locations');
-          const metadata = {};
-          
-          function scanDir(dir) {
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
+    plugins: [
+      yaml({
+        include: ['**/*.yml', '**/*.yaml', 'mapversion.yml']
+      }),
+      glob(),
+      {
+        // Development server middleware for debugging - critical for troubleshooting
+        name: 'debug-middleware',
+        configureServer(server) {
+          // Add middleware that logs requests for troubleshooting
+          server.middlewares.use((req, res, next) => {
+            console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+            next();
+          });
+        }
+      },
+      {
+        // Improved cache control handling
+        name: 'svg-cache-control',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            // Set cache headers for static assets
+            if (req.url?.endsWith('.svg') || req.url?.endsWith('.png')) {
+              res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+            }
+            next();
+          });
+        }
+      }
+    ],
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src')
+      }
+    },
+    server: {
+      fs: {
+        allow: ['..']
+      },
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'X-Requested-With, Content-Type, Authorization'
+      },
+      // Simplified proxy configuration using server port from env
+      proxy: {
+        '/api': {
+          target: `http://localhost:${serverPort}`,
+          changeOrigin: true,
+          // Don't rewrite paths - server expects /api prefix now
+          rewrite: (path) => path,
+          configure: (proxy) => {
+            // Increase timeouts
+            proxy.options.timeout = 120000; // 2 minutes
+            proxy.options.proxyTimeout = 120000; // 2 minutes
             
-            entries.forEach(entry => {
-              const fullPath = path.join(dir, entry.name);
-              
-              if (entry.isDirectory()) {
-                scanDir(fullPath);
-              } else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) {
-                const stats = fs.statSync(fullPath);
-                const relativePath = path.relative(baseDir, fullPath)
-                  .replace(/\\/g, '/');
-                
-                metadata[relativePath] = {
-                  path: relativePath,
-                  lastModified: stats.mtimeMs
-                };
+            // Add debug logging for proxy requests
+            proxy.on('proxyReq', (proxyReq, req) => {
+              console.log(`Proxying request: ${req.method} ${req.url} -> ${proxyReq.path}`);
+            });
+            
+            proxy.on('error', (err, req, res) => {
+              console.error('Proxy error:', err);
+              if (!res.headersSent) {
+                res.writeHead(502, {
+                  'Content-Type': 'application/json'
+                });
+                res.end(JSON.stringify({
+                  error: 'Proxy error',
+                  message: err.message
+                }));
               }
             });
           }
-          
-          try {
-            scanDir(locationsDir);
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(metadata));
-          } catch (error) {
-            console.error('Error generating metadata:', error);
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: 'Failed to generate metadata' }));
-          }
-        });
-      }
-    },
-    {
-      // Build plugin to generate static metadata file for production
-      name: 'metadata-generator',
-      apply: 'build',
-      generateBundle() {
-        const baseDir = process.cwd();
-        const outputDir = path.resolve(baseDir, '../dist');
-        const locationsDir = path.join(baseDir, 'locations');
-        const metadata = {};
-        
-        function scanDir(dir) {
-          if (!fs.existsSync(dir)) return;
-          
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          
-          entries.forEach(entry => {
-            const fullPath = path.join(dir, entry.name);
-            
-            if (entry.isDirectory()) {
-              scanDir(fullPath);
-            } else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) {
-              const stats = fs.statSync(fullPath);
-              const relativePath = path.relative(baseDir, fullPath)
-                .replace(/\\/g, '/');
-              
-              metadata[relativePath] = {
-                path: relativePath,
-                lastModified: stats.mtimeMs
-              };
-            }
-          });
         }
-        
-        try {
-          scanDir(locationsDir);
-          
-          // Ensure output directory exists
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-          }
-          
-          // Write metadata to JSON file in output directory
-          fs.writeFileSync(
-            path.join(outputDir, 'file-metadata.json'), 
-            JSON.stringify(metadata, null, 2)
-          );
-          
-          console.log('Generated file-metadata.json for production');
-        } catch (error) {
-          console.error('Error generating metadata file:', error);
-        }
-      }
-    }
-  ],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src')
-    }
-  },
-  server: {
-    fs: {
-      allow: ['..']  // Allow access to parent directory
-    },
-    // Add headers for static assets
-    headers: {
-      // Set cache-control headers for all static assets
-      '*.svg': {
-        'Cache-Control': 'public, max-age=604800, immutable' // 1 week
       },
-      '*.png': {
-        'Cache-Control': 'public, max-age=604800, immutable' // 1 week
+      host: '0.0.0.0',
+      port: clientPort,
+      strictPort: true,
+      hmr: {
+        // Fix WebSocket connection issues
+        host: domain.replace(/^https?:\/\//, ''), // Strip protocol if present
+        clientPort: isSecure ? 443 : clientPort, // Use 443 for secure connections
+        protocol: isSecure ? 'wss' : 'ws', // Use secure WebSockets if domain uses HTTPS
+        timeout: 120000,
+        path: '/ws',
+        
+        // Add a custom function to handle WebSocket connection options
+        webSocketServer: {
+          options: {
+            // Prevent automatic upgrade to wss when behind HTTPS proxy
+            secure: false,
+            // Don't verify client cert
+            rejectUnauthorized: false
+          }
+        }
+      },
+      // Add allowed hosts explicitly using domain from env
+      allowedHosts: [
+        domain,
+        env.API_DOMAIN || 'devapi.soulmap.7thseraph.org',
+        'localhost',
+        '127.0.0.1'
+      ],
+      watch: {
+        usePolling: true,
+        interval: 1000
       }
     },
-    // Allow requests from the specified host when running behind a reverse proxy
-    host: '0.0.0.0', // Listen on all network interfaces
-    port: clientPort, // Use CLIENT_PORT from env
-    allowedHosts: ['dev.soulmap.7thseraph.org']
-  },
-  assetsInclude: ['**/*.png', '**/*.svg']
+    assetsInclude: ['**/*.png', '**/*.svg']
+  };
 });

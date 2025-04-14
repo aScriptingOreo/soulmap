@@ -5,11 +5,11 @@ import { generateContentHash, getStoredHash, setStoredHash } from './services/ha
 
 const LOCATIONS_CACHE_KEY = 'soulmap_locations_cache';
 const METADATA_CACHE_KEY = 'soulmap_metadata_cache';
+const MARKER_HASHES_KEY = 'soulmap_marker_hashes';
 
-// Use the environment variable provided by Vite for the API base URL
-// Fallback to relative /api if the variable is not set (e.g., during build or local dev without env)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'; 
-console.log(`Using API Base URL: ${API_BASE_URL}`); // Add log for debugging
+// Ensure API_BASE_URL is consistent
+const API_BASE_URL = '/api';
+console.log('Using simplified API path: /api (proxied locally)');
 
 // Initialize localforage instance for locations
 const locationStore = localforage.createInstance({
@@ -62,7 +62,27 @@ export async function setupDatabaseChangeListener(refreshCallback: () => Promise
     
     try {
       console.log(`Connecting to SSE endpoint: ${API_BASE_URL}/listen`);
-      eventSource = new EventSource(`${API_BASE_URL}/listen`);
+      
+      // Check if EventSource is available (might not be in some environments)
+      if (typeof EventSource === 'undefined') {
+        console.warn('EventSource API not available, falling back to periodic refresh');
+        setupPeriodicRefresh();
+        return;
+      }
+      
+      // Add a random parameter to avoid caching
+      const sseUrl = `${API_BASE_URL}/listen?_=${Date.now()}`;
+      
+      // Create simple EventSource - no extra options needed with local proxying
+      try {
+        eventSource = new EventSource(sseUrl);
+        console.log(`EventSource created for URL: ${sseUrl}`);
+      } catch (e) {
+        console.error('Error creating EventSource:', e);
+        console.error('Stack:', e.stack);
+        setupPeriodicRefresh();
+        return;
+      }
       
       eventSource.onopen = () => {
         console.log('SSE connection established');
@@ -199,44 +219,54 @@ export async function setupDatabaseChangeListener(refreshCallback: () => Promise
           setTimeout(connect, delay);
         } else {
           console.warn('Maximum reconnection attempts reached. Falling back to periodic refresh.');
-          
-          // Set up a fallback refresh interval
-          setInterval(async () => {
-            if (!refreshInProgress) {
-              try {
-                console.log('Performing fallback refresh check');
-                const newHash = await generateDatabaseHash();
-                const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
-                
-                if (cachedData && cachedData.hash !== newHash) {
-                  console.log('Change detected during fallback refresh');
-                  refreshInProgress = true;
-                  
-                  try {
-                    lastRefreshTime = Date.now();
-                    
-                    // Load fresh locations directly
-                    const freshLocations = await fetchLocationsFromAPI();
-                    if (freshLocations && freshLocations.length > 0) {
-                      await updateLocationCache(freshLocations);
-                      broadcastLocationsUpdate(freshLocations);
-                    }
-                    
-                    await refreshCallback();
-                  } finally {
-                    refreshInProgress = false;
-                  }
-                }
-              } catch (error) {
-                console.error('Error in fallback refresh:', error);
-              }
-            }
-          }, 30000); // Check every 30 seconds
+          setupPeriodicRefresh();
         }
       };
     } catch (error) {
       console.error('Failed to set up database change listener:', error);
+      setupPeriodicRefresh();
     }
+  }
+  
+  // Fallback to periodic refresh when SSE fails
+  function setupPeriodicRefresh() {
+    console.log('Setting up periodic refresh fallback');
+    
+    // Set up a fallback refresh interval
+    const refreshInterval = setInterval(async () => {
+      if (!refreshInProgress) {
+        try {
+          console.log('Performing fallback refresh check');
+          const newHash = await generateDatabaseHash();
+          const cachedData = await locationStore.getItem<{ hash: string }>(LOCATIONS_CACHE_KEY);
+          
+          if (cachedData && cachedData.hash !== newHash) {
+            console.log('Change detected during fallback refresh');
+            refreshInProgress = true;
+            
+            try {
+              lastRefreshTime = Date.now();
+              
+              // Load fresh locations directly
+              const freshLocations = await fetchLocationsFromAPI();
+              if (freshLocations && freshLocations.length > 0) {
+                await updateLocationCache(freshLocations);
+                broadcastLocationsUpdate(freshLocations);
+              }
+              
+              await refreshCallback();
+            } finally {
+              refreshInProgress = false;
+            }
+          }
+        } catch (error) {
+          console.error('Error in fallback refresh:', error);
+        }
+      }
+    }, 30000); // Check every 30 seconds
+    
+    // Return cleanup function for the interval
+    return () => clearInterval(refreshInterval);
   }
   
   // Start the initial connection
@@ -276,11 +306,232 @@ async function fetchLocationsFromAPI(): Promise<(Location & { type: string })[] 
     const normalizedLocations = locations.filter((loc: any) => !!loc)
       .map((loc: any) => normalizeLocationCoordinates(loc));
     
+    // Store individual marker hashes when we fetch fresh data
+    storeMarkerHashes(normalizedLocations);
+    
     return normalizedLocations;
   } catch (error) {
     console.error("Error fetching locations from API:", error);
     return null;
   }
+}
+
+// New function to store individual marker hashes
+async function storeMarkerHashes(locations: (Location & { type: string })[]): Promise<void> {
+  try {
+    // Create a hash map of location ID -> hash
+    const markerHashes: Record<string, string> = {};
+    
+    locations.forEach(location => {
+      // Generate a simple hash from the stringified location data
+      // This could be replaced with a more sophisticated hashing if needed
+      const locationData = JSON.stringify({
+        name: location.name,
+        coordinates: location.coordinates,
+        type: location.type,
+        description: location.description,
+        icon: location.icon,
+        lastModified: location.lastModified
+      });
+      
+      // Use a basic hash function (or import a proper hashing library)
+      const hash = stringToHash(locationData);
+      markerHashes[location.name] = hash.toString();
+    });
+    
+    // Store in localForage
+    await locationStore.setItem(MARKER_HASHES_KEY, markerHashes);
+    console.log(`Stored hashes for ${Object.keys(markerHashes).length} markers`);
+  } catch (error) {
+    console.error('Error storing marker hashes:', error);
+  }
+}
+
+// Simple string hash function
+function stringToHash(str: string): number {
+  let hash = 0;
+  if (str.length === 0) return hash;
+  
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  return Math.abs(hash);
+}
+
+// Modified function to check for marker changes on load
+export async function loadLocations(isOfflineMode = false): Promise<(Location & { type: string })[]> {
+  try {
+    await locationStore.ready(); // Ensure store is ready
+
+    // Get cached data first - we'll need this regardless of online/offline status
+    const cachedData = await locationStore.getItem<{
+      hash: string, 
+      data: (Location & { type: string })[]
+    }>(LOCATIONS_CACHE_KEY);
+    
+    // Get previously stored marker hashes
+    const cachedMarkerHashes = await locationStore.getItem<Record<string, string>>(MARKER_HASHES_KEY) || {};
+    
+    // If we're in offline mode and have cached data, use it right away
+    if (isOfflineMode && cachedData) {
+      console.log('Using cached locations data in offline mode');
+      return cachedData.data;
+    } 
+    // If offline with no cached data, return empty array (can't proceed)
+    else if (isOfflineMode && !cachedData) {
+      console.error('No cached data available for offline mode');
+      return [];
+    }
+    
+    // If we're online, proceed with normal flow
+    const contentHash = await generateContentHash();
+    const storedHash = getStoredHash();
+
+    // If content hash matches and we're not doing a hard refresh, use cached data
+    const isHardRefresh = performance.getEntriesByType('navigation')
+      .some((nav: any) => nav.type === 'reload' && nav.loadType === 'hard');
+      
+    if (cachedData && cachedData.hash === contentHash && !isHardRefresh) {
+      console.log('Using cached locations data (hashes match and not a hard refresh)');
+      return cachedData.data;
+    }
+
+    // If we get here, we need to load fresh data from the API
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const progressBar = document.querySelector('.loading-progress') as HTMLElement;
+    const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
+    const loadingText = document.querySelector('.loading-text') as HTMLElement;
+
+    // Show loading overlay first
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'flex';
+    }
+
+    const updateProgress = (progress: number, text: string) => {
+      console.log(`Loading progress: ${progress}%, ${text}`); 
+      if (progressBar && percentageText && loadingText) {
+        progressBar.style.width = `${progress}%`;
+        percentageText.textContent = `${Math.round(progress)}%`;
+        loadingText.textContent = text;
+      }
+    };
+
+    updateProgress(0, 'Loading location data...');
+
+    try {
+      console.log(`Fetching locations from API: ${API_BASE_URL}/locations`);
+      // Load locations from API instead of direct DB access
+      const response = await fetch(`${API_BASE_URL}/locations`);
+      
+      if (!response.ok) {
+        console.error(`API request failed with status: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`API error details: ${errorText}`);
+        throw new Error(`Failed to fetch locations: ${response.statusText}`);
+      }
+      
+      const locations = await response.json();
+      
+      console.log(`Received ${locations.length} locations from API`);
+      if (locations.length === 0) {
+        console.warn('API returned 0 locations - this may indicate a server-side issue');
+      }
+      
+      updateProgress(50, 'Processing location data...');
+      const validLocations = locations.filter((loc: any) => !!loc);
+
+      // Normalize the location data before returning
+      const normalizedLocations = validLocations.map((loc: any) => normalizeLocationCoordinates(loc));
+
+      // Get new hashes and compare with cached hashes to detect changes
+      let changesDetected = false;
+      const newMarkerHashes: Record<string, string> = {};
+      
+      normalizedLocations.forEach(location => {
+        const locationData = JSON.stringify({
+          name: location.name,
+          coordinates: location.coordinates,
+          type: location.type,
+          description: location.description,
+          icon: location.icon,
+          lastModified: location.lastModified
+        });
+        
+        const newHash = stringToHash(locationData).toString();
+        newMarkerHashes[location.name] = newHash;
+        
+        // Check if this marker has changed
+        if (cachedMarkerHashes[location.name] !== newHash) {
+          changesDetected = true;
+          console.log(`Detected change in marker: ${location.name}`);
+        }
+      });
+      
+      // If changes were detected or this is a hard refresh, show a notification
+      if (changesDetected || isHardRefresh) {
+        showDatabaseUpdateNotification(changesDetected ? 'Marker data updated' : 'Map refreshed');
+      }
+      
+      // Store the new marker hashes
+      await locationStore.setItem(MARKER_HASHES_KEY, newMarkerHashes);
+
+      // Cache the new data with hash
+      await locationStore.setItem(LOCATIONS_CACHE_KEY, {
+        hash: contentHash,
+        data: normalizedLocations
+      });
+
+      // Store the new hash
+      setStoredHash(contentHash);
+
+      updateProgress(100, 'Location data loaded!');
+      
+      // Hide loading overlay when done
+      if (loadingOverlay) {
+        setTimeout(() => {
+          loadingOverlay.style.display = 'none';
+        }, 500); // Short delay for smooth transition
+      }
+
+      return normalizedLocations;
+    } catch (apiError) {
+      console.error("Error loading locations from API:", apiError);
+      
+      // If we have cached data, use it as fallback
+      if (cachedData) {
+        console.log('API request failed, using cached data as fallback');
+        return cachedData.data;
+      }
+      
+      throw apiError;
+    }
+  } catch (error) {
+    console.error("Error loading location files:", error);
+    throw error; // Let the error propagate to show in the UI
+  }
+}
+
+// Modified function to include custom message
+function showDatabaseUpdateNotification(message: string = 'Map data updated') {
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.className = 'database-update-notification low-priority';
+  notification.textContent = message;
+  notification.style.cssText = 'opacity: 0.7; font-size: 0.8em; padding: 5px 10px;';
+  
+  // Add to document
+  document.body.appendChild(notification);
+  
+  // Remove after a short delay
+  setTimeout(() => {
+    notification.classList.add('fade-out');
+    setTimeout(() => {
+      notification.remove();
+    }, 500);
+  }, 2000);
 }
 
 // Function to update the locations cache
@@ -296,26 +547,6 @@ async function updateLocationCache(locations: (Location & { type: string })[]): 
   } catch (error) {
     console.error('Error updating location cache:', error);
   }
-}
-
-// Show a notification when database updates are detected
-function showDatabaseUpdateNotification() {
-  // Create notification element - MAKE THIS LESS VISIBLE
-  const notification = document.createElement('div');
-  notification.className = 'database-update-notification low-priority';
-  notification.textContent = 'Map data updated';
-  notification.style.cssText = 'opacity: 0.7; font-size: 0.8em; padding: 5px 10px;';
-  
-  // Add to document
-  document.body.appendChild(notification);
-  
-  // Remove after a short delay
-  setTimeout(() => {
-    notification.classList.add('fade-out');
-    setTimeout(() => {
-      notification.remove();
-    }, 500);
-  }, 2000); // Show for just 2 seconds instead of 3
 }
 
 // Generate a checksum of the current database state
@@ -385,124 +616,11 @@ async function loadDatabaseMetadata(): Promise<Record<string, { lastModified: nu
   }
 }
 
-export async function loadLocations(isOfflineMode = false): Promise<(Location & { type: string })[]> {
-  try {
-    await locationStore.ready(); // Ensure store is ready
-
-    // Get cached data first - we'll need this regardless of online/offline status
-    const cachedData = await locationStore.getItem<{
-      hash: string, 
-      data: (Location & { type: string })[]
-    }>(LOCATIONS_CACHE_KEY);
-    
-    // If we're in offline mode and have cached data, use it right away
-    if (isOfflineMode && cachedData) {
-      console.log('Using cached locations data in offline mode');
-      return cachedData.data;
-    } 
-    // If offline with no cached data, return empty array (can't proceed)
-    else if (isOfflineMode && !cachedData) {
-      console.error('No cached data available for offline mode');
-      return [];
-    }
-    
-    // If we're online, proceed with normal flow
-    const contentHash = await generateContentHash();
-    const storedHash = getStoredHash();
-
-    // Use cached data if hashes match and we're online
-    if (cachedData && cachedData.hash === contentHash) {
-      console.log('Using cached locations data (hashes match)');
-      return cachedData.data;
-    }
-
-    // If we get here, we need to load fresh data from the API
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const progressBar = document.querySelector('.loading-progress') as HTMLElement;
-    const percentageText = document.querySelector('.loading-percentage') as HTMLElement;
-    const loadingText = document.querySelector('.loading-text') as HTMLElement;
-
-    // Show loading overlay first
-    if (loadingOverlay) {
-      loadingOverlay.style.display = 'flex';
-    }
-
-    const updateProgress = (progress: number, text: string) => {
-      console.log(`Loading progress: ${progress}%, ${text}`); 
-      if (progressBar && percentageText && loadingText) {
-        progressBar.style.width = `${progress}%`;
-        percentageText.textContent = `${Math.round(progress)}%`;
-        loadingText.textContent = text;
-      }
-    };
-
-    updateProgress(0, 'Loading location data...');
-
-    try {
-      console.log(`Fetching locations from API: ${API_BASE_URL}/locations`);
-      // Load locations from API instead of direct DB access
-      const response = await fetch(`${API_BASE_URL}/locations`);
-      
-      if (!response.ok) {
-        console.error(`API request failed with status: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`API error details: ${errorText}`);
-        throw new Error(`Failed to fetch locations: ${response.statusText}`);
-      }
-      
-      const locations = await response.json();
-      
-      console.log(`Received ${locations.length} locations from API`);
-      if (locations.length === 0) {
-        console.warn('API returned 0 locations - this may indicate a server-side issue');
-      }
-      
-      updateProgress(50, 'Processing location data...');
-      const validLocations = locations.filter((loc: any) => !!loc);
-
-      // Normalize the location data before returning
-      const normalizedLocations = validLocations.map((loc: any) => normalizeLocationCoordinates(loc));
-
-      // Cache the new data with hash
-      await locationStore.setItem(LOCATIONS_CACHE_KEY, {
-        hash: contentHash,
-        data: normalizedLocations
-      });
-
-      // Store the new hash
-      setStoredHash(contentHash);
-
-      updateProgress(100, 'Location data loaded!');
-      
-      // Hide loading overlay when done
-      if (loadingOverlay) {
-        setTimeout(() => {
-          loadingOverlay.style.display = 'none';
-        }, 500); // Short delay for smooth transition
-      }
-
-      return normalizedLocations;
-    } catch (apiError) {
-      console.error("Error loading locations from API:", apiError);
-      
-      // If we have cached data, use it as fallback
-      if (cachedData) {
-        console.log('API request failed, using cached data as fallback');
-        return cachedData.data;
-      }
-      
-      throw apiError;
-    }
-  } catch (error) {
-    console.error("Error loading location files:", error);
-    throw error; // Let the error propagate to show in the UI
-  }
-}
-
 export async function clearLocationsCache(): Promise<void> {
   try {
     await locationStore.removeItem(LOCATIONS_CACHE_KEY);
     await locationStore.removeItem(METADATA_CACHE_KEY);
+    await locationStore.removeItem(MARKER_HASHES_KEY); // Also clear marker hashes
   } catch (error) {
     console.error('Error clearing locations cache:', error);
   }

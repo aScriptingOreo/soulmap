@@ -2934,3 +2934,77 @@ background: rgba(255, 255, 255, 0.2);
   0% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* Database update notification */
+.database-update-notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  font-size: 14px;
+  text-align: center;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.database-update-notification.low-priority {
+  background: rgba(75, 85, 99, 0.8);
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.database-update-notification.fade-out {
+  opacity: 0;
+}
+
+/* Fatal error message */
+.fatal-error {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(220, 38, 38, 0.95);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+}
+
+.fatal-error h2 {
+  margin-top: 0;
+}
+
+.fatal-error pre {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  border-radius: 4px;
+  overflow: auto;
+  margin: 10px 0;
+  text-align: left;
+  font-size: 12px;
+}
+
+.fatal-error button {
+  background: white;
+  color: rgb(220, 38, 38);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.fatal-error button:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
