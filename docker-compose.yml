@@ -35,12 +35,51 @@ services:
       # Single service for the Vite dev server
       - "traefik.http.services.soulmap.loadbalancer.server.port=${CLIENT_PORT}"
       
-      # Simple HTTP router - no SSL, no redirects
+      # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
       - "traefik.http.routers.soulmap.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.soulmap.entrypoints=http"
+      - "traefik.http.routers.soulmap.service=soulmap" # Explicitly link router to service
     depends_on:
       sm-pg:
         condition: service_healthy
+
+  soulmap-admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: soulmap-admin
+    environment:
+      - NODE_ENV=development
+      - VITE_ADMIN_API_TOKEN=${ADMIN_API_TOKEN:-dev-token}
+      - API_URL=http://soulmap:${SERVER_PORT:-3000}
+      - VITE_DISCORD_CLIENT_ID=${discord_bot_id}
+      - VITE_SERVER_ID=1309555440102674513
+      - VITE_ADMIN_ROLE_ID=1309700533749289012
+      - VITE_MANAGER_ROLE_ID=1363588579506262056
+      - DOMAIN=${DOMAIN}  # Pass the DOMAIN variable from .env
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    networks:
+      - proxy
+      - default
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+
+      # Service definition for admin panel (Vite dev server)
+      - "traefik.http.services.soulmap-admin.loadbalancer.server.port=5173"
+
+      # Router for the admin panel at /admin path
+      - "traefik.http.routers.soulmap-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.soulmap-admin.entrypoints=http"
+      - "traefik.http.routers.soulmap-admin.service=soulmap-admin"
+      
+      # Remove the strip prefix middleware - Let Vite handle the base path
+      # - "traefik.http.middlewares.admin-strip.stripprefix.prefixes=/admin"
+      # - "traefik.http.middlewares.admin-strip.stripprefix.forceSlash=false"
+      # - "traefik.http.routers.soulmap-admin.middlewares=admin-strip"
   
   soulmapbot:
     build:
