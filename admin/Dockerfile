@@ -9,9 +9,6 @@ RUN npm install
 # Copy app source
 COPY . .
 
-# Make the reset script executable
-RUN chmod +x reset-config.sh
-
 # Expose Vite's default port
 EXPOSE 5173
 

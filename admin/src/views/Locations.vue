@@ -15,7 +15,7 @@
       
       <select v-model="categoryFilter" class="category-filter">
         <option value="">All Categories</option>
-        <option v-for="(label, value) in categories" :key="value" :value="value">{{ label }}</option>
+        <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
       </select>
       
       <div class="sort-options">
@@ -47,6 +47,7 @@
       <table>
         <thead>
           <tr>
+            <th>Icon</th>
             <th @click="updateSort('name')">
               Name
               <span v-if="sortOption === 'name_asc'" class="sort-indicator">▲</span>
@@ -58,16 +59,34 @@
               <span v-if="sortOption === 'category_desc'" class="sort-indicator">▼</span>
             </th>
             <th>Coordinates</th>
-            <th>Tags</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="location in filteredLocations" :key="location.id">
+            <td class="icon-cell">
+              <!-- Font Awesome icon -->
+              <i 
+                v-if="location.icon && (location.icon.startsWith('fa-') || location.icon.startsWith('fas ') || location.icon.startsWith('far '))" 
+                :class="location.icon" 
+                :style="{ color: location.iconColor || '#ffffff' }"
+                class="location-icon fa-icon"
+              ></i>
+              <!-- SVG icon from server -->
+              <img 
+                v-else-if="location.icon && location.icon.startsWith('/')" 
+                :src="getSvgIconUrl(location.icon)"
+                :alt="location.name"
+                class="location-icon svg-icon"
+                @error="onIconLoadError"
+              >
+              <!-- No icon available -->
+              <span v-else class="no-icon">•</span>
+            </td>
             <td class="name-cell">{{ location.name }}</td>
             <td class="category-cell">
               <span class="category-badge" :style="getCategoryStyle(location.type)">
-                {{ getCategoryLabel(location.type) }}
+                {{ location.type }}
               </span>
             </td>
             <td class="coords-cell">
@@ -81,13 +100,6 @@
                 <div v-for="(coord, index) in getFormattedCoordinates(location.coordinates)" :key="index" class="coord">
                   {{ coord }}
                 </div>
-              </div>
-            </td>
-            <td class="tags-cell">
-              <div class="tags-list">
-                <span v-for="(tag, index) in extractTagsFromDescription(location.description)" :key="index" class="tag">
-                  {{ tag }}
-                </span>
               </div>
             </td>
             <td class="actions-cell">
@@ -133,8 +145,8 @@ import api from '../services/api';
 import webhook from '../services/webhook';
 
 // State
-const locationsList = ref([]);  // Changed from 'locations' to 'locationsList' to avoid duplicate declaration
-const categories = ref({}); // For filter dropdown display names
+const locationsList = ref([]);
+const categories = ref([]); // Store categories exactly as from API
 const categoryStyles = ref({}); // Stores { type: { backgroundColor, color } }
 const loading = ref(true);
 const error = ref(null);
@@ -169,20 +181,6 @@ const canDelete = computed(() => {
   const ADMIN_ROLE_ID = '1309700533749289012';
   return authStore.user?.roles?.includes(ADMIN_ROLE_ID);
 });
-
-// Extract hashtags from description
-function extractTagsFromDescription(description) {
-  if (!description) return [];
-  
-  const tagRegex = /#(\w+)/g;
-  const matches = description.match(tagRegex);
-  
-  if (matches) {
-    return matches.map(tag => tag.substring(1)); // Remove # prefix
-  }
-  
-  return [];
-}
 
 // Format coordinates for display consistently in [X, Y] format
 function getFormattedCoordinates(coordinates) {
@@ -220,79 +218,33 @@ function getFormattedCoordinates(coordinates) {
   }
 }
 
-// Get category label from type (handle case insensitively)
-function getCategoryLabel(type) {
-  if (!type) return 'Unknown';
+// Get category style based on the type
+function getCategoryStyle(type) {
+  if (!type) return { backgroundColor: '#777', color: 'white' };
   
-  // Convert type to lowercase for case-insensitive matching
-  const typeLower = type.toLowerCase();
-  
-  // Check if the lowercase type exists in our categories
-  if (categories.value[typeLower]) {
-    return categories.value[typeLower];
+  // Return the existing style or generate one if not yet created
+  if (!categoryStyles.value[type]) {
+    // Generate a reproducible color based on the type string
+    const hash = [...type].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const hue = hash % 360;
+    categoryStyles.value[type] = { 
+      backgroundColor: `hsl(${hue}, 65%, 45%)`, 
+      color: 'white' 
+    };
   }
   
-  // If not found, try to capitalize the first letter for display
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  return categoryStyles.value[type];
 }
 
-// Fetch categories from the database and generate styles
+// Fetch categories from the database exactly as they are
 async function fetchCategories() {
   try {
-    const categoryNames = await api.getCategories(); // Expects ['town', 'poi', ...]
-    categoryNames.sort(); // Sort for consistent color assignment
-
-    const styles = {};
-    const displayCategories = {};
-    const totalCategories = categoryNames.length;
-
-    categoryNames.forEach((cat, index) => {
-      const typeLower = cat.toLowerCase();
-
-      // Generate HSL color based on index
-      const hue = Math.round((index / totalCategories) * 360);
-      const backgroundColor = `hsl(${hue}, 65%, 45%)`; // Adjusted saturation/lightness
-      const color = 'white'; // Text color
-
-      styles[typeLower] = { backgroundColor, color };
-
-      // Create display name map for filter dropdown
-      const displayName = typeLower
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-      displayCategories[typeLower] = displayName;
-    });
-
-    categoryStyles.value = styles;
-    categories.value = displayCategories;
-
+    const categoryList = await api.getCategories();
+    categories.value = categoryList; // Store exactly as received
   } catch (error) {
     console.error('Error fetching categories:', error);
-    // Fallback categories and styles
-    categories.value = {
-      town: 'Town', poi: 'Point of Interest', dungeon: 'Dungeon', resource: 'Resource',
-      social: 'Social', boss: 'Boss', quest: 'Quest', vendor: 'Vendor', other: 'Other',
-    };
-    categoryStyles.value = { // Basic fallback styles
-      town: { backgroundColor: '#4caf50', color: 'white' },
-      poi: { backgroundColor: '#2196f3', color: 'white' },
-      dungeon: { backgroundColor: '#9c27b0', color: 'white' },
-      resource: { backgroundColor: '#ff9800', color: 'white' },
-      social: { backgroundColor: '#e91e63', color: 'white' },
-      boss: { backgroundColor: '#f44336', color: 'white' },
-      quest: { backgroundColor: '#673ab7', color: 'white' },
-      vendor: { backgroundColor: '#009688', color: 'white' },
-      other: { backgroundColor: '#607d8b', color: 'white' },
-    };
+    categories.value = [];
   }
-}
-
-// Get the style object for a given category type
-function getCategoryStyle(type) {
-  const typeLower = type?.toLowerCase();
-  // Provide a default style if the type is unknown or not loaded
-  return categoryStyles.value[typeLower] || { backgroundColor: '#777', color: 'white' };
 }
 
 // Filter and sort locations based on search, category, and sort option
@@ -305,18 +257,13 @@ const filteredLocations = computed(() => {
     result = result.filter(loc => 
       loc.name?.toLowerCase().includes(searchLower) || 
       loc.description?.toLowerCase().includes(searchLower) ||
-      extractTagsFromDescription(loc.description).some(tag => 
-        tag.toLowerCase().includes(searchLower)
-      ) ||
-      getCategoryLabel(loc.type).toLowerCase().includes(searchLower)
+      loc.type?.toLowerCase().includes(searchLower)
     );
   }
   
-  // Filter by category (mapping from type)
+  // Filter by category (exact match)
   if (categoryFilter.value) {
-    result = result.filter(loc => 
-      loc.type?.toLowerCase() === categoryFilter.value.toLowerCase()
-    );
+    result = result.filter(loc => loc.type === categoryFilter.value);
   }
   
   // Sort the results
@@ -327,9 +274,9 @@ const filteredLocations = computed(() => {
       case 'name_desc':
         return (b.name || '').localeCompare(a.name || '');
       case 'category_asc':
-        return getCategoryLabel(a.type).localeCompare(getCategoryLabel(b.type));
+        return (a.type || '').localeCompare(b.type || '');
       case 'category_desc':
-        return getCategoryLabel(b.type).localeCompare(getCategoryLabel(a.type));
+        return (b.type || '').localeCompare(a.type || '');
       case 'recent':
         return new Date(b.updatedAt || b.lastModified || 0) - new Date(a.updatedAt || a.lastModified || 0);
       default:
@@ -384,7 +331,7 @@ function openAddModal() {
     id: null,
     name: '',
     description: '',
-    type: 'poi',
+    type: categories.value.length > 0 ? categories.value[0] : 'poi',
     coordinates: [[0, 0]]
   };
   isNewLocation.value = true;
@@ -521,6 +468,21 @@ function showNotification(message, type = 'success') {
   setTimeout(() => {
     notification.value.show = false;
   }, 3000);
+}
+
+// Function to get SVG icon URL
+function getSvgIconUrl(iconPath) {
+  if (!iconPath || !iconPath.startsWith('/')) return '';
+  return `https://soulmap.avakot.org${iconPath}.svg`;
+}
+
+// Handle error when icon fails to load
+function onIconLoadError(event) {
+  console.warn('Failed to load location icon:', event.target.src);
+  event.target.style.display = 'none';
+  event.target.nextElementSibling = document.createElement('span');
+  event.target.nextElementSibling.className = 'no-icon';
+  event.target.nextElementSibling.textContent = '•';
 }
 </script>
 
@@ -718,5 +680,33 @@ th:hover {
 
 .notification.error {
   background-color: #e74c3c;
+}
+
+.icon-cell {
+  width: 40px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.location-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+}
+
+.fa-icon {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.svg-icon {
+  object-fit: contain;
+}
+
+.no-icon {
+  display: inline-block;
+  font-size: 24px;
+  line-height: 24px;
+  color: #ccc;
 }
 </style>

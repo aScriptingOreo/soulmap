@@ -19,7 +19,7 @@ router.get('/categories', async (req, res) => {
       },
     });
     
-    // Extract the type values from the results
+    // Extract the type values from the results WITHOUT modifying them
     const categories = uniqueCategoryObjects.map(item => item.type);
     
     res.json(categories);

@@ -16,7 +16,9 @@ export default defineConfig({
   
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Add alias for local Font Awesome if needed
+      'fontawesome': fileURLToPath(new URL('./src/libs/fontawesome', import.meta.url))
     }
   },
   

@@ -2,6 +2,8 @@
  * API service for the admin panel
  */
 
+import { discoverFontAwesomeIcons } from '../utils/fontAwesomeIcons';
+
 // Use the backend API regardless of environment
 // Docker networking will handle routing through the proxy
 const API_BASE = '/api';
@@ -109,6 +111,28 @@ export async function deleteLocation(id) {
   });
 }
 
+/**
+ * Extract unique icons from locations and include Font Awesome icons
+ */
+export function extractIconsFromLocations() {
+  return getLocations()
+    .then(locations => {
+      const iconSet = new Set();
+      
+      // Get Font Awesome icons
+      discoverFontAwesomeIcons().forEach(icon => iconSet.add(icon));
+      
+      // Add icons from actual locations
+      locations.forEach(location => {
+        if (location.icon) {
+          iconSet.add(location.icon);
+        }
+      });
+      
+      return Array.from(iconSet).sort();
+    });
+}
+
 export default {
   getStats,
   getRequests,
@@ -118,5 +142,6 @@ export default {
   getCategories,
   createLocation,
   updateLocation,
-  deleteLocation
+  deleteLocation,
+  extractIconsFromLocations
 };
