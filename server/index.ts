@@ -3,6 +3,8 @@ import cors from 'cors';
 import { createServer } from 'http';
 import db from './db';
 import fetch from 'node-fetch';
+// Remove the problematic import
+// import adminRoutes from './src/routes/admin.js';
 
 const app = express();
 const server = createServer(app);
@@ -395,6 +397,114 @@ app.post('/api/admin/auth/validate', async (req, res) => {
       valid: false, 
       message: 'Failed to validate authentication' 
     });
+  }
+});
+
+// Add categories endpoint
+app.get('/api/admin/categories', async (req, res) => {
+  try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
+    // Get unique categories (types) from locations
+    const uniqueCategories = await prisma.location.findMany({
+      distinct: ['type'],
+      select: {
+        type: true
+      },
+      orderBy: {
+        type: 'asc'
+      }
+    });
+    
+    // Extract the type values
+    const categories = uniqueCategories.map(item => item.type);
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Get location by ID
+app.get('/api/admin/locations/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
+    const location = await prisma.location.findUnique({
+      where: { id }
+    });
+    
+    if (!location) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    
+    res.json(location);
+  } catch (error) {
+    console.error('Error fetching location:', error);
+    res.status(500).json({ error: 'Failed to fetch location' });
+  }
+});
+
+// Update location by ID
+app.put('/api/admin/locations/:id', async (req, res) => {
+  const { id } = req.params;
+  const { coordinates, ...restData } = req.body;
+  
+  const data = { ...restData };
+  
+  // Handle coordinates if provided
+  if (coordinates && Array.isArray(coordinates)) {
+    data.coordinates = coordinates;
+  }
+  
+  try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
+    const updatedLocation = await prisma.location.update({
+      where: { id },
+      data
+    });
+    
+    res.json(updatedLocation);
+  } catch (error) {
+    console.error('Error updating location:', error.message || error);
+    
+    // Check for Prisma not found error
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Location not found for update' });
+    }
+    
+    res.status(500).json({ error: 'Failed to update location' });
+  }
+});
+
+// Delete location by ID
+app.delete('/api/admin/locations/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
+    await prisma.location.delete({
+      where: { id }
+    });
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting location:', error);
+    res.status(500).json({ error: 'Failed to delete location' });
   }
 });
 

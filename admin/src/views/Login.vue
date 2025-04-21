@@ -1,8 +1,8 @@
 <template>
   <div class="login-container">
     <div class="login-card">
-      <h1>SoulMap Admin</h1>
-      <p class="description">Administrator dashboard for SoulMap location data</p>
+      <h1>Soulmap Admin</h1>
+      <p class="description">Administrator dashboard for Soulmap location data</p>
       
       <div v-if="authStore.isLoading" class="loading">
         <p>Authenticating...</p>
@@ -23,7 +23,7 @@
       </div>
       
       <div class="footer">
-        <p>&copy; {{ new Date().getFullYear() }} SoulMap Team</p>
+        <p>&copy; {{ new Date().getFullYear() }} Soulmap Team</p>
       </div>
     </div>
   </div>
@@ -84,32 +84,37 @@ function retry() {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e2f42, #2c3e50);
+  /* Removed background-color: #2c3e50; */ 
   padding: 20px;
 }
 
 .login-card {
   width: 100%;
-  max-width: 450px;
+  max-width: 450px; 
   background: white;
   border-radius: 8px;
-  padding: 40px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  padding: 40px; 
+  /* Adjusted existing shadow and added a subtle border for better definition */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); 
+  border: 1px solid #eee; /* Optional: Add a light border */
   text-align: center;
 }
 
 h1 {
   margin-bottom: 10px;
   color: #2c3e50;
+  font-size: 2rem; /* Adjusted font size */
+  font-weight: 600; /* Adjusted font weight */
 }
 
 .description {
   color: #7f8c8d;
   margin-bottom: 30px;
+  font-size: 1rem; /* Adjusted font size */
 }
 
 .discord-button {
-  display: flex;
+  display: inline-flex; /* Changed to inline-flex for better centering with auto margin */
   align-items: center;
   justify-content: center;
   background-color: #5865F2;
@@ -120,8 +125,11 @@ h1 {
   font-weight: 600;
   text-decoration: none;
   transition: background-color 0.2s;
-  margin: 20px auto;
-  width: 100%;
+  margin: 30px auto; /* Increased top/bottom margin */
+  width: auto; /* Let the button size itself */
+  min-width: 200px; /* Added min-width */
+  border: none; /* Ensure no border */
+  cursor: pointer; /* Add cursor pointer */
 }
 
 .discord-button:hover {
@@ -136,7 +144,7 @@ h1 {
 
 .footer {
   margin-top: 40px;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* Adjusted font size */
   color: #95a5a6;
 }
 

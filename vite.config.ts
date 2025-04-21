@@ -103,10 +103,10 @@ export default defineConfig({
           });
           
           proxy.on('error', (err, req, res) => {
-            console.error('[API Proxy Error]', err);
+            //console.error('[API Proxy Error]', err);
             if (!res.headersSent) {
               res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));
+              //res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));
             }
           });
         }

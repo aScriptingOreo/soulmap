@@ -66,7 +66,7 @@
           <tr v-for="location in filteredLocations" :key="location.id">
             <td class="name-cell">{{ location.name }}</td>
             <td class="category-cell">
-              <span :class="'category-badge ' + location.type">
+              <span class="category-badge" :style="getCategoryStyle(location.type)">
                 {{ getCategoryLabel(location.type) }}
               </span>
             </td>
@@ -134,7 +134,8 @@ import webhook from '../services/webhook';
 
 // State
 const locationsList = ref([]);  // Changed from 'locations' to 'locationsList' to avoid duplicate declaration
-const categories = ref({});
+const categories = ref({}); // For filter dropdown display names
+const categoryStyles = ref({}); // Stores { type: { backgroundColor, color } }
 const loading = ref(true);
 const error = ref(null);
 const search = ref('');
@@ -235,45 +236,63 @@ function getCategoryLabel(type) {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// Fetch categories from the database
+// Fetch categories from the database and generate styles
 async function fetchCategories() {
   try {
-    const allCategories = await api.getCategories();
-    const categoriesMap = {};
-    
-    // Extract unique categories and create options map
-    allCategories.forEach(cat => {
-      const type = cat.toLowerCase();
-      // Format the display name (capitalize first letter of each word)
-      const displayName = type
+    const categoryNames = await api.getCategories(); // Expects ['town', 'poi', ...]
+    categoryNames.sort(); // Sort for consistent color assignment
+
+    const styles = {};
+    const displayCategories = {};
+    const totalCategories = categoryNames.length;
+
+    categoryNames.forEach((cat, index) => {
+      const typeLower = cat.toLowerCase();
+
+      // Generate HSL color based on index
+      const hue = Math.round((index / totalCategories) * 360);
+      const backgroundColor = `hsl(${hue}, 65%, 45%)`; // Adjusted saturation/lightness
+      const color = 'white'; // Text color
+
+      styles[typeLower] = { backgroundColor, color };
+
+      // Create display name map for filter dropdown
+      const displayName = typeLower
         .split('_')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
-      
-      categoriesMap[type] = displayName;
+      displayCategories[typeLower] = displayName;
     });
-    
-    // Add "other" as a fallback category if not already present
-    if (!categoriesMap['other']) {
-      categoriesMap['other'] = 'Other';
-    }
-    
-    categories.value = categoriesMap;
+
+    categoryStyles.value = styles;
+    categories.value = displayCategories;
+
   } catch (error) {
-    console.error('Failed to load categories:', error);
-    // Fallback to default categories
+    console.error('Error fetching categories:', error);
+    // Fallback categories and styles
     categories.value = {
-      'town': 'Town',
-      'poi': 'Point of Interest',
-      'dungeon': 'Dungeon',
-      'resource': 'Resource',
-      'social': 'Social',
-      'boss': 'Boss',
-      'quest': 'Quest',
-      'vendor': 'Vendor',
-      'other': 'Other'
+      town: 'Town', poi: 'Point of Interest', dungeon: 'Dungeon', resource: 'Resource',
+      social: 'Social', boss: 'Boss', quest: 'Quest', vendor: 'Vendor', other: 'Other',
+    };
+    categoryStyles.value = { // Basic fallback styles
+      town: { backgroundColor: '#4caf50', color: 'white' },
+      poi: { backgroundColor: '#2196f3', color: 'white' },
+      dungeon: { backgroundColor: '#9c27b0', color: 'white' },
+      resource: { backgroundColor: '#ff9800', color: 'white' },
+      social: { backgroundColor: '#e91e63', color: 'white' },
+      boss: { backgroundColor: '#f44336', color: 'white' },
+      quest: { backgroundColor: '#673ab7', color: 'white' },
+      vendor: { backgroundColor: '#009688', color: 'white' },
+      other: { backgroundColor: '#607d8b', color: 'white' },
     };
   }
+}
+
+// Get the style object for a given category type
+function getCategoryStyle(type) {
+  const typeLower = type?.toLowerCase();
+  // Provide a default style if the type is unknown or not loaded
+  return categoryStyles.value[typeLower] || { backgroundColor: '#777', color: 'white' };
 }
 
 // Filter and sort locations based on search, category, and sort option
@@ -614,52 +633,19 @@ th:hover {
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
+  /* Colors are now applied via :style binding */
 }
 
-.town {
-  background-color: #4caf50;
-  color: white;
-}
-
-.poi {
-  background-color: #2196f3;
-  color: white;
-}
-
-.dungeon {
-  background-color: #9c27b0;
-  color: white;
-}
-
-.resource {
-  background-color: #ff9800;
-  color: white;
-}
-
-.social {
-  background-color: #e91e63;
-  color: white;
-}
-
-.boss {
-  background-color: #f44336;
-  color: white;
-}
-
-.quest {
-  background-color: #673ab7;
-  color: white;
-}
-
-.vendor {
-  background-color: #009688;
-  color: white;
-}
-
-.other {
-  background-color: #607d8b;
-  color: white;
-}
+/* Remove specific category styles */
+/* .town { ... } */
+/* .poi { ... } */
+/* .dungeon { ... } */
+/* .resource { ... } */
+/* .social { ... } */
+/* .boss { ... } */
+/* .quest { ... } */
+/* .vendor { ... } */
+/* .other { ... } */
 
 .coords-cell .coord {
   font-family: monospace;

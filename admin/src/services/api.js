@@ -77,14 +77,7 @@ export async function getLocation(id) {
  * Get all unique location categories
  */
 export async function getCategories() {
-  try {
-    const response = await apiRequest('/admin/categories');
-    return response;
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    // Return default categories as fallback
-    return ['town', 'poi', 'dungeon', 'resource', 'social', 'boss', 'quest', 'vendor', 'other'];
-  }
+  return apiRequest('/admin/categories');
 }
 
 /**
