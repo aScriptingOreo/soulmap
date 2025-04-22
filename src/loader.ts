@@ -29,12 +29,22 @@ let refreshInProgress = false;
 // Create a custom event for location updates
 const LOCATIONS_UPDATED_EVENT = 'locationsUpdated';
 
+// Define the disable marker
+const DISABLED_MARKER = '![DISABLED]';
+
+// Function to check if a location is disabled
+function isLocationDisabled(location: Location & { type: string }): boolean {
+  return location.type?.includes(DISABLED_MARKER) ?? false;
+}
+
 // Function to broadcast location updates to all components
 function broadcastLocationsUpdate(locations: (Location & { type: string })[]) {
+  // Filter out disabled locations before broadcasting
+  const enabledLocations = locations.filter(loc => !isLocationDisabled(loc));
   const event = new CustomEvent(LOCATIONS_UPDATED_EVENT, { 
-    detail: { locations, timestamp: Date.now() } 
+    detail: { locations: enabledLocations, timestamp: Date.now() } 
   });
-  console.log(`Broadcasting location update with ${locations.length} locations`);
+  console.log(`Broadcasting location update with ${enabledLocations.length} enabled locations`);
   document.dispatchEvent(event);
 }
 
@@ -305,11 +315,15 @@ async function fetchLocationsFromAPI(): Promise<(Location & { type: string })[] 
     // Normalize the location data before returning
     const normalizedLocations = locations.filter((loc: any) => !!loc)
       .map((loc: any) => normalizeLocationCoordinates(loc));
+      
+    // Filter out disabled locations *before* storing hashes or returning
+    const enabledLocations = normalizedLocations.filter(loc => !isLocationDisabled(loc));
+    console.log(`Filtered out ${normalizedLocations.length - enabledLocations.length} disabled locations.`);
+
+    // Store individual marker hashes only for enabled locations
+    storeMarkerHashes(enabledLocations);
     
-    // Store individual marker hashes when we fetch fresh data
-    storeMarkerHashes(normalizedLocations);
-    
-    return normalizedLocations;
+    return enabledLocations; // Return only enabled locations
   } catch (error) {
     console.error("Error fetching locations from API:", error);
     return null;
@@ -372,17 +386,20 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
       data: (Location & { type: string })[]
     }>(LOCATIONS_CACHE_KEY);
     
-    // Get previously stored marker hashes
+    // Load cached marker hashes BEFORE they're used
     const cachedMarkerHashes = await locationStore.getItem<Record<string, string>>(MARKER_HASHES_KEY) || {};
     
+    // Filter cached data if it exists
+    const enabledCachedData = cachedData?.data?.filter(loc => !isLocationDisabled(loc));
+
     // If we're in offline mode and have cached data, use it right away
-    if (isOfflineMode && cachedData) {
-      console.log('Using cached locations data in offline mode');
-      return cachedData.data;
+    if (isOfflineMode && enabledCachedData) {
+      console.log('Using filtered cached locations data in offline mode');
+      return enabledCachedData;
     } 
     // If offline with no cached data, return empty array (can't proceed)
-    else if (isOfflineMode && !cachedData) {
-      console.error('No cached data available for offline mode');
+    else if (isOfflineMode && !enabledCachedData) {
+      console.error('No enabled cached data available for offline mode');
       return [];
     }
     
@@ -394,9 +411,9 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
     const isHardRefresh = performance.getEntriesByType('navigation')
       .some((nav: any) => nav.type === 'reload' && nav.loadType === 'hard');
       
-    if (cachedData && cachedData.hash === contentHash && !isHardRefresh) {
-      console.log('Using cached locations data (hashes match and not a hard refresh)');
-      return cachedData.data;
+    if (enabledCachedData && cachedData?.hash === contentHash && !isHardRefresh) {
+      console.log('Using filtered cached locations data (hashes match and not a hard refresh)');
+      return enabledCachedData;
     }
 
     // If we get here, we need to load fresh data from the API
@@ -463,7 +480,7 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
         const newHash = stringToHash(locationData).toString();
         newMarkerHashes[location.name] = newHash;
         
-        // Check if this marker has changed
+        // Now cachedMarkerHashes is properly defined before being used
         if (cachedMarkerHashes[location.name] !== newHash) {
           changesDetected = true;
           console.log(`Detected change in marker: ${location.name}`);
@@ -478,10 +495,14 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
       // Store the new marker hashes
       await locationStore.setItem(MARKER_HASHES_KEY, newMarkerHashes);
 
+      // Filter out disabled locations *before* caching
+      const enabledLocations = normalizedLocations.filter(loc => !isLocationDisabled(loc));
+      console.log(`Filtered out ${normalizedLocations.length - enabledLocations.length} disabled locations before caching.`);
+
       // Cache the new data with hash
       await locationStore.setItem(LOCATIONS_CACHE_KEY, {
         hash: contentHash,
-        data: normalizedLocations
+        data: enabledLocations // Cache only enabled locations
       });
 
       // Store the new hash
@@ -496,14 +517,14 @@ export async function loadLocations(isOfflineMode = false): Promise<(Location & 
         }, 500); // Short delay for smooth transition
       }
 
-      return normalizedLocations;
+      return enabledLocations;
     } catch (apiError) {
       console.error("Error loading locations from API:", apiError);
       
       // If we have cached data, use it as fallback
-      if (cachedData) {
-        console.log('API request failed, using cached data as fallback');
-        return cachedData.data;
+      if (enabledCachedData) {
+        console.log('API request failed, using filtered cached data as fallback');
+        return enabledCachedData;
       }
       
       throw apiError;
@@ -582,6 +603,7 @@ async function updateLocationCache(locations: (Location & { type: string })[]): 
 // Generate a checksum of the current database state
 async function generateDatabaseHash(): Promise<string> {
   try {
+    // This uses the single hash endpoint
     const response = await fetch(`${API_BASE_URL}/locations/hash`);
     if (!response.ok) {
       console.warn(`Hash API returned error status: ${response.status}`);
@@ -606,6 +628,30 @@ async function generateDatabaseHash(): Promise<string> {
   } catch (error) {
     console.error('Error generating database hash:', error);
     return `error-client-${Date.now()}`;
+  }
+}
+
+// Add a new function to fetch individual marker hashes if needed
+async function fetchMarkerHashes(): Promise<Record<string, string>> {
+  try {
+    // This uses the multiple hashes endpoint
+    const response = await fetch(`${API_BASE_URL}/locations/hashes`);
+    if (!response.ok) {
+      console.warn(`Marker hashes API returned error status: ${response.status}`);
+      return {};
+    }
+    
+    const data = await response.json();
+    
+    if (!data.hashes || typeof data.hashes !== 'object') {
+      console.warn('Invalid hashes format received from API');
+      return {};
+    }
+    
+    return data.hashes;
+  } catch (error) {
+    console.error('Error fetching marker hashes:', error);
+    return {};
   }
 }
 

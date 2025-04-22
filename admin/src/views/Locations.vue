@@ -1,8 +1,9 @@
 <template>
   <div class="locations-container">
     <div class="header">
-      <h1>Locations</h1>
-      <button @click="openAddModal" class="add-btn">+ Add Location</button>
+      <!-- <h2>Locations</h2> -->
+      <!-- Remove button from here -->
+      <!-- <button @click="openAddModal" class="add-btn">+ Add Location</button> -->
     </div>
     
     <div class="filters">
@@ -63,7 +64,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="location in filteredLocations" :key="location.id">
+          <tr 
+            v-for="location in filteredLocations" 
+            :key="location.id"
+            @mouseenter="showTooltip(location, $event)" 
+            @mouseleave="hideTooltip"
+            @mousemove="updateTooltipPosition($event)"
+            :class="{ 'disabled-row': isLocationDisabled(location) }" 
+          >
             <td class="icon-cell">
               <!-- Font Awesome icon -->
               <i 
@@ -85,8 +93,9 @@
             </td>
             <td class="name-cell">{{ location.name }}</td>
             <td class="category-cell">
-              <span class="category-badge" :style="getCategoryStyle(location.type)">
-                {{ location.type }}
+              <span class="category-badge" :style="getCategoryStyle(getCleanCategory(location.type))">
+                {{ getCleanCategory(location.type) }}
+                <span v-if="isLocationDisabled(location)" class="disabled-indicator">(Disabled)</span>
               </span>
             </td>
             <td class="coords-cell">
@@ -103,16 +112,29 @@
               </div>
             </td>
             <td class="actions-cell">
-              <button @click="openEditModal(location)" class="edit-btn" :title="canEdit ? 'Edit location' : 'View location details'">
-                {{ canEdit ? 'Edit' : 'View' }}
+              <button 
+                @click="openEditModal(location)" 
+                class="action-btn edit-btn" 
+                :title="canEdit ? 'Edit location' : 'View location details'"
+              >
+                <i :class="canEdit ? 'fa-solid fa-pen-to-square' : 'fa-solid fa-eye'"></i>
+              </button>
+              <button 
+                v-if="canEdit" 
+                @click="toggleLocationVisibility(location)" 
+                class="action-btn toggle-vis-btn"
+                :class="{ 'enabled': !isLocationDisabled(location), 'disabled': isLocationDisabled(location) }"
+                :title="isLocationDisabled(location) ? 'Enable location' : 'Disable location'"
+              >
+                <i :class="isLocationDisabled(location) ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
               </button>
               <button 
                 v-if="canDelete" 
                 @click="openDeleteModal(location)" 
-                class="delete-btn"
+                class="action-btn delete-btn"
                 title="Delete location"
               >
-                Delete
+                <i class="fa-solid fa-trash-alt"></i>
               </button>
             </td>
           </tr>
@@ -120,6 +142,26 @@
       </table>
     </div>
     
+    <!-- Tooltip Element -->
+    <div 
+      v-if="tooltip.visible" 
+      class="location-tooltip" 
+      :style="{ top: tooltip.top + 'px', left: tooltip.left + 'px' }"
+    >
+      <h4>{{ tooltip.details.name }}</h4>
+      <p v-if="tooltip.details.description"><strong>Desc:</strong> {{ truncateText(tooltip.details.description, 150) }}</p>
+      <p v-if="tooltip.details.lore"><strong>Lore:</strong> {{ truncateText(tooltip.details.lore, 150) }}</p>
+      <p v-if="tooltip.details.spoilers"><strong>Spoilers:</strong> {{ truncateText(tooltip.details.spoilers, 150) }}</p>
+      <p v-if="tooltip.details.radius > 0"><strong>Radius:</strong> {{ tooltip.details.radius }}</p>
+      <p v-if="tooltip.details.iconSize !== 1"><strong>Icon Size:</strong> {{ tooltip.details.iconSize }}</p>
+      <p v-if="tooltip.details.noCluster"><strong>No Cluster:</strong> Yes</p>
+      <p v-if="tooltip.details.isCoordinateSearch"><strong>Coord Search:</strong> Yes</p>
+      <p v-if="tooltip.details.mediaUrl && tooltip.details.mediaUrl.length > 0"><strong>Media:</strong> {{ tooltip.details.mediaUrl.length }} item(s)</p>
+      <p v-if="tooltip.details.submittedBy"><strong>Submitted By:</strong> {{ tooltip.details.submittedBy }}</p>
+      <p v-if="tooltip.details.approvedBy"><strong>Approved By:</strong> {{ tooltip.details.approvedBy }}</p>
+      <p><strong>Last Modified:</strong> {{ new Date(tooltip.details.updatedAt || tooltip.details.lastModified).toLocaleString() }}</p>
+    </div>
+
     <!-- Modal for editing/adding locations -->
     <LocationEditModal 
       v-if="showModal"
@@ -130,19 +172,20 @@
       @delete="deleteLocation"
     />
     
-    <!-- Success Notification -->
-    <div v-if="notification.show" class="notification" :class="notification.type">
-      {{ notification.message }}
-    </div>
+    <!-- Floating Add Button -->
+    <button @click="openAddModal" class="fab-add-btn" title="Add Location">
+      <i class="fa-solid fa-plus"></i>
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import LocationEditModal from '../components/LocationEditModal.vue';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
 import webhook from '../services/webhook';
+import { showNotification } from '../services/notificationService';
 
 // State
 const locationsList = ref([]);
@@ -156,11 +199,6 @@ const sortOption = ref('name_asc');
 const showModal = ref(false);
 const currentLocation = ref({});
 const isNewLocation = ref(false);
-const notification = ref({
-  show: false,
-  message: '',
-  type: 'success'
-});
 
 // Get auth store for role checking
 const authStore = useAuthStore();
@@ -218,22 +256,31 @@ function getFormattedCoordinates(coordinates) {
   }
 }
 
-// Get category style based on the type
+// Helper to check if location is disabled
+function isLocationDisabled(location) {
+  return location.type?.includes(DISABLED_MARKER) ?? false;
+}
+
+// Helper to get the category name without the disabled marker
+function getCleanCategory(type) {
+  return type?.replace(DISABLED_MARKER, '').trim() || 'Unknown';
+}
+
+// Get category style based on the *clean* type
 function getCategoryStyle(type) {
-  if (!type) return { backgroundColor: '#777', color: 'white' };
+  const cleanType = getCleanCategory(type); // Use clean type for styling
+  if (!cleanType) return { backgroundColor: '#777', color: 'white' };
   
-  // Return the existing style or generate one if not yet created
-  if (!categoryStyles.value[type]) {
-    // Generate a reproducible color based on the type string
-    const hash = [...type].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  if (!categoryStyles.value[cleanType]) {
+    const hash = [...cleanType].reduce((sum, char) => sum + char.charCodeAt(0), 0);
     const hue = hash % 360;
-    categoryStyles.value[type] = { 
+    categoryStyles.value[cleanType] = { 
       backgroundColor: `hsl(${hue}, 65%, 45%)`, 
       color: 'white' 
     };
   }
   
-  return categoryStyles.value[type];
+  return categoryStyles.value[cleanType];
 }
 
 // Fetch categories from the database exactly as they are
@@ -302,6 +349,9 @@ onMounted(async () => {
     fetchLocations(),
     fetchCategories()
   ]);
+  
+  // Set up SSE after initial data load
+  setupSSEListener();
 });
 
 // Fetch locations from API
@@ -323,7 +373,7 @@ async function fetchLocations() {
 // Modal functions
 function openAddModal() {
   if (!canEdit.value) {
-    showNotification('You do not have permission to add locations', 'error');
+    displayNotification('You do not have permission to add locations', 'error');
     return;
   }
   
@@ -338,10 +388,29 @@ function openAddModal() {
   showModal.value = true;
 }
 
-function openEditModal(location) {
+// Update openEditModal to always fetch the latest data
+async function openEditModal(location) {
+  if (!canEdit.value && !location.id) {
+    displayNotification('You do not have permission to add locations', 'error');
+    return;
+  }
+  
   try {
-    // Create a clean copy of the location to avoid reference issues
-    const locationCopy = JSON.parse(JSON.stringify(location));
+    let locationCopy;
+    
+    // If editing an existing location, always fetch the latest data
+    if (location.id) {
+      try {
+        // Fetch the latest data for this location
+        const freshLocation = await api.getLocation(location.id);
+        locationCopy = JSON.parse(JSON.stringify(freshLocation || location));
+      } catch (error) {
+        console.error('Failed to fetch latest location data:', error);
+        locationCopy = JSON.parse(JSON.stringify(location));
+      }
+    } else {
+      locationCopy = JSON.parse(JSON.stringify(location));
+    }
     
     // Make sure coordinates are properly formatted
     if (locationCopy.coordinates && !Array.isArray(locationCopy.coordinates)) {
@@ -354,17 +423,17 @@ function openEditModal(location) {
     }
     
     currentLocation.value = locationCopy;
-    isNewLocation.value = false;
+    isNewLocation.value = !location.id;
     showModal.value = true;
   } catch (error) {
     console.error('Error opening edit modal:', error);
-    showNotification('Failed to open editor: ' + error.message, 'error');
+    displayNotification('Failed to open editor: ' + error.message, 'error');
   }
 }
 
 function openDeleteModal(location) {
   if (!canDelete.value) {
-    showNotification('You do not have permission to delete locations', 'error');
+    displayNotification('You do not have permission to delete locations', 'error');
     return;
   }
   
@@ -374,7 +443,7 @@ function openDeleteModal(location) {
     showModal.value = true;
   } catch (error) {
     console.error('Error opening delete modal:', error);
-    showNotification('Failed to prepare location for deletion: ' + error.message, 'error');
+    displayNotification('Failed to prepare location for deletion: ' + error.message, 'error');
   }
 }
 
@@ -385,7 +454,7 @@ function closeModal() {
 // CRUD operations with webhook logging
 async function saveLocation(locationData) {
   if (!canEdit.value) {
-    showNotification('You do not have permission to modify locations', 'error');
+    displayNotification('You do not have permission to modify locations', 'error');
     return;
   }
   
@@ -403,19 +472,23 @@ async function saveLocation(locationData) {
         data: savedLocation
       });
       
-      showNotification('Location added successfully!');
+      displayNotification('Location added successfully!');
     } else {
+      // For updates, find the original location to track changes
+      const originalLocation = locationsList.value.find(loc => loc.id === locationData.id);
+      
       // Update existing location
       savedLocation = await api.updateLocation(locationData.id, locationData);
       
-      // Log to Discord webhook
+      // Log to Discord webhook with before/after data
       await webhook.sendLogToDiscord({
         action: 'update',
         user: authStore.user,
-        data: savedLocation
+        data: savedLocation,
+        oldData: originalLocation
       });
       
-      showNotification('Location updated successfully!');
+      displayNotification('Location updated successfully!');
     }
     
     // Refresh locations list
@@ -423,13 +496,13 @@ async function saveLocation(locationData) {
     closeModal();
   } catch (err) {
     console.error('Error saving location:', err);
-    showNotification('Failed to save location: ' + err.message, 'error');
+    displayNotification('Failed to save location: ' + err.message, 'error');
   }
 }
 
 async function deleteLocation(locationId) {
   if (!canDelete.value) {
-    showNotification('You do not have permission to delete locations', 'error');
+    displayNotification('You do not have permission to delete locations', 'error');
     return;
   }
   
@@ -447,27 +520,18 @@ async function deleteLocation(locationId) {
       data: locationToDelete
     });
     
-    showNotification('Location deleted successfully!');
+    displayNotification('Location deleted successfully!');
     await fetchLocations();
     closeModal();
   } catch (err) {
     console.error('Error deleting location:', err);
-    showNotification('Failed to delete location: ' + err.message, 'error');
+    displayNotification('Failed to delete location: ' + err.message, 'error');
   }
 }
 
 // Notification helper
-function showNotification(message, type = 'success') {
-  notification.value = {
-    show: true,
-    message,
-    type
-  };
-  
-  // Hide notification after 3 seconds
-  setTimeout(() => {
-    notification.value.show = false;
-  }, 3000);
+function displayNotification(message, type = 'success') {
+  showNotification(message, type);
 }
 
 // Function to get SVG icon URL
@@ -484,29 +548,180 @@ function onIconLoadError(event) {
   event.target.nextElementSibling.className = 'no-icon';
   event.target.nextElementSibling.textContent = '•';
 }
+
+// Add SSE connection for real-time updates
+let eventSource = null;
+
+// Set up SSE listener for location changes
+function setupSSEListener() {
+  try {
+    const sseUrl = '/api/listen';
+    eventSource = new EventSource(sseUrl);
+    
+    eventSource.onmessage = async (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === 'change' && message.resource === 'location') {
+          console.log('SSE: Location change detected, refreshing locations...');
+          await fetchLocations();
+          
+          // If we're currently editing the changed location, refresh its data
+          if (showModal.value && !isNewLocation.value && message.id === currentLocation.value.id) {
+            console.log('SSE: Currently editing the changed location, refreshing details...');
+            try {
+              const updatedLocation = await api.getLocation(message.id);
+              if (updatedLocation) {
+                currentLocation.value = updatedLocation;
+              }
+            } catch (error) {
+              console.error('Failed to refresh location details:', error);
+            }
+          }
+        } else if (message.type === 'connected') {
+          console.log('SSE: Connected to location updates.');
+        }
+      } catch (error) {
+        console.error('SSE: Error parsing message:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('SSE: Connection error:', error);
+      // Try to reconnect after a delay
+      setTimeout(() => {
+        if (eventSource) {
+          eventSource.close();
+          setupSSEListener();
+        }
+      }, 5000);
+    };
+  } catch (error) {
+    console.error('Failed to initialize SSE:', error);
+  }
+}
+
+// Clean up SSE connection on unmount
+onUnmounted(() => {
+  if (eventSource) {
+    eventSource.close();
+    console.log('SSE: Connection closed.');
+  }
+});
+
+// Tooltip State
+const tooltip = ref({
+  visible: false,
+  details: null,
+  top: 0,
+  left: 0,
+  timer: null // Timer for delayed appearance
+});
+
+// Tooltip Functions
+function showTooltip(location, event) {
+  // Debounce or delay showing the tooltip
+  clearTimeout(tooltip.value.timer); 
+  tooltip.value.timer = setTimeout(() => {
+    tooltip.value.details = location;
+    updateTooltipPosition(event); // Set initial position
+    tooltip.value.visible = true;
+  }, 300); // 300ms delay
+}
+
+function hideTooltip() {
+  clearTimeout(tooltip.value.timer);
+  tooltip.value.visible = false;
+  tooltip.value.details = null;
+}
+
+function updateTooltipPosition(event) {
+  if (!tooltip.value.visible) return;
+  // Position tooltip slightly offset from the cursor
+  const offsetX = 15;
+  const offsetY = 15;
+  tooltip.value.top = event.clientY + offsetY;
+  tooltip.value.left = event.clientX + offsetX;
+
+  // TODO: Add boundary checks to prevent tooltip going off-screen
+}
+
+// Helper to truncate long text
+function truncateText(text, maxLength) {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+}
+
+// Define the disable marker constant
+const DISABLED_MARKER = '![DISABLED]';
+
+// Function to toggle location visibility
+async function toggleLocationVisibility(location) {
+  if (!canEdit.value) {
+    displayNotification('You do not have permission to modify locations', 'error');
+    return;
+  }
+
+  const currentlyDisabled = isLocationDisabled(location);
+  const originalType = getCleanCategory(location.type);
+  const newType = currentlyDisabled ? originalType : `${DISABLED_MARKER} ${originalType}`;
+  const action = currentlyDisabled ? 'enable' : 'disable';
+
+  try {
+    // Prepare minimal update data
+    const updateData = { id: location.id, type: newType };
+    
+    // Update the location type via API
+    const updatedLocation = await api.updateLocation(location.id, updateData);
+    
+    // Log to Discord webhook
+    await webhook.sendLogToDiscord({
+      action: action, // Use 'enable' or 'disable'
+      user: authStore.user,
+      data: { ...location, type: newType }, // Show the new type
+      oldData: location // Show the old state
+    });
+    
+    displayNotification(`Location ${action}d successfully!`);
+    
+    // Refresh locations list locally for immediate UI update
+    const index = locationsList.value.findIndex(loc => loc.id === location.id);
+    if (index !== -1) {
+      locationsList.value[index].type = newType;
+      // Trigger reactivity if needed, though direct modification should work with Vue 3 refs
+      locationsList.value = [...locationsList.value]; 
+    } else {
+      // If not found (e.g., due to filtering), fetch full list
+      await fetchLocations();
+    }
+
+  } catch (err) {
+    console.error(`Error ${action}ing location:`, err);
+    displayNotification(`Failed to ${action} location: ${err.message}`, 'error');
+    // Optionally revert local change on error
+    // const index = locationsList.value.findIndex(loc => loc.id === location.id);
+    // if (index !== -1) locationsList.value[index].type = location.type;
+  }
+}
 </script>
 
 <style scoped>
 .locations-container {
   padding: 20px 0;
+  position: relative; /* Needed if any child uses absolute positioning relative to this */
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
+  /* justify-content: space-between; No longer needed for button */
+  justify-content: flex-start; /* Align title/elements to the start */
   align-items: center;
   margin-bottom: 20px;
 }
 
-.add-btn {
-  background: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
+/* Remove old add-btn styles or repurpose if needed elsewhere */
+/* .add-btn { ... } */
 
 .filters {
   display: flex;
@@ -642,71 +857,231 @@ th:hover {
 
 .actions-cell {
   white-space: nowrap;
+  display: flex; /* Use flexbox for button alignment */
+  gap: 8px; /* Add space between buttons */
 }
 
-.edit-btn, .delete-btn {
+.edit-btn, .delete-btn, .toggle-vis-btn { /* Include new button */
   padding: 6px 10px;
-  margin-right: 8px;
+  /* margin-right: 8px; Remove margin, use gap */
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
+  display: inline-flex; /* Align icon and text if any */
+  align-items: center;
+  justify-content: center;
 }
 
-.edit-btn {
-  background: #3498db;
+/* ... existing edit/delete button styles ... */
+
+.toggle-vis-btn {
+  width: 30px; /* Fixed width for icon button */
+  padding: 6px 0; /* Adjust padding */
+}
+
+.toggle-vis-btn.enabled {
+  background-color: #2ecc71; /* Green for enabled */
   color: white;
 }
-
-.delete-btn {
-  background: #e74c3c;
-  color: white;
+.toggle-vis-btn.enabled:hover {
+  background-color: #27ae60;
 }
 
-.notification {
+.toggle-vis-btn.disabled {
+  background-color: #bdc3c7; /* Grey for disabled */
+  color: #7f8c8d;
+}
+.toggle-vis-btn.disabled:hover {
+  background-color: #95a5a6;
+}
+
+.category-badge .disabled-indicator {
+  font-weight: normal;
+  font-style: italic;
+  opacity: 0.8;
+  margin-left: 4px;
+  font-size: 0.9em;
+}
+/* Add this style when tooltip is visible */
+.location-tooltip { /* Or check based on v-if condition if easier */
+  opacity: 1;
+}
+
+
+.location-tooltip h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #555;
+  padding-bottom: 4px;
+}
+
+.location-tooltip p {
+  margin: 4px 0;
+}
+
+.location-tooltip strong {
+  color: #aaa;
+}
+
+/* Style table rows for hover indication (optional) */
+tbody tr:hover {
+  background-color: #f8f9fa; /* Light background on hover */
+}
+
+/* Style for disabled rows (optional) */
+.disabled-row {
+  opacity: 0.6;
+  background-color: #f8f8f8; /* Slightly different background */
+  /* Add transition for smoother hover effect */
+  transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out; 
+}
+.disabled-row:hover {
+  opacity: 0.9; /* Increase opacity more on hover */
+  background-color: #f0f0f0;
+}
+
+/* Fix tooltip styling */
+.location-tooltip {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.8);
   color: white;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 300px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 1100;
+  pointer-events: none;
+  white-space: normal;
+  opacity: 1; /* Set default opacity to 1 instead of relying on :has() */
+  transition: opacity 0.2s ease-in-out;
 }
 
-.notification.success {
-  background-color: #4caf50;
+/* Remove problematic :has() selector since it's not widely supported */
+/* .location-tooltip:has(h4) { 
+  opacity: 1;
+} */
+
+.location-tooltip h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #555;
+  padding-bottom: 4px;
 }
 
-.notification.error {
-  background-color: #e74c3c;
+.location-tooltip p {
+  margin: 4px 0;
 }
 
-.icon-cell {
-  width: 40px;
-  text-align: center;
-  vertical-align: middle;
+.location-tooltip strong {
+  color: #aaa;
 }
 
-.location-icon {
+/* Fix for Font Awesome icons to be centered like SVG ones */
+.location-icon.fa-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
-  display: inline-block;
+  text-align: center;
+  margin: 0 auto; /* Center horizontally */
 }
 
-.fa-icon {
-  font-size: 20px;
-  line-height: 24px;
+/* Icon cell styling to ensure consistent layout */
+.icon-cell {
+  width: 40px; /* Fixed width */
+  text-align: center; /* Center contents */
 }
 
-.svg-icon {
-  object-fit: contain;
+/* Restore the floating add button style */
+.fab-add-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #2196F3; /* Nice material blue */
+  color: white;
+  border: none;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100; /* Make sure it appears above other content */
 }
 
-.no-icon {
-  display: inline-block;
-  font-size: 24px;
-  line-height: 24px;
-  color: #ccc;
+.fab-add-btn:hover {
+  background-color: #1976D2; /* Darker blue on hover */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.05);
+}
+
+.fab-add-btn i {
+  font-size: 24px; /* Larger plus icon */
+}
+
+/* ...rest of the existing styles... */
+.actions-cell {
+  white-space: nowrap;
+  display: flex;
+  gap: 8px; /* Space between buttons */
+}
+
+/* Replace the existing button styles with these new ones */
+.action-btn {
+  width: 36px; /* Fixed width for consistent appearance */
+  height: 36px; /* Square buttons */
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px; /* Larger icons */
+  transition: all 0.2s ease;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Edit button - blue */
+.edit-btn {
+  background-color: #3498db;
+}
+.edit-btn:hover {
+  background-color: #2980b9;
+}
+
+/* Toggle visibility button - green when enabled, gray when disabled */
+.toggle-vis-btn.enabled {
+  background-color: #2ecc71;
+}
+.toggle-vis-btn.enabled:hover {
+  background-color: #27ae60;
+}
+
+.toggle-vis-btn.disabled {
+  background-color: #95a5a6;
+}
+.toggle-vis-btn.disabled:hover {
+  background-color: #7f8c8d;
+}
+
+/* Delete button - red */
+.delete-btn {
+  background-color: #e74c3c;
+}
+.delete-btn:hover {
+  background-color: #c0392b;
 }
 </style>

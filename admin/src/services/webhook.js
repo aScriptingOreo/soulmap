@@ -43,15 +43,99 @@ function formatCoordinates(coordinates) {
 }
 
 /**
+ * Compare two objects and return a string of changes
+ * @param {Object} oldData - Original data
+ * @param {Object} newData - Updated data
+ * @returns {string} - Formatted change string
+ */
+function getChanges(oldData, newData) {
+  if (!oldData || !newData) return 'Complete data change';
+  
+  const changes = [];
+  const allKeys = new Set([...Object.keys(oldData), ...Object.keys(newData)]);
+  
+  for (const key of allKeys) {
+    // Skip internal fields or fields we don't want to track
+    if (key === 'id' || key === 'createdAt' || key === 'updatedAt' || key === 'lastModified') continue;
+    
+    const oldValue = oldData[key];
+    const newValue = newData[key];
+    
+    // Skip if both values are empty/null
+    if ((oldValue === undefined || oldValue === null || oldValue === '') && 
+        (newValue === undefined || newValue === null || newValue === '')) {
+      continue;
+    }
+    
+    // Check if the value changed
+    if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+      // Format the change based on field type
+      let formattedChange = '';
+      
+      switch (key) {
+        case 'coordinates':
+          const oldCoords = formatCoordinates(oldValue);
+          const newCoords = formatCoordinates(newValue);
+          formattedChange = `**${key}**: ${oldCoords} → ${newCoords}`;
+          break;
+          
+        case 'description':
+        case 'lore':
+        case 'spoilers':
+          // For text fields, show a length comparison if content is long
+          if ((oldValue && oldValue.length > 50) || (newValue && newValue.length > 50)) {
+            const oldLength = oldValue ? oldValue.length : 0;
+            const newLength = newValue ? newValue.length : 0;
+            formattedChange = `**${key}**: Text changed (${oldLength} → ${newLength} chars)`;
+          } else {
+            // For shorter text, show the actual change
+            const oldText = oldValue || '(empty)';
+            const newText = newValue || '(empty)';
+            formattedChange = `**${key}**: "${oldText}" → "${newText}"`;
+          }
+          break;
+          
+        case 'mediaUrl':
+          // For media URLs, show count changes
+          const oldCount = Array.isArray(oldValue) ? oldValue.length : 0;
+          const newCount = Array.isArray(newValue) ? newValue.length : 0;
+          formattedChange = `**${key}**: ${oldCount} URLs → ${newCount} URLs`;
+          break;
+          
+        case 'iconSize':
+        case 'radius':
+          // For numeric fields, show the value change
+          formattedChange = `**${key}**: ${oldValue || 0} → ${newValue || 0}`;
+          break;
+          
+        case 'iconColor':
+          // For color fields, make them more visible
+          formattedChange = `**${key}**: ${oldValue || '#FFFFFF'} → ${newValue || '#FFFFFF'}`;
+          break;
+          
+        default:
+          // For all other fields, show simple before/after
+          formattedChange = `**${key}**: ${oldValue || '(empty)'} → ${newValue || '(empty)'}`;
+      }
+      
+      changes.push(formattedChange);
+    }
+  }
+  
+  return changes.length ? changes.join('\n') : 'No detectable changes';
+}
+
+/**
  * Send a log to Discord webhook
  * 
  * @param {Object} options - Log options
  * @param {string} options.action - The action performed (create, update, delete)
  * @param {Object} options.user - The user who performed the action
  * @param {Object} options.data - The affected data
+ * @param {Object} [options.oldData] - The previous data (for update actions)
  * @param {string} [options.color] - Hex color for the Discord embed (without #)
  */
-export async function sendLogToDiscord({ action, user, data, color }) {
+export async function sendLogToDiscord({ action, user, data, oldData, color }) {
   // Determine color based on action
   if (!color) {
     switch (action.toLowerCase()) {
@@ -72,57 +156,77 @@ export async function sendLogToDiscord({ action, user, data, color }) {
   // Format user information
   const userInfo = user ? `${user.username}${user.discriminator ? '#' + user.discriminator : ''} (${user.id})` : 'Unknown user';
   
-  // Format data based on type
+  // Format data based on action type
   let locationInfo = '';
+  let changesInfo = '';
   
   if (data) {
-    if (action.toLowerCase() === 'delete') {
-      locationInfo = `ID: ${data.id}\nName: ${data.name}\nType: ${data.type || 'Unknown'}`;
-    } else {
-      // For create/update, show more details
-      locationInfo = `ID: ${data.id}\nName: ${data.name}\nType: ${data.type || 'Unknown'}\nCoordinates: ${formatCoordinates(data.coordinates)}`;
-      
+    // Basic identification always included
+    locationInfo = `**ID**: ${data.id}\n**Name**: ${data.name}\n**Type**: ${data.type || 'Unknown'}`;
+    
+    if (action.toLowerCase() === 'update' && oldData) {
+      // For updates, show what changed
+      changesInfo = getChanges(oldData, data);
+    } else if (action.toLowerCase() === 'create') {
+      // For creation, show basic details
+      locationInfo += `\n**Coordinates**: ${formatCoordinates(data.coordinates)}`;
       if (data.description) {
         const truncatedDesc = data.description.length > 100 ? 
           `${data.description.substring(0, 97)}...` : 
           data.description;
-        locationInfo += `\nDescription: ${truncatedDesc}`;
+        locationInfo += `\n**Description**: ${truncatedDesc}`;
       }
     }
+    // For deletion, just show the basic info
   }
   
-  // Ensure we don't exceed character limit
+  // Ensure we don't exceed character limits
   if (locationInfo.length > CHARACTER_LIMIT - 50) {
     locationInfo = locationInfo.substring(0, CHARACTER_LIMIT - 53) + '...';
+  }
+  
+  if (changesInfo && changesInfo.length > CHARACTER_LIMIT) {
+    changesInfo = changesInfo.substring(0, CHARACTER_LIMIT - 3) + '...';
+  }
+  
+  // Create embed fields
+  const fields = [
+    {
+      name: 'User',
+      value: userInfo,
+      inline: true
+    },
+    {
+      name: 'Action',
+      value: action.charAt(0).toUpperCase() + action.slice(1),
+      inline: true
+    },
+    {
+      name: 'Timestamp',
+      value: new Date().toISOString(),
+      inline: true
+    },
+    {
+      name: 'Location Details',
+      value: locationInfo || 'No details available'
+    }
+  ];
+  
+  // Add changes field if we have changes
+  if (changesInfo && action.toLowerCase() === 'update') {
+    fields.push({
+      name: 'Changes',
+      value: changesInfo
+    });
   }
   
   // Create embed
   const embed = {
     title: `Location ${action.charAt(0).toUpperCase() + action.slice(1)}`,
     color: parseInt(color, 16),
-    fields: [
-      {
-        name: 'User',
-        value: userInfo,
-        inline: true
-      },
-      {
-        name: 'Action',
-        value: action.charAt(0).toUpperCase() + action.slice(1),
-        inline: true
-      },
-      {
-        name: 'Timestamp',
-        value: new Date().toISOString(),
-        inline: true
-      },
-      {
-        name: 'Location Details',
-        value: locationInfo || 'No details available'
-      }
-    ],
+    fields: fields,
     footer: {
-      text: `SoulMap Admin - ${new Date().toLocaleString()}`
+      text: `Soulmap Admin - ${new Date().toLocaleString()}`
     }
   };
   

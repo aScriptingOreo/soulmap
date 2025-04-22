@@ -3,14 +3,15 @@
     <div class="modal-content" @click.stop>
       <h2>{{ isNew ? 'Add New Location' : 'Edit Location' }}</h2>
       
-      <form @submit.prevent="saveLocation" class="location-form">
+      <form @submit.prevent="validateAndSaveLocation" class="location-form">
         <div class="form-group">
-          <label for="name">Name:</label>
+          <label for="name">Name: <span class="required">*</span></label>
           <input type="text" id="name" v-model="formData.name" required>
+          <div v-if="validationErrors.name" class="error-message">{{ validationErrors.name }}</div>
         </div>
         
         <div class="form-group">
-          <label for="type">Category:</label>
+          <label for="type">Category: <span class="required">*</span></label>
           <div class="category-autocomplete">
             <input 
               type="text" 
@@ -37,6 +38,7 @@
               </div>
             </div>
           </div>
+          <div v-if="validationErrors.type" class="error-message">{{ validationErrors.type }}</div>
         </div>
         
         <div class="form-group">
@@ -45,7 +47,7 @@
         </div>
         
         <div class="form-group coordinates-section">
-          <label>Coordinates:</label>
+          <label>Coordinates: <span class="required">*</span></label>
           <div v-for="(coords, index) in formData.coordinates" :key="index" class="coords-row">
             <div class="coord-container">
               <input type="text" 
@@ -59,6 +61,7 @@
               {{ coordinateErrors[index] }}
             </div>
           </div>
+          <div v-if="validationErrors.coordinates" class="error-message">{{ validationErrors.coordinates }}</div>
           
           <div class="coords-actions">
             <button type="button" @click="addCoordinate" class="add-btn">+ Add Coordinate</button>
@@ -75,7 +78,7 @@
           
           <div class="form-group">
             <label for="iconSize">Icon Size:</label>
-            <input type="number" id="iconSize" v-model.number="formData.iconSize" min="0" step="0.1">
+            <input type="number" id="iconSize" v-model.number="formData.iconSize" min="0" step="0.01">
           </div>
           
           <div class="form-group">
@@ -490,7 +493,12 @@ const canDelete = computed(() => {
 
 // Watch for changes in the location prop
 watch(() => props.location, (newLocation) => {
+  // Only update if we have a valid location object
+  if (!newLocation) return;
+  
   const validLocation = ensureValidLocation(newLocation);
+  
+  // Update all fields carefully to avoid UI glitches
   formData.value = {
     id: validLocation.id,
     name: validLocation.name,
@@ -507,12 +515,13 @@ watch(() => props.location, (newLocation) => {
     noCluster: validLocation.noCluster
   };
   
-  // Update category input when location changes
+  // Update related UI state
   categoryInput.value = validLocation.type || '';
-  
   coordinateErrors.value = Array(formData.value.coordinates.length).fill(null);
   mediaUrlsText.value = parseMediaUrls(validLocation.mediaUrl);
   exactCoordinatesText.value = parseExactCoordinates(validLocation.exactCoordinates);
+  
+  console.log('Location data updated in modal:', validLocation.id);
 }, { deep: true });
 
 // Validate coordinates format [X, Y]
@@ -597,6 +606,69 @@ function prepareCoordinatesForSaving(coordinates) {
       return [0, 0]; // Fallback
     });
   }
+}
+
+// Add validation errors state
+const validationErrors = ref({
+  name: '',
+  type: '',
+  coordinates: ''
+});
+
+// Validate required fields and then save
+function validateAndSaveLocation() {
+  // Clear previous validation errors
+  validationErrors.value = {
+    name: '',
+    type: '',
+    coordinates: ''
+  };
+  
+  // Validate required fields
+  let isValid = true;
+  
+  // Name is required
+  if (!formData.value.name || formData.value.name.trim() === '') {
+    validationErrors.value.name = 'Name is required';
+    isValid = false;
+  }
+  
+  // Type/Category is required
+  if (!formData.value.type || formData.value.type.trim() === '') {
+    validationErrors.value.type = 'Category is required';
+    isValid = false;
+  }
+  
+  // At least one valid coordinate pair is required
+  if (!formData.value.coordinates || formData.value.coordinates.length === 0) {
+    validationErrors.value.coordinates = 'At least one coordinate pair is required';
+    isValid = false;
+  } else {
+    // Check if coordinates are valid
+    const hasValidCoordinate = formData.value.coordinates.some((coord, index) => {
+      return validateCoordinates(index);
+    });
+    
+    if (!hasValidCoordinate) {
+      validationErrors.value.coordinates = 'At least one valid coordinate pair is required';
+      isValid = false;
+    }
+  }
+  
+  // Continue only if validation passed
+  if (!isValid) {
+    // Scroll to first error
+    setTimeout(() => {
+      const firstError = document.querySelector('.error-message');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    return;
+  }
+  
+  // If all validation passes, call the saveLocation function
+  saveLocation();
 }
 
 // Save location
@@ -898,5 +970,11 @@ select {
 .category-suggestion:hover,
 .category-suggestion.selected {
   background-color: #f0f7ff;
+}
+
+.required {
+  color: #e74c3c;
+  font-weight: bold;
+  margin-left: 2px;
 }
 </style>

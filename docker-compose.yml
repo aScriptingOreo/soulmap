@@ -1,6 +1,8 @@
 networks:
   proxy:
     external: true
+  grafana-edge_monitoring:
+    external: true
 
 services:
   soulmap:
@@ -124,6 +126,7 @@ services:
       - "5432:5432"  # PostgreSQL port
     networks:
       - default
+      - grafana-edge_monitoring
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]

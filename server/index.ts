@@ -94,6 +94,8 @@ app.get('/api/locations/:id', async (req, res) => {
 
 app.get('/api/locations/hash', async (req, res) => {
   try {
+    // If db.generateDatabaseHash() doesn't filter disabled locations, consider passing a parameter
+    // or implementing filtering at this endpoint level
     const hash = await db.generateDatabaseHash();
     res.json({ hash });
   } catch (error) {
@@ -113,14 +115,22 @@ app.get('/api/locations/hashes', async (req, res) => {
       select: {
         id: true,
         name: true,
+        type: true, // Include type for disabled marker check
         lastModified: true
       }
     });
     
     // Create a map of location name to hash
     const hashes: Record<string, string> = {};
+    
+    // Define disable marker constant - match the one in loader.ts
+    const DISABLED_MARKER = '![DISABLED]';
+    
     locations.forEach(location => {
-      hashes[location.name] = location.lastModified?.getTime().toString() || Date.now().toString();
+      // Don't include disabled locations in the hashes
+      if (!location.type?.includes(DISABLED_MARKER)) {
+        hashes[location.name] = location.lastModified?.getTime().toString() || Date.now().toString();
+      }
     });
     
     res.json({ hashes });

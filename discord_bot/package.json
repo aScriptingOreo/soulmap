@@ -1,7 +1,7 @@
 {
   "name": "soulmap-discord-bot",
   "version": "1.0.0",
-  "description": "Discord Bot for SoulMap",
+  "description": "Discord Bot for Soulmap",
   "main": "index.js",
   "scripts": {
     "start": "npx prisma generate && node index.js",

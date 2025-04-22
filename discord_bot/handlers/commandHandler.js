@@ -143,7 +143,7 @@ async function handleListRequests(interaction, client, getRequestsByStatus, getA
       .setDescription(`Found ${requests.length} requests`)
       .setTimestamp()
       .setFooter({ 
-        text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Showing ${Math.min(requests.length, 10)} of ${requests.length} requests` 
+        text: `Soulmap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Showing ${Math.min(requests.length, 10)} of ${requests.length} requests` 
       });
       
     // Add up to 10 requests to the embed
@@ -303,7 +303,7 @@ async function handleWhereIs(interaction, searchLocationsForAutocomplete) {
         { name: 'Type', value: locationMatch.type || 'Unknown', inline: true },
         { name: 'Map Links', value: coordinateLinks.join('\n'), inline: false }
       )
-      .setFooter({ text: 'SoulMap Location Finder' })
+      .setFooter({ text: 'Soulmap Location Finder' })
       .setTimestamp();
       
     await interaction.editReply({ embeds: [embed] });

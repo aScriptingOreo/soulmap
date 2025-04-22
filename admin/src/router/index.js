@@ -24,6 +24,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/map', // New route for the live map
+    name: 'map',
+    component: () => import('../views/MapView.vue'), // New component
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'login',
     component: Login,

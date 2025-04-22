@@ -38,13 +38,6 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 /**
- * Get admin dashboard statistics
- */
-export async function getStats() {
-  return apiRequest('/admin/stats');
-}
-
-/**
  * Get all requests
  */
 export async function getRequests() {
@@ -71,8 +64,22 @@ export async function getLocations() {
 /**
  * Get single location by ID
  */
-export async function getLocation(id) {
+/**export async function getLocation(id) {
   return apiRequest(`/locations/${id}`);
+}
+
+/**
+ * Get a single location by ID
+ * @param {string} id - Location ID
+ * @returns {Promise<Object>} Location data
+ */
+export function getLocation(id) {
+  try {
+    return apiRequest(`/admin/locations/${id}`);
+  } catch (error) {
+    console.error(`Failed to fetch location ${id}:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -134,7 +141,6 @@ export function extractIconsFromLocations() {
 }
 
 export default {
-  getStats,
   getRequests,
   updateRequestStatus,
   getLocations,

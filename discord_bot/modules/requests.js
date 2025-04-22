@@ -378,7 +378,7 @@ async function submitNewMarkerRequest(
       { name: 'Description', value: description || '*(No description provided)*' }
     )
     .setFooter({ 
-      text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
+      text: `Soulmap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
       iconURL: interaction.user.displayAvatarURL() 
     })
     .setTimestamp();
@@ -466,7 +466,7 @@ async function submitCoordinateAddRequest(interaction, client, existingMarkerId,
       { name: 'Description Update', value: description || 'No changes to description' }
     )
     .setFooter({ 
-      text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
+      text: `Soulmap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion} | Requested by ${interaction.user.tag} (${interaction.user.id})`, 
       iconURL: interaction.user.displayAvatarURL() 
     })
     .setTimestamp();

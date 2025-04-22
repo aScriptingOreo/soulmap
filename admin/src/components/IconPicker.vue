@@ -1,25 +1,41 @@
 <template>
   <div class="icon-picker-container">
     <label>Icon:</label>
-    <div class="selected-icon-preview" @click="togglePicker">
-      <span v-if="!modelValue" class="placeholder">Select Icon</span>
-      <template v-else>
-        <img 
-          v-if="modelValue && modelValue.startsWith('/')" 
-          :src="getSvgUrl(modelValue)" 
-          :alt="modelValue" 
-          class="preview-icon svg-icon"
-          @error="onIconError"
+    
+    <!-- Add a custom input option -->
+    <div class="icon-input-container">
+      <div class="selected-icon-preview" @click="togglePicker">
+        <span v-if="!modelValue" class="placeholder">Select Icon</span>
+        <template v-else>
+          <img 
+            v-if="modelValue && modelValue.startsWith('/')" 
+            :src="getSvgUrl(modelValue)" 
+            :alt="modelValue" 
+            class="preview-icon svg-icon"
+            @error="onIconError"
+          >
+          <i 
+            v-else-if="modelValue"
+            :class="modelValue"
+            class="preview-icon fa-icon"
+            aria-hidden="true"
+          ></i>
+          <span class="icon-text">{{ modelValue }}</span>
+        </template>
+        <button type="button" class="toggle-btn">{{ showPicker ? 'Hide' : 'Choose' }}</button>
+      </div>
+      
+      <!-- Add custom icon input field -->
+      <div class="custom-icon-input">
+        <input 
+          type="text" 
+          v-model="customIconInput" 
+          placeholder="Enter custom icon e.g., fa-solid fa-star" 
+          @input="handleCustomIconInput"
+          @keydown.enter="applyCustomIcon"
         >
-        <i 
-          v-else-if="modelValue"
-          :class="modelValue"
-          class="preview-icon fa-icon"
-          aria-hidden="true"
-        ></i>
-        <span class="icon-text">{{ modelValue }}</span>
-      </template>
-      <button type="button" class="toggle-btn">{{ showPicker ? 'Hide' : 'Choose' }}</button>
+        <button type="button" @click="applyCustomIcon" class="apply-btn">Apply</button>
+      </div>
     </div>
 
     <div v-if="showPicker" class="picker-dropdown">
@@ -66,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { extractIconsFromLocations } from '../services/api';
 import { discoverFontAwesomeIcons } from '../utils/fontAwesomeIcons';
 
@@ -84,6 +100,69 @@ const searchTerm = ref('');
 const allAvailableIcons = ref([]);
 const loadingError = ref(null);
 let eventSource = null;
+
+// Add custom icon input functionality
+const customIconInput = ref('');
+
+// Initialize with current value if any
+onMounted(() => {
+  if (props.modelValue) {
+    customIconInput.value = props.modelValue;
+  }
+  
+  fetchAvailableIcons();
+  setupSSEListener();
+});
+
+// Handle custom icon input
+function handleCustomIconInput() {
+  // Allow user to type any value - we'll format it when they apply
+}
+
+// Apply the custom icon
+function applyCustomIcon() {
+  if (!customIconInput.value.trim()) return;
+  
+  let iconValue = customIconInput.value.trim();
+  
+  // If user only entered the icon name without prefix, add the fa-solid prefix
+  if (!iconValue.includes(' ') && !iconValue.startsWith('fa-') && !iconValue.startsWith('/')) {
+    iconValue = `fa-solid fa-${iconValue}`;
+  }
+  // If user entered something like "star" or "fa-star", add the proper prefix
+  else if (!iconValue.includes(' ') && iconValue.startsWith('fa-')) {
+    iconValue = `fa-solid ${iconValue}`;
+  }
+  // If user entered "fas fa-something" format, convert to new format
+  else if (iconValue.startsWith('fas fa-')) {
+    iconValue = iconValue.replace('fas fa-', 'fa-solid fa-');
+  }
+  else if (iconValue.startsWith('far fa-')) {
+    iconValue = iconValue.replace('far fa-', 'fa-regular fa-');
+  }
+  else if (iconValue.startsWith('fab fa-')) {
+    iconValue = iconValue.replace('fab fa-', 'fa-brands fa-');
+  }
+  
+  // Update the model value
+  emit('update:modelValue', iconValue);
+  
+  // Add this custom icon to our available icons if it's not already there
+  if (!allAvailableIcons.value.includes(iconValue) && 
+      (iconValue.startsWith('fa-solid') || iconValue.startsWith('fa-regular') || iconValue.startsWith('fa-brands'))) {
+    allAvailableIcons.value.push(iconValue);
+    allAvailableIcons.value.sort();
+  }
+}
+
+// Watch for changes to the model value
+watch(() => props.modelValue, (newValue) => {
+  if (newValue) {
+    customIconInput.value = newValue;
+  } else {
+    customIconInput.value = '';
+  }
+});
 
 // Load icons directly and from locations
 async function fetchAvailableIcons() {
@@ -279,6 +358,7 @@ function togglePicker() {
 
 function selectIcon(icon) {
   emit('update:modelValue', icon);
+  customIconInput.value = icon || '';
   showPicker.value = false;
 }
 
@@ -449,5 +529,38 @@ label {
   border: 1px solid #e74c3c;
   border-radius: 4px;
   margin-bottom: 10px;
+}
+
+.icon-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-icon-input {
+  display: flex;
+  gap: 8px;
+}
+
+.custom-icon-input input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.apply-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.apply-btn:hover {
+  background: #45a049;
 }
 </style>

@@ -11,7 +11,7 @@ async function registerCommands(client, token) {
       // User request command with subcommands
       {
         name: 'request',
-        description: 'Submit location requests for SoulMap',
+        description: 'Submit location requests for Soulmap',
         options: [
           {
             name: 'new',
@@ -62,7 +62,7 @@ async function registerCommands(client, token) {
       // Admin command with subcommands
       {
         name: 'admin',
-        description: 'Manage SoulMap locations (admin only)',
+        description: 'Manage Soulmap locations (admin only)',
         options: [
           {
             name: 'new',

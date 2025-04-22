@@ -19,12 +19,12 @@ async function updateLeaderboard(client, getContributorLeaderboard, getLeaderboa
     
     // Create embed for the leaderboard
     const embed = new EmbedBuilder()
-      .setTitle('🏆 SoulMap Contributors Leaderboard 🏆')
+      .setTitle('🏆 Soulmap Contributors Leaderboard 🏆')
       .setColor('#FFD700') // Gold color
       .setDescription('Top contributors based on implemented location coordinates')
       .setTimestamp()
       .setFooter({ 
-        text: `SoulMap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion}` 
+        text: `Soulmap v${versionInfo.mapVersion} | Preludes ${versionInfo.gameVersion}` 
       });
     
     // Format contributors list
