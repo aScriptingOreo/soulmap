@@ -2,7 +2,8 @@
  * Discord webhook service for logging admin actions
  */
 
-const WEBHOOK_URL = 'https://discord.com/api/webhooks/1363590769708892382/ydWe7U4-5WQ1q0QEw92UQe9jf6WIsUWtgrp7DcIP3odPxXoL9kmhHrYvzeKn6fPIwLcX';
+// Read webhook URL from environment variable (Vite exposes VITE_ prefixed vars)
+const WEBHOOK_URL = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
 const CHARACTER_LIMIT = 1024;
 
 /**
@@ -136,6 +137,12 @@ function getChanges(oldData, newData) {
  * @param {string} [options.color] - Hex color for the Discord embed (without #)
  */
 export async function sendLogToDiscord({ action, user, data, oldData, color }) {
+  // Check if webhook URL is configured
+  if (!WEBHOOK_URL) {
+    console.warn('Discord webhook URL is not configured. Skipping log.');
+    return false;
+  }
+  
   // Determine color based on action
   if (!color) {
     switch (action.toLowerCase()) {

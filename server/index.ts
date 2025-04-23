@@ -3,8 +3,8 @@ import cors from 'cors';
 import { createServer } from 'http';
 import db from './db';
 import fetch from 'node-fetch';
-// Remove the problematic import
-// import adminRoutes from './src/routes/admin.js';
+import adminRouter from './src/routes/admin.js';
+import { authenticateAdmin } from './src/middleware/auth.js';
 
 const app = express();
 const server = createServer(app);
@@ -435,6 +435,52 @@ app.get('/api/admin/categories', async (req, res) => {
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Add the new endpoint for creating locations - place it before the existing location routes
+app.post('/api/admin/locations/new', async (req, res) => {
+  const { coordinates, ...restData } = req.body;
+  
+  try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
+    // Ensure required fields exist
+    if (!restData.name || !restData.type) {
+      return res.status(400).json({ error: 'Name and type are required fields' });
+    }
+    
+    // Create a new location with data from the request
+    const newLocation = await prisma.location.create({
+      data: {
+        name: restData.name,
+        description: restData.description || '',
+        type: restData.type,
+        // Handle coordinates based on schema (Json type)
+        coordinates: coordinates || [[0, 0]],
+        icon: restData.icon || null,
+        iconSize: restData.iconSize ?? 1,
+        iconColor: restData.iconColor || '#ffffff',
+        radius: restData.radius ?? 0,
+        lore: restData.lore || '',
+        spoilers: restData.spoilers || '',
+        mediaUrl: restData.mediaUrl || [],
+        isCoordinateSearch: !!restData.isCoordinateSearch,
+        noCluster: !!restData.noCluster,
+        exactCoordinates: restData.exactCoordinates || null,
+        submittedBy: 'admin-panel',
+        approvedBy: 'admin-panel'
+      }
+    });
+    
+    // Return the newly created location
+    res.status(201).json(newLocation);
+  } catch (error) {
+    console.error('Error creating new location:', error);
+    res.status(500).json({ error: 'Failed to create location' });
   }
 });
 

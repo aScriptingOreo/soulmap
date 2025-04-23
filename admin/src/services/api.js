@@ -4,9 +4,9 @@
 
 import { discoverFontAwesomeIcons } from '../utils/fontAwesomeIcons';
 
-// Use the backend API regardless of environment
-// Docker networking will handle routing through the proxy
-const API_BASE = '/api';
+// Define the API base URLs correctly
+const API_BASE_URL = '/api'; // For public endpoints if needed
+const ADMIN_API_BASE_URL = '/api/admin'; // For admin endpoints
 
 // For now, we're using a simple API token approach
 // In a real app, this would be handled via proper authentication
@@ -16,104 +16,125 @@ const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_API_TOKEN || 'dev-token';
  * Make an authenticated API request
  */
 async function apiRequest(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
-  
+  // The 'endpoint' parameter should already be the full path, e.g., /api/admin/locations
+  const url = endpoint; // Use the endpoint directly, DO NOT prepend API_BASE_URL here
+
   const headers = {
     'Content-Type': 'application/json',
-    'X-Admin-Token': ADMIN_TOKEN,
+    // Use Authorization header standard
+    'Authorization': `Bearer ${ADMIN_TOKEN}`, 
     ...options.headers
   };
   
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `API error: ${response.status}`);
+  console.log(`[apiRequest] Fetching: ${options.method || 'GET'} ${url}`); // Log the final URL
+
+  try { // Add try block for better error handling
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})); // Try to parse error JSON
+      console.error(`API Error Response (${response.status} for ${url}):`, errorData);
+      // Use error message from response if available, otherwise status
+      throw new Error(errorData.error || `API error: ${response.status}`); 
+    }
+    
+    // Handle 204 No Content for DELETE
+    if (response.status === 204) {
+      return null; 
+    }
+
+    // Check if response is JSON before parsing
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+      return await response.json();
+    } else {
+      // Handle non-JSON responses if necessary, or return null/empty object
+      console.warn(`API response for ${url} was not JSON.`);
+      return await response.text(); // Or return null;
+    }
+  } catch (error) {
+    console.error(`API Request Failed for ${url}:`, error);
+    // Re-throw a consistent error format
+    throw new Error(error.message.startsWith('API error:') ? error.message : `API error: ${error.message || 'Network Error'}`);
   }
-  
-  return response.json();
 }
 
 /**
- * Get all requests
+ * Get all requests (Assuming this uses /api/admin/requests)
  */
 export async function getRequests() {
-  return apiRequest('/admin/requests');
+  return apiRequest(`${ADMIN_API_BASE_URL}/requests`); // Pass full path
 }
 
 /**
- * Update request status
+ * Update request status (Assuming this uses /api/admin/requests/:id/status)
  */
 export async function updateRequestStatus(id, status, reason = '') {
-  return apiRequest(`/admin/requests/${id}/status`, {
+  return apiRequest(`${ADMIN_API_BASE_URL}/requests/${id}/status`, { // Pass full path
     method: 'POST',
     body: JSON.stringify({ status, reason })
   });
 }
 
 /**
- * Get all locations
+ * Get all locations (Uses public /api/locations)
  */
 export async function getLocations() {
-  return apiRequest('/locations');
+  return apiRequest(`${API_BASE_URL}/locations`); // Pass full path
 }
 
 /**
- * Get single location by ID
- */
-/**export async function getLocation(id) {
-  return apiRequest(`/locations/${id}`);
-}
-
-/**
- * Get a single location by ID
+ * Get a single location by ID (Uses admin /api/admin/locations/:id)
  * @param {string} id - Location ID
  * @returns {Promise<Object>} Location data
  */
 export function getLocation(id) {
-  try {
-    return apiRequest(`/admin/locations/${id}`);
-  } catch (error) {
-    console.error(`Failed to fetch location ${id}:`, error);
-    throw error;
-  }
+  return apiRequest(`${ADMIN_API_BASE_URL}/locations/${id}`); // Pass full path
 }
 
 /**
- * Get all unique location categories
+ * Get all unique location categories (Uses admin /api/admin/categories)
  */
 export async function getCategories() {
-  return apiRequest('/admin/categories');
+  return apiRequest(`${ADMIN_API_BASE_URL}/categories`); // Pass full path
 }
 
 /**
- * Create a new location
+ * Create a new location (Uses dedicated endpoint for creation)
  */
 export async function createLocation(locationData) {
-  return apiRequest('/admin/locations', {
+  const url = `${ADMIN_API_BASE_URL}/locations/new`; // Use new dedicated endpoint
+  console.log(`Attempting to create location via POST ${url}`);
+  return apiRequest(url, { 
     method: 'POST',
     body: JSON.stringify(locationData)
   });
 }
 
 /**
- * Update an existing location
+ * Update an existing location (Uses admin /api/admin/locations/:id)
  */
 export async function updateLocation(id, locationData) {
-  return apiRequest(`/admin/locations/${id}`, {
+  const url = `${ADMIN_API_BASE_URL}/locations/${id}`; // Correct path: /api/admin/locations/:id
+  console.log(`Attempting to update location via PUT ${url}`);
+   // Pass the full 'url' directly to apiRequest
+  return apiRequest(url, {
     method: 'PUT',
     body: JSON.stringify(locationData)
   });
 }
 
 /**
- * Delete a location
+ * Delete a location (Uses admin /api/admin/locations/:id)
  */
 export async function deleteLocation(id) {
-  return apiRequest(`/admin/locations/${id}`, {
+  const url = `${ADMIN_API_BASE_URL}/locations/${id}`; // Correct path: /api/admin/locations/:id
+  console.log(`Attempting to delete location via DELETE ${url}`);
+   // Pass the full 'url' directly to apiRequest
+  return apiRequest(url, {
     method: 'DELETE'
   });
 }

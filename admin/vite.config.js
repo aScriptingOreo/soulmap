@@ -38,7 +38,18 @@ export default defineConfig({
       '/api': {
         target: `http://soulmap:${serverPort}`,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure: (proxy, _options) => { // Add this configure block
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log(`[Proxy Req] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log(`[Proxy Res] ${req.method} ${req.originalUrl} -> ${proxyRes.statusCode}`);
+          });
+          proxy.on('error', (err, req, _res) => {
+            console.error('[Proxy Error]', err);
+          });
+        }
       }
     },
     

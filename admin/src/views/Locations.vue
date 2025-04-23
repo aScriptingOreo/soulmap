@@ -16,7 +16,8 @@
       
       <select v-model="categoryFilter" class="category-filter">
         <option value="">All Categories</option>
-        <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+        <!-- Use clean categories for the dropdown options -->
+        <option v-for="category in cleanCategories" :key="category" :value="category">{{ category }}</option>
       </select>
       
       <div class="sort-options">
@@ -189,7 +190,11 @@ import { showNotification } from '../services/notificationService';
 
 // State
 const locationsList = ref([]);
-const categories = ref([]); // Store categories exactly as from API
+const categories = ref([]); // Store categories exactly as from API (including disabled marker)
+const cleanCategories = computed(() => { // New computed property for unique, clean category names
+  const uniqueClean = new Set(categories.value.map(cat => getCleanCategory(cat)));
+  return Array.from(uniqueClean).sort();
+});
 const categoryStyles = ref({}); // Stores { type: { backgroundColor, color } }
 const loading = ref(true);
 const error = ref(null);
@@ -287,7 +292,7 @@ function getCategoryStyle(type) {
 async function fetchCategories() {
   try {
     const categoryList = await api.getCategories();
-    categories.value = categoryList; // Store exactly as received
+    categories.value = categoryList; // Store exactly as received (including disabled marker)
   } catch (error) {
     console.error('Error fetching categories:', error);
     categories.value = [];
@@ -304,26 +309,31 @@ const filteredLocations = computed(() => {
     result = result.filter(loc => 
       loc.name?.toLowerCase().includes(searchLower) || 
       loc.description?.toLowerCase().includes(searchLower) ||
-      loc.type?.toLowerCase().includes(searchLower)
+      getCleanCategory(loc.type)?.toLowerCase().includes(searchLower) // Search clean category name
     );
   }
   
-  // Filter by category (exact match)
+  // Filter by category (using clean category name)
   if (categoryFilter.value) {
-    result = result.filter(loc => loc.type === categoryFilter.value);
+    result = result.filter(loc => getCleanCategory(loc.type) === categoryFilter.value);
   }
   
   // Sort the results
   result.sort((a, b) => {
+    const cleanTypeA = getCleanCategory(a.type);
+    const cleanTypeB = getCleanCategory(b.type);
+    
     switch (sortOption.value) {
       case 'name_asc':
         return (a.name || '').localeCompare(b.name || '');
       case 'name_desc':
         return (b.name || '').localeCompare(a.name || '');
       case 'category_asc':
-        return (a.type || '').localeCompare(b.type || '');
+        // Sort by clean category name
+        return cleanTypeA.localeCompare(cleanTypeB);
       case 'category_desc':
-        return (b.type || '').localeCompare(a.type || '');
+        // Sort by clean category name
+        return cleanTypeB.localeCompare(cleanTypeA);
       case 'recent':
         return new Date(b.updatedAt || b.lastModified || 0) - new Date(a.updatedAt || a.lastModified || 0);
       default:
@@ -708,20 +718,19 @@ async function toggleLocationVisibility(location) {
 
 <style scoped>
 .locations-container {
-  padding: 20px 0;
+  padding: 20px 15px; /* Add horizontal padding */
   position: relative; /* Needed if any child uses absolute positioning relative to this */
+  max-width: 1200px; /* Limit maximum width */
+  margin: 0 auto; /* Center the container */
+  box-sizing: border-box; /* Include padding in width calculation */
 }
 
 .header {
   display: flex;
-  /* justify-content: space-between; No longer needed for button */
   justify-content: flex-start; /* Align title/elements to the start */
   align-items: center;
   margin-bottom: 20px;
 }
-
-/* Remove old add-btn styles or repurpose if needed elsewhere */
-/* .add-btn { ... } */
 
 .filters {
   display: flex;
@@ -775,12 +784,18 @@ async function toggleLocationVisibility(location) {
 table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed; /* Use fixed layout */
 }
 
 th, td {
   padding: 12px 16px;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  /* Remove border-bottom from individual cells */
+  /* border-bottom: 1px solid #eee; */
+  overflow: hidden; /* Prevent content overflow */
+  text-overflow: ellipsis; /* Add ellipsis for overflow */
+  vertical-align: middle; /* Vertically center content */
+  line-height: 1.5; /* Consistent line height */
 }
 
 th {
@@ -788,21 +803,75 @@ th {
   font-weight: 600;
   cursor: pointer;
   user-select: none;
+  border-bottom: 1px solid #ddd; /* Keep header bottom border */
 }
 
-th:hover {
-  background-color: #eaeaea;
+/* Column specific styles */
+.icon-cell {
+  width: 50px; /* Reduced width */
+  text-align: center;
 }
 
-.sort-indicator {
-  margin-left: 5px;
-  font-size: 10px;
+/* Apply the same width to the header cell for the icon column */
+th:first-child { /* Target the first header cell (Icon) */
+  width: 50px;
+  text-align: center; /* Ensure header text is also centered */
 }
 
 .name-cell {
   font-weight: 500;
+  width: 25%;
+  white-space: nowrap; /* Prevent name wrapping */
 }
 
+.category-cell {
+  width: 20%;
+  white-space: nowrap;
+}
+
+.coords-cell {
+  width: 25%;
+  font-family: monospace;
+}
+
+.actions-cell {
+  width: 130px; /* Fixed width for actions */
+  white-space: nowrap;
+  display: flex;
+  gap: 8px;
+  align-items: center; /* Vertically center buttons */
+  justify-content: flex-start; /* Align buttons to the start */
+  /* border-bottom is handled by the td rule */
+}
+
+/* Icon styles */
+.location-icon {
+  display: inline-flex; /* Use inline-flex for alignment */
+  align-items: center;
+  justify-content: center;
+  width: 28px; /* Increased width */
+  height: 28px; /* Increased height */
+  vertical-align: middle; /* Align with text if needed */
+}
+
+.location-icon.svg-icon {
+  object-fit: contain; /* Ensure SVG scales correctly */
+}
+
+.location-icon.fa-icon {
+  font-size: 20px; /* Increased Font Awesome icon size */
+}
+
+.no-icon {
+  display: inline-block;
+  width: 28px; /* Match icon size */
+  text-align: center;
+  font-weight: bold;
+  color: #ccc;
+  font-size: 20px; /* Match icon size */
+}
+
+/* Category badge */
 .category-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -810,25 +879,18 @@ th:hover {
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
-  /* Colors are now applied via :style binding */
+  white-space: nowrap;
 }
 
-/* Remove specific category styles */
-/* .town { ... } */
-/* .poi { ... } */
-/* .dungeon { ... } */
-/* .resource { ... } */
-/* .social { ... } */
-/* .boss { ... } */
-/* .quest { ... } */
-/* .vendor { ... } */
-/* .other { ... } */
-
-.coords-cell .coord {
-  font-family: monospace;
-  margin-bottom: 2px;
+.category-badge .disabled-indicator {
+  font-weight: normal;
+  font-style: italic;
+  opacity: 0.8;
+  margin-left: 4px;
+  font-size: 0.9em;
 }
 
+/* Coordinates display */
 .coord-summary {
   font-family: monospace;
 }
@@ -842,109 +904,60 @@ th:hover {
   margin-left: 4px;
 }
 
-.tags-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag {
-  background: #f0f0f0;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 12px;
-}
-
-.actions-cell {
-  white-space: nowrap;
-  display: flex; /* Use flexbox for button alignment */
-  gap: 8px; /* Add space between buttons */
-}
-
-.edit-btn, .delete-btn, .toggle-vis-btn { /* Include new button */
-  padding: 6px 10px;
-  /* margin-right: 8px; Remove margin, use gap */
+/* Action Buttons */
+.action-btn {
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
-  display: inline-flex; /* Align icon and text if any */
+  display: flex; /* Use flex for centering icon */
   align-items: center;
   justify-content: center;
+  font-size: 16px; /* Icon size */
+  transition: all 0.2s ease;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0; /* Prevent shrinking */
 }
 
-/* ... existing edit/delete button styles ... */
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
 
-.toggle-vis-btn {
-  width: 30px; /* Fixed width for icon button */
-  padding: 6px 0; /* Adjust padding */
+.edit-btn {
+  background-color: #3498db; /* Blue */
+}
+.edit-btn:hover {
+  background-color: #2980b9;
 }
 
 .toggle-vis-btn.enabled {
-  background-color: #2ecc71; /* Green for enabled */
-  color: white;
+  background-color: #2ecc71; /* Green */
 }
 .toggle-vis-btn.enabled:hover {
   background-color: #27ae60;
 }
 
 .toggle-vis-btn.disabled {
-  background-color: #bdc3c7; /* Grey for disabled */
-  color: #7f8c8d;
+  background-color: #95a5a6; /* Gray */
 }
 .toggle-vis-btn.disabled:hover {
-  background-color: #95a5a6;
+  background-color: #7f8c8d;
 }
 
-.category-badge .disabled-indicator {
-  font-weight: normal;
-  font-style: italic;
-  opacity: 0.8;
-  margin-left: 4px;
-  font-size: 0.9em;
+.delete-btn {
+  background-color: #e74c3c; /* Red */
 }
-/* Add this style when tooltip is visible */
-.location-tooltip { /* Or check based on v-if condition if easier */
-  opacity: 1;
+.delete-btn:hover {
+  background-color: #c0392b;
 }
 
-
-.location-tooltip h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  border-bottom: 1px solid #555;
-  padding-bottom: 4px;
-}
-
-.location-tooltip p {
-  margin: 4px 0;
-}
-
-.location-tooltip strong {
-  color: #aaa;
-}
-
-/* Style table rows for hover indication (optional) */
-tbody tr:hover {
-  background-color: #f8f9fa; /* Light background on hover */
-}
-
-/* Style for disabled rows (optional) */
-.disabled-row {
-  opacity: 0.6;
-  background-color: #f8f8f8; /* Slightly different background */
-  /* Add transition for smoother hover effect */
-  transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out; 
-}
-.disabled-row:hover {
-  opacity: 0.9; /* Increase opacity more on hover */
-  background-color: #f0f0f0;
-}
-
-/* Fix tooltip styling */
+/* Tooltip */
 .location-tooltip {
   position: fixed;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: rgba(0, 0, 0, 0.85);
   color: white;
   padding: 10px 15px;
   border-radius: 6px;
@@ -955,14 +968,9 @@ tbody tr:hover {
   z-index: 1100;
   pointer-events: none;
   white-space: normal;
-  opacity: 1; /* Set default opacity to 1 instead of relying on :has() */
+  opacity: 1;
   transition: opacity 0.2s ease-in-out;
 }
-
-/* Remove problematic :has() selector since it's not widely supported */
-/* .location-tooltip:has(h4) { 
-  opacity: 1;
-} */
 
 .location-tooltip h4 {
   margin: 0 0 8px 0;
@@ -979,24 +987,26 @@ tbody tr:hover {
   color: #aaa;
 }
 
-/* Fix for Font Awesome icons to be centered like SVG ones */
-.location-icon.fa-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  text-align: center;
-  margin: 0 auto; /* Center horizontally */
+/* Row styles */
+tbody tr { /* Apply border to the table row */
+  border-bottom: 1px solid #eee;
 }
 
-/* Icon cell styling to ensure consistent layout */
-.icon-cell {
-  width: 40px; /* Fixed width */
-  text-align: center; /* Center contents */
+tbody tr:hover {
+  background-color: #f8f9fa;
 }
 
-/* Restore the floating add button style */
+.disabled-row {
+  opacity: 0.6;
+  background-color: #f8f8f8;
+  transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out;
+}
+.disabled-row:hover {
+  opacity: 0.9;
+  background-color: #f0f0f0;
+}
+
+/* Floating Add Button */
 .fab-add-btn {
   position: fixed;
   bottom: 24px;
@@ -1004,7 +1014,7 @@ tbody tr:hover {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background-color: #2196F3; /* Nice material blue */
+  background-color: #2196F3;
   color: white;
   border: none;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
@@ -1013,75 +1023,23 @@ tbody tr:hover {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  z-index: 100; /* Make sure it appears above other content */
+  z-index: 100;
 }
 
 .fab-add-btn:hover {
-  background-color: #1976D2; /* Darker blue on hover */
+  background-color: #1976D2;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   transform: scale(1.05);
 }
 
 .fab-add-btn i {
-  font-size: 24px; /* Larger plus icon */
+  font-size: 24px;
 }
 
-/* ...rest of the existing styles... */
-.actions-cell {
-  white-space: nowrap;
-  display: flex;
-  gap: 8px; /* Space between buttons */
-}
-
-/* Replace the existing button styles with these new ones */
-.action-btn {
-  width: 36px; /* Fixed width for consistent appearance */
-  height: 36px; /* Square buttons */
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px; /* Larger icons */
-  transition: all 0.2s ease;
-  color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* Edit button - blue */
-.edit-btn {
-  background-color: #3498db;
-}
-.edit-btn:hover {
-  background-color: #2980b9;
-}
-
-/* Toggle visibility button - green when enabled, gray when disabled */
-.toggle-vis-btn.enabled {
-  background-color: #2ecc71;
-}
-.toggle-vis-btn.enabled:hover {
-  background-color: #27ae60;
-}
-
-.toggle-vis-btn.disabled {
-  background-color: #95a5a6;
-}
-.toggle-vis-btn.disabled:hover {
-  background-color: #7f8c8d;
-}
-
-/* Delete button - red */
-.delete-btn {
-  background-color: #e74c3c;
-}
-.delete-btn:hover {
-  background-color: #c0392b;
-}
+/* Removed duplicate/conflicting styles */
+/* Removed duplicate .actions-cell */
+/* Removed duplicate .action-btn */
+/* Removed duplicate .edit-btn, .toggle-vis-btn, .delete-btn hover/color styles */
+/* Removed duplicate td vertical-align */
+/* Removed duplicate icon sizing/alignment styles */
 </style>

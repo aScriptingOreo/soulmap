@@ -1,7 +1,15 @@
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
 
+console.log('Admin router file loaded.'); // Add this log
+
 const router = express.Router();
+
+// Add middleware to log all requests to this router
+router.use((req, res, next) => {
+  console.log(`Admin route hit: ${req.method} ${req.originalUrl}`); // Add this log
+  next();
+});
 
 /**
  * Get all unique location categories
@@ -45,6 +53,87 @@ router.get('/locations/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching location:', error);
     res.status(500).json({ error: 'Failed to fetch location' });
+  }
+});
+
+/**
+ * Create a new location
+ */
+router.post('/locations', async (req, res) => {
+  console.log('POST /locations handler reached.'); // Add this log
+  // Ensure coordinates are handled correctly
+  const { coordinates, ...restData } = req.body; 
+  
+  const data = { ...restData };
+
+  // Handle coordinates based on your schema (assuming JSON for flexibility)
+  if (coordinates && Array.isArray(coordinates)) {
+     data.coordinates = coordinates; 
+  } else {
+     // Provide a default if coordinates are missing or invalid
+     data.coordinates = [[0, 0]]; 
+  }
+
+  // Add default values or handle missing optional fields if necessary
+  data.iconSize = data.iconSize ?? 1;
+  data.iconColor = data.iconColor ?? '#ffffff';
+  data.radius = data.radius ?? 0;
+  data.mediaUrl = data.mediaUrl ?? [];
+  data.isCoordinateSearch = data.isCoordinateSearch ?? false;
+  data.noCluster = data.noCluster ?? false;
+  data.exactCoordinates = data.exactCoordinates ?? null;
+  // You might want to set submittedBy/approvedBy based on the authenticated user here
+
+  try {
+    const newLocation = await prisma.location.create({
+      data,
+    });
+    console.log('Location created successfully:', newLocation.id); // Add success log
+    res.status(201).json(newLocation); // Use 201 Created status
+  } catch (error) {
+    console.error('Error creating location:', error.message || error); 
+    res.status(500).json({ error: 'Failed to create location' });
+  }
+});
+
+/**
+ * Create a new location (dedicated endpoint)
+ */
+router.post('/locations/new', async (req, res) => {
+  console.log('POST /locations/new handler reached.'); // Log for debugging
+  
+  // Ensure coordinates are handled correctly
+  const { coordinates, ...restData } = req.body; 
+  
+  const data = { ...restData };
+
+  // Handle coordinates based on your schema
+  if (coordinates && Array.isArray(coordinates)) {
+     data.coordinates = coordinates; 
+  } else {
+     // Provide a default if coordinates are missing or invalid
+     data.coordinates = [[0, 0]]; 
+  }
+
+  // Add default values or handle missing optional fields
+  data.iconSize = data.iconSize ?? 1;
+  data.iconColor = data.iconColor ?? '#ffffff';
+  data.radius = data.radius ?? 0;
+  data.mediaUrl = data.mediaUrl ?? [];
+  data.isCoordinateSearch = data.isCoordinateSearch ?? false;
+  data.noCluster = data.noCluster ?? false;
+  data.exactCoordinates = data.exactCoordinates ?? null;
+  
+  try {
+    console.log('Creating new location with data:', data);
+    const newLocation = await prisma.location.create({
+      data,
+    });
+    console.log('Location created successfully:', newLocation.id);
+    res.status(201).json(newLocation);
+  } catch (error) {
+    console.error('Error creating location:', error);
+    res.status(500).json({ error: 'Failed to create location' });
   }
 });
 

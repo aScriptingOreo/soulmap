@@ -563,4 +563,35 @@ label {
 .apply-btn:hover {
   background: #45a049;
 }
+
+/* Fix SVG icon sizing in the icon picker */
+.preview-icon.svg-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  vertical-align: middle;
+  object-fit: contain; /* Preserve aspect ratio */
+  max-width: 24px;
+  max-height: 24px;
+}
+
+.grid-icon.svg-icon {
+  max-width: 24px;
+  max-height: 24px;
+  width: 24px;
+  height: 24px;
+  object-fit: contain; /* Preserve aspect ratio */
+}
+
+/* Ensure Font Awesome icons have consistent size */
+.preview-icon.fa-icon,
+.grid-icon.fa-icon {
+  display: inline-flex; /* Better centering */
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 24px; /* Consistent width */
+  height: 24px; /* Consistent height */ 
+  font-size: 18px; /* Adjust size as needed */
+}
 </style>

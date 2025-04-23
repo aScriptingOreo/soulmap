@@ -59,6 +59,7 @@ services:
       - VITE_ADMIN_ROLE_ID=1309700533749289012
       - VITE_MANAGER_ROLE_ID=1363588579506262056
       - DOMAIN=${DOMAIN}  # Pass the DOMAIN variable from .env
+      - VITE_DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL} # Add this line
     volumes:
       - ./admin:/app
       - /app/node_modules

@@ -73,7 +73,7 @@ function logout() {
 <style scoped>
 .app {
   font-family: Arial, sans-serif;
-  max-width: 1200px;
+  /* Removed max-width from here to allow header to be controlled independently */
   margin: 0 auto;
   padding: 20px;
 }
@@ -84,6 +84,11 @@ function logout() {
   align-items: center; /* Align items vertically */
   flex-wrap: wrap; /* Allow wrapping on smaller screens */
   gap: 15px; /* Add gap between elements */
+  max-width: 1100px; /* Limit header width */
+  margin-left: auto;  /* Center the header */
+  margin-right: auto; /* Center the header */
+  padding-left: 15px; /* Add some padding if needed */
+  padding-right: 15px; /* Add some padding if needed */
 }
 
 .app-header h1 {
@@ -149,7 +154,7 @@ function logout() {
 
 .discord-icon {
   margin-right: 8px;
-  font-size: 1.2em; /* Make icon slightly larger */
+  font-size: 1.3em; /* Increased icon size */
 }
 
 .logout-icon-button {
@@ -162,7 +167,7 @@ function logout() {
   background-color: #f1f1f1; /* Light grey background */
   color: #d32f2f; /* Red icon color */
   text-decoration: none;
-  font-size: 16px; /* Icon size */
+  font-size: 18px; /* Increased icon size */
   border: 1px solid #ddd;
   transition: all 0.2s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);

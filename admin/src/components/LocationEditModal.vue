@@ -47,25 +47,45 @@
         </div>
         
         <div class="form-group coordinates-section">
-          <label>Coordinates: <span class="required">*</span></label>
-          <div v-for="(coords, index) in formData.coordinates" :key="index" class="coords-row">
-            <div class="coord-container">
-              <input type="text" 
-                     v-model="formData.coordinates[index]" 
-                     @input="validateCoordinates(index)" 
-                     placeholder="[X, Y]"
-                     class="coord-input">
-              <button type="button" @click="removeCoordinate(index)" class="remove-btn">✕</button>
-            </div>
-            <div class="error-message" v-if="coordinateErrors[index]">
-              {{ coordinateErrors[index] }}
-            </div>
+          <div class="coords-header" @click="coordsCollapsed = !coordsCollapsed">
+            <i 
+              class="fa-solid fa-chevron-right toggle-arrow" 
+              :class="{ 'expanded': !coordsCollapsed }"
+            ></i>
+            <label>
+              Coordinates: <span class="required">*</span> 
+              <span class="coords-count">({{ formData.coordinates.length }} coordinates)</span>
+            </label>
           </div>
-          <div v-if="validationErrors.coordinates" class="error-message">{{ validationErrors.coordinates }}</div>
           
-          <div class="coords-actions">
-            <button type="button" @click="addCoordinate" class="add-btn">+ Add Coordinate</button>
-            <button type="button" @click="parseCoordinates" class="parse-btn">Parse Bulk Coordinates</button>
+          <div v-show="!coordsCollapsed" class="coords-content">
+            <div v-for="(coords, index) in formData.coordinates" :key="index" class="coords-row">
+              <div class="coord-container">
+                <div class="coord-index">#{{ index + 1 }}</div>
+                <input type="text" 
+                       v-model="formData.coordinates[index]" 
+                       @input="validateCoordinates(index)" 
+                       placeholder="[X, Y]"
+                       class="coord-input">
+                <button type="button" @click="removeCoordinate(index)" class="remove-btn" title="Remove coordinate">
+                  <i class="fa-solid fa-times"></i>
+                </button>
+              </div>
+              <div class="error-message" v-if="coordinateErrors[index]">
+                {{ coordinateErrors[index] }}
+              </div>
+            </div>
+            
+            <div v-if="validationErrors.coordinates" class="error-message">{{ validationErrors.coordinates }}</div>
+            
+            <div class="coords-actions">
+              <button type="button" @click="addCoordinate" class="add-btn">
+                <i class="fa-solid fa-plus"></i> Add Coordinate
+              </button>
+              <button type="button" @click="parseCoordinates" class="parse-btn">
+                <i class="fa-solid fa-paste"></i> Parse Bulk
+              </button>
+            </div>
           </div>
         </div>
 
@@ -480,6 +500,7 @@ exactCoordinatesText.value = parseExactCoordinates(safeLocation.exactCoordinates
 const coordinateErrors = ref(Array(formData.value.coordinates.length).fill(null));
 const showBulkParser = ref(false);
 const bulkCoordinates = ref('');
+const coordsCollapsed = ref(true); // Start collapsed by default
 
 // Delete confirmation
 const showDeleteConfirm = ref(false);
@@ -554,6 +575,7 @@ function validateAllCoordinates() {
 function addCoordinate() {
   formData.value.coordinates.push('[0, 0]');
   coordinateErrors.value.push(null);
+  coordsCollapsed.value = false; // Expand when adding
 }
 
 function removeCoordinate(index) {
@@ -585,6 +607,7 @@ function processBulkCoordinates() {
   // Close the bulk parser
   showBulkParser.value = false;
   bulkCoordinates.value = '';
+  coordsCollapsed.value = false; // Expand after adding bulk
 }
 
 // Convert string coordinates back to array for saving
@@ -687,6 +710,10 @@ function saveLocation() {
   saveData.mediaUrl = processMediaUrlsForSaving();
   saveData.exactCoordinates = processExactCoordinatesForSaving();
   
+  // Emit the save event. The parent component is responsible for
+  // determining whether to call the create (e.g., /api/admin/locations/new)
+  // or update (e.g., PUT /api/admin/locations/:id) endpoint based on
+  // whether saveData.id is null (for new) or has a value (for update).
   emit('save', saveData);
 }
 
@@ -976,5 +1003,157 @@ select {
   color: #e74c3c;
   font-weight: bold;
   margin-left: 2px;
+}
+
+/* Styles for coordinate index and toggle */
+.coordinates-section {
+  grid-column: span 2; /* Ensure it spans both columns */
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background-color: #fdfdfd;
+  padding: 0; /* Remove padding from section itself */
+  overflow: hidden; /* Needed for smooth transition */
+}
+
+.coords-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #e0e0e0;
+  transition: background-color 0.2s ease;
+}
+
+.coords-header:hover {
+  background-color: #f1f1f1;
+}
+
+.coords-header label {
+  margin-bottom: 0; /* Remove bottom margin for label in header */
+  flex-grow: 1;
+  display: flex; /* Use flex to align count */
+  align-items: center;
+}
+
+.toggle-arrow {
+  margin-right: 12px;
+  color: #555;
+  transition: transform 0.3s ease;
+  font-size: 14px;
+}
+
+.toggle-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.coords-count {
+  margin-left: 8px;
+  font-size: 13px;
+  color: #777;
+  font-weight: normal;
+}
+
+.coords-content {
+  padding: 16px;
+  /* Add transition for smooth expand/collapse if desired, requires height calculation */
+  /* transition: max-height 0.3s ease-out; */
+  /* max-height: 1000px; Set a large max-height for expanded state */
+  /* overflow: hidden; */
+}
+
+/* Remove v-show based hiding if using height transition */
+/* .coordinates-section .coords-content[style*="display: none;"] { */
+  /* max-height: 0; */
+/* } */
+
+.coords-row {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #eee; /* Lighter separator */
+}
+.coords-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.coord-container {
+  display: flex;
+  gap: 10px; /* Increased gap */
+  align-items: center; /* Vertically align items */
+}
+
+.coord-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 35px; /* Slightly wider */
+  height: 36px; /* Match input height */
+  background-color: #e9ecef; /* Lighter background */
+  border-radius: 4px;
+  font-weight: bold;
+  color: #495057; /* Darker text */
+  font-size: 13px;
+}
+
+.coord-input {
+  flex: 1;
+  font-family: monospace;
+  height: 36px; /* Consistent height */
+}
+
+.remove-btn {
+  background: #f8d7da; /* Light red */
+  border: 1px solid #f5c6cb; /* Red border */
+  color: #721c24; /* Dark red text */
+  border-radius: 50%; /* Circular */
+  cursor: pointer;
+  font-size: 12px;
+  width: 28px; /* Fixed size */
+  height: 28px; /* Fixed size */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.remove-btn:hover {
+  background-color: #f5c6cb;
+  border-color: #f1b0b7;
+}
+
+.remove-btn i {
+  line-height: 1; /* Ensure icon is centered */
+}
+
+.coords-actions {
+  display: flex;
+  gap: 10px; /* Increased gap */
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee; /* Separator */
+}
+
+.add-btn,
+.parse-btn {
+  background: #e9ecef; /* Lighter background */
+  border: 1px solid #ced4da; /* Gray border */
+  color: #495057; /* Darker text */
+  border-radius: 4px;
+  padding: 8px 12px; /* Adjusted padding */
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex; /* Align icon and text */
+  align-items: center;
+  gap: 6px; /* Space between icon and text */
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.add-btn:hover,
+.parse-btn:hover {
+  background: #dee2e6;
+  border-color: #adb5bd;
 }
 </style>
