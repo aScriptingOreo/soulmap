@@ -1,13 +1,13 @@
 import express from 'express';
-import { prisma } from '../lib/prisma.js';
+import db from '#db';  // Use database wrapper for consistent handling
 
-console.log('Admin router file loaded.'); // Add this log
+console.log('Admin router file loaded.');
 
 const router = express.Router();
 
 // Add middleware to log all requests to this router
 router.use((req, res, next) => {
-  console.log(`Admin route hit: ${req.method} ${req.originalUrl}`); // Add this log
+  console.log(`Admin route hit: ${req.method} ${req.originalUrl}`);
   next();
 });
 
@@ -16,6 +16,11 @@ router.use((req, res, next) => {
  */
 router.get('/categories', async (req, res) => {
   try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+    
     // Use Prisma findMany with distinct for better type safety and reliability
     const uniqueCategoryObjects = await prisma.location.findMany({
       distinct: ['type'],
@@ -43,6 +48,11 @@ router.get('/categories', async (req, res) => {
 router.get('/locations/:id', async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+
     const location = await prisma.location.findUnique({
       where: { id },
     });
@@ -85,6 +95,11 @@ router.post('/locations', async (req, res) => {
   // You might want to set submittedBy/approvedBy based on the authenticated user here
 
   try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+
     const newLocation = await prisma.location.create({
       data,
     });
@@ -126,6 +141,11 @@ router.post('/locations/new', async (req, res) => {
   
   try {
     console.log('Creating new location with data:', data);
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+
     const newLocation = await prisma.location.create({
       data,
     });
@@ -168,6 +188,11 @@ router.put('/locations/:id', async (req, res) => {
   }
 
   try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+
     const updatedLocation = await prisma.location.update({
       where: { id },
       data,
@@ -190,6 +215,11 @@ router.put('/locations/:id', async (req, res) => {
 router.delete('/locations/:id', async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = await db.getPrismaClient();
+    if (!prisma) {
+      return res.status(500).json({ error: 'Failed to connect to database' });
+    }
+
     await prisma.location.delete({
       where: { id },
     });

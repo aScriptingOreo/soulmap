@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from 'url';
 // Get domain from environment variables
 const domain = process.env.DOMAIN || 'localhost';
 const serverPort = parseInt(process.env.SERVER_PORT || '3715');
+const serverHost = parseInt(process.env.VITE_API_HOST || '3000');
 
 console.log('=== Admin Panel Configuration ===');
 console.log(`Domain: ${domain}`);
@@ -36,7 +37,7 @@ export default defineConfig({
     // API proxy to main server
     proxy: {
       '/api': {
-        target: `http://soulmap:${serverPort}`,
+        target: `http://${serverHost}:${serverPort}`,
         changeOrigin: true,
         secure: false,
         configure: (proxy, _options) => { // Add this configure block

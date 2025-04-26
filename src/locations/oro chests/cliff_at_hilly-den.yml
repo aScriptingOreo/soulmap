@@ -1,8 +1,0 @@
-# src/locations/loot/ode_chest.yml
-name: "[oro] Cliff at hilly-den"
-coordinates: [1995, 3535]
-description: "credits: Dystopia"
-icon: "/SF_chest"
-iconSize: 1.25
-iconColor: "#87ffc9"
-mediaUrl: "https://i.imgur.com/Y7Yk439.jpeg"

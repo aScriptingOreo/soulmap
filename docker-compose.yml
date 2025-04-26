@@ -1,118 +1,113 @@
-networks:
-  proxy:
-    external: true
-  grafana-edge_monitoring:
-    external: true
+#networks:
+  #proxy:
+  #  external: true
+  #grafana-edge_monitoring:
+  #  external: true
 
 services:
   soulmap:
     build:
-      context: .
+      context: ./client/.
       dockerfile: Dockerfile
     container_name: soulmap
+    entrypoint: []  # This will override any ENTRYPOINT from the image
     command: bun dev
     volumes:
-      - .:/app
+      - ./client/:/app
       - /app/node_modules
       - /app/dist
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=${DATABASE_URL}
       - CLIENT_PORT=${CLIENT_PORT}
-      - SERVER_PORT=${SERVER_PORT}
       - DOMAIN=${DOMAIN}
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_API_HOST=${VITE_API_HOST}
+      - SERVER_PORT=${SERVER_PORT}
     ports:
       - "${CLIENT_PORT}:${CLIENT_PORT}"
-      - "${SERVER_PORT}:${SERVER_PORT}"
     networks:
-      - proxy
+    #  - proxy
       - default
     restart: always
-    labels:
-      # Basic Traefik config - just expose the Vite dev server
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      
-      # Single service for the Vite dev server
-      - "traefik.http.services.soulmap.loadbalancer.server.port=${CLIENT_PORT}"
-      
-      # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
-      - "traefik.http.routers.soulmap.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.soulmap.entrypoints=http"
-      - "traefik.http.routers.soulmap.service=soulmap" # Explicitly link router to service
+    #labels:
+    #  # Basic Traefik config - just expose the Vite dev server
+    #  - "traefik.enable=true"
+    #  - "traefik.docker.network=proxy"
+    #  
+    #  # Single service for the Vite dev server
+    #  - "traefik.http.services.soulmap.loadbalancer.server.port=${CLIENT_PORT}"
+    #  
+    #  # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
+    #  - "traefik.http.routers.soulmap.rule=Host(`${DOMAIN}`)"
+    #  - "traefik.http.routers.soulmap.entrypoints=http"
+    #  - "traefik.http.routers.soulmap.service=soulmap" # Explicitly link router to service
     depends_on:
       sm-pg:
         condition: service_healthy
+      smapi: 
+        condition: service_started
+
+  smapi:
+    build:
+      context: ./server/.
+      dockerfile: Dockerfile
+    container_name: smapi
+    command: bun run dev
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - /app/dist
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SERVER_PORT=${SERVER_PORT}
+      - DOMAIN=${DOMAIN}
+      - PORT=${SERVER_PORT}  # Ensure the PORT env var is set for the server
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    networks:
+      - default
+    restart: always
 
   soulmap-admin:
     build:
-      context: ./admin
+      context: ./admin/.
       dockerfile: Dockerfile
     container_name: soulmap-admin
     environment:
       - NODE_ENV=development
       - VITE_ADMIN_API_TOKEN=${ADMIN_API_TOKEN:-dev-token}
-      - API_URL=http://soulmap:${SERVER_PORT:-3000}
+      - API_URL=http://${VITE_API_HOST}:${SERVER_PORT:-3000}
       - VITE_DISCORD_CLIENT_ID=${discord_bot_id}
       - VITE_SERVER_ID=1309555440102674513
       - VITE_ADMIN_ROLE_ID=1309700533749289012
       - VITE_MANAGER_ROLE_ID=1363588579506262056
       - DOMAIN=${DOMAIN}  # Pass the DOMAIN variable from .env
       - VITE_DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL} # Add this line
+      - DISCORD_LOGIN=FALSE
     volumes:
       - ./admin:/app
       - /app/node_modules
     networks:
-      - proxy
+    #  - proxy
       - default
     restart: always
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-
-      # Service definition for admin panel (Vite dev server)
-      - "traefik.http.services.soulmap-admin.loadbalancer.server.port=5173"
-
-      # Router for the admin panel at /admin path
-      - "traefik.http.routers.soulmap-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
-      - "traefik.http.routers.soulmap-admin.entrypoints=http"
-      - "traefik.http.routers.soulmap-admin.service=soulmap-admin"
-      
-      # Remove the strip prefix middleware - Let Vite handle the base path
-      # - "traefik.http.middlewares.admin-strip.stripprefix.prefixes=/admin"
-      # - "traefik.http.middlewares.admin-strip.stripprefix.forceSlash=false"
-      # - "traefik.http.routers.soulmap-admin.middlewares=admin-strip"
-  
-  soulmapbot:
-    build:
-      context: ./discord_bot/
-      dockerfile: Dockerfile
-    command: npm run dev
-    container_name: soulmapbot
-    environment:
-      - DISCORD_TOKEN=${discord_bot_token}
-      - CHANNEL_ID=${discord_channel_id}
-      - ADMIN_ROLE_ID=${discord_admin_role_id}
-      - LEADERBOARD_CHANNEL_ID=${discord_leaderboard_channel_id}
-      - DATABASE_URL=${DATABASE_URL}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    volumes:
-      - ./discord_bot/handlers:/app/handlers
-      - ./discord_bot/modules:/app/modules
-      - ./discord_bot/classes:/app/classes
-
-      - ./discord_bot/index.js:/app/index.js
-      - ./discord_bot/database.js:/app/database.js
-      - ./discord_bot/schema.prisma:/app/schema.prisma
-      - ./discord_bot/package.json:/app/package.json
-      - ./src/mapversion.yml:/app/src/mapversion.yml
-    restart: always
-    networks:
-      - default
-    depends_on:
-      sm-pg:
-        condition: service_healthy
+    ports:
+      - "5170:5173"  # Vite dev server port
+    #labels:
+    #  - "traefik.enable=true"
+    #  - "traefik.docker.network=proxy"
+    #
+    #  # Service definition for admin panel (Vite dev server)
+    #  - "traefik.http.services.soulmap-admin.loadbalancer.server.port=5173"
+    #
+    #  # Router for the admin panel at /admin path
+    #  - "traefik.http.routers.soulmap-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
+    #  - "traefik.http.routers.soulmap-admin.entrypoints=http"
+    #  - "traefik.http.routers.soulmap-admin.service=soulmap-admin"
+    #  
+    #  # Remove the strip prefix middleware - Let Vite handle the base path
+    #  # - "traefik.http.middlewares.admin-strip.stripprefix.prefixes=/admin"
+    #  # - "traefik.http.middlewares.admin-strip.stripprefix.forceSlash=false"
+    #  # - "traefik.http.routers.soulmap-admin.middlewares=admin-strip"
 
   sm-pg:
     image: postgres:latest
@@ -127,7 +122,7 @@ services:
       - "5432:5432"  # PostgreSQL port
     networks:
       - default
-      - grafana-edge_monitoring
+    #  - grafana-edge_monitoring
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]

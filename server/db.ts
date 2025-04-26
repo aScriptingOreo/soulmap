@@ -197,53 +197,59 @@ export async function setupListener(channel: string, callback: (payload: string)
     activeListeners.get(channel)!.callback = callback;
     return () => cleanupListener(channel);
   }
-  
-  let client;
+
   try {
-    client = await getClient();
+    // First verify if we can connect at all
+    if (!await verifyConnection()) {
+      console.warn(`Database connection unavailable, skipping listener setup for ${channel}`);
+      return () => false; // Return dummy cleanup function
+    }
     
-    // Set up notification listener
-    client.on('notification', (msg) => {
-      if (msg.channel === channel) {
-        callback(msg.payload || '');
-      }
-    });
-    
-    // Set up error handler for reconnection
-    client.on('error', async (err) => {
-      console.error(`Error on listener for channel ${channel}:`, err.message);
-      if (activeListeners.has(channel)) {
-        const listenerInfo = activeListeners.get(channel)!;
-        if (listenerInfo.active) {
-          listenerInfo.active = false;
-          // Try to reconnect after a delay
-          setTimeout(() => {
-            reconnectListener(channel, callback);
-          }, 5000);
+    let client;
+    try {
+      client = await getClient();
+      // Set up notification listener
+      client.on('notification', (msg) => {
+        if (msg.channel === channel) {
+          callback(msg.payload || '');
         }
-      }
-    });
-    
-    // Listen for notifications on the specified channel
-    await client.query(`LISTEN ${channel}`);
-    console.log(`PostgreSQL LISTEN set up for channel: ${channel}`);
-    
-    // Store the listener information
-    activeListeners.set(channel, { client, callback, active: true });
-    
-    // Return a cleanup function
-    return () => cleanupListener(channel);
+      });
+      
+      // Set up error handler for reconnection
+      client.on('error', async (err) => {
+        console.error(`Error on listener for channel ${channel}:`, err.message);
+        if (activeListeners.has(channel)) {
+          const listenerInfo = activeListeners.get(channel)!;
+          if (listenerInfo.active) {
+            listenerInfo.active = false;
+            // Try to reconnect after a delay
+            setTimeout(() => {
+              reconnectListener(channel, callback);
+            }, 5000);
+          }
+        }
+      });
+      
+      // Listen for notifications on the specified channel
+      await client.query(`LISTEN ${channel}`);
+      console.log(`PostgreSQL LISTEN set up for channel: ${channel}`);
+      
+      // Store the listener information
+      activeListeners.set(channel, { client, callback, active: true });
+      
+      // Return a cleanup function
+      return () => cleanupListener(channel);
+    } catch (error) {
+      if (client) client.release();
+      console.error(`Error setting up listener for channel ${channel}:`, error);
+      
+      // Don't schedule reconnection if the database is not available
+      // Just return a no-op cleanup function
+      return () => false;
+    }
   } catch (error) {
-    if (client) client.release();
-    console.error(`Error setting up listener for channel ${channel}:`, error);
-    
-    // Schedule a reconnection attempt
-    setTimeout(() => {
-      reconnectListener(channel, callback);
-    }, 5000);
-    
-    // Still return a cleanup function
-    return () => cleanupListener(channel);
+    console.error(`Failed to setup listener for ${channel}:`, error.message);
+    return () => false; // Return dummy cleanup function
   }
 }
 

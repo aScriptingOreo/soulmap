@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE specific files
+.idea
+.vscode
+*.sublime-workspace
+*.sublime-project
+
+# Cache directories
+.npm
+.eslintcache
+
+# Misc
+.DS_Store
+Thumbs.db

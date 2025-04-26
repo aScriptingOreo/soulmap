@@ -1,0 +1,28 @@
+{
+    "name": "prisma-graphql-server",
+    "version": "1.0.0",
+    "description": "A simple GraphQL server using Prisma and Express",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "npx prisma generate && bun --hot run index.ts",
+        "build": "tsc"
+    },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "cors": "^2.8.5",
+    "events": "^3.3.0",
+    "express": "^5.1.0",
+    "js-yaml": "^4.1.0",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.15.6"
+  },
+  "devDependencies": {
+    "prisma": "^6.6.0",
+    "typescript": "^5.8.3"
+  },
+
+"imports": {
+    "#db": "./db.ts"
+}
+}

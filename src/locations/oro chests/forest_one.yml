@@ -1,8 +1,0 @@
-# src/locations/loot/ode_chest.yml
-name: "[oro] Cozy Forest Chest"
-coordinates: [2611, 3855]
-description: "credits: Dystopia"
-icon: "/SF_chest"
-iconSize: 1.25
-iconColor: "#87ffc9"
-mediaUrl: "https://i.imgur.com/uxOC9YI.jpeg"

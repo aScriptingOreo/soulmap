@@ -1,8 +1,0 @@
-# src/locations/loot/ode_chest.yml
-name: "[oro] Pensive's Chest"
-coordinates: [2474, 3122]
-description: "credits: Yuritau"
-icon: "/SF_chest"
-iconSize: 1.25
-iconColor: "#87ffc9"
-mediaUrl: "https://i.imgur.com/P72F62h.jpeg"
