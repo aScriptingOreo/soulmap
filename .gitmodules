@@ -1,0 +1,9 @@
+[submodule "server"]
+	path = server
+	url = https://github.com/aScriptingOreo/soulmap-api
+[submodule "admin"]
+	path = admin
+	url = https://github.com/aScriptingOreo/soulmap-admin
+[submodule "client"]
+	path = client
+	url = https://github.com/aScriptingOreo/soulmap-client

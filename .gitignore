@@ -186,7 +186,3 @@ discord_bot/data
 
 # pgdb
 database/
-
-client/
-server/
-admin/
