@@ -1,15 +1,15 @@
-#networks:
-  #proxy:
-  #  external: true
+networks:
+  proxy:
+    external: true
   #grafana-edge_monitoring:
   #  external: true
 
 services:
-  soulmap:
+  devsm:
     build:
       context: ./client/.
       dockerfile: Dockerfile
-    container_name: soulmap
+    container_name: devsm
     entrypoint: []  # This will override any ENTRYPOINT from the image
     command: bun dev
     volumes:
@@ -25,23 +25,24 @@ services:
     ports:
       - "${CLIENT_PORT}:${CLIENT_PORT}"
     networks:
-    #  - proxy
+      - proxy
       - default
     restart: always
-    #labels:
-    #  # Basic Traefik config - just expose the Vite dev server
-    #  - "traefik.enable=true"
-    #  - "traefik.docker.network=proxy"
-    #  
-    #  # Single service for the Vite dev server
-    #  - "traefik.http.services.soulmap.loadbalancer.server.port=${CLIENT_PORT}"
-    #  
-    #  # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
-    #  - "traefik.http.routers.soulmap.rule=Host(`${DOMAIN}`)"
-    #  - "traefik.http.routers.soulmap.entrypoints=http"
-    #  - "traefik.http.routers.soulmap.service=soulmap" # Explicitly link router to service
+    labels:
+      # Basic Traefik config - just expose the Vite dev server
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      
+      # Single service for the Vite dev server
+      - "traefik.http.services.devsm.loadbalancer.server.port=${CLIENT_PORT}"
+      
+      # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
+      - "traefik.http.routers.devsm.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.devsm.entrypoints=https"
+      - "traefik.http.routers.devsm.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.devsm.tls=true"
     depends_on:
-      sm-pg:
+      devsm-pg:
         condition: service_healthy
       smapi: 
         condition: service_started
@@ -67,11 +68,11 @@ services:
       - default
     restart: always
 
-  soulmap-admin:
+  devsm-admin:
     build:
       context: ./admin/.
       dockerfile: Dockerfile
-    container_name: soulmap-admin
+    container_name: devsm-admin
     environment:
       - NODE_ENV=development
       - VITE_ADMIN_API_TOKEN=${ADMIN_API_TOKEN:-dev-token}
@@ -87,31 +88,27 @@ services:
       - ./admin:/app
       - /app/node_modules
     networks:
-    #  - proxy
+      - proxy
       - default
     restart: always
     ports:
       - "5170:5173"  # Vite dev server port
-    #labels:
-    #  - "traefik.enable=true"
-    #  - "traefik.docker.network=proxy"
-    #
-    #  # Service definition for admin panel (Vite dev server)
-    #  - "traefik.http.services.soulmap-admin.loadbalancer.server.port=5173"
-    #
-    #  # Router for the admin panel at /admin path
-    #  - "traefik.http.routers.soulmap-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
-    #  - "traefik.http.routers.soulmap-admin.entrypoints=http"
-    #  - "traefik.http.routers.soulmap-admin.service=soulmap-admin"
-    #  
-    #  # Remove the strip prefix middleware - Let Vite handle the base path
-    #  # - "traefik.http.middlewares.admin-strip.stripprefix.prefixes=/admin"
-    #  # - "traefik.http.middlewares.admin-strip.stripprefix.forceSlash=false"
-    #  # - "traefik.http.routers.soulmap-admin.middlewares=admin-strip"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+    
+      # Service definition for admin panel (Vite dev server)
+      - "traefik.http.services.devsm-admin.loadbalancer.server.port=5173"
+    
+      # Router for the admin panel at /admin path
+      - "traefik.http.routers.devsm-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.devsm-admin.entrypoints=https"
+      - "traefik.http.routers.devsm-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.devsm-admin.tls=true"
 
-  sm-pg:
+  devsm-pg:
     image: postgres:latest
-    container_name: soulmap-postgres
+    container_name: devsm-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -119,7 +116,7 @@ services:
     volumes:
       - ./database:/var/lib/postgresql/data
     ports:
-      - "5432:5432"  # PostgreSQL port
+      - 5435:5432
     networks:
       - default
     #  - grafana-edge_monitoring
