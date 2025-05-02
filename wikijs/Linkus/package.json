@@ -1,0 +1,18 @@
+{
+  "name": "linkus",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "Monitor Markdown and HTML files and expose links to wiki pages",
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "path": "^0.12.7"
+  }
+}

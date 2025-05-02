@@ -127,3 +127,71 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  avakotwiki:
+    image: lscr.io/linuxserver/wikijs:latest
+    container_name: avakotWiki
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - DB_TYPE=sqlite #optional
+      - DB_HOST= #optional
+      - DB_PORT= #optional
+      - DB_NAME= #optional
+      - DB_USER= #optional
+      - DB_PASS= #optional
+    volumes:
+      - ./wikijs/assets:/app/assets
+      - ./wikijs/config.yml:/app/config.yml:rw
+      - ./wikijs/db.sqlite:/config/db.sqlite:rw
+      - ./wikijs/repo:/wiki-data
+      - ./wikijs/data:/data
+    ports:
+      - 3020:3000
+    restart: unless-stopped
+    networks:
+      - proxy
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.avakotwiki.rule=Host(`wiki.avakot.org`)"
+      - "traefik.http.routers.avakotwiki.entrypoints=https"
+      - "traefik.http.routers.avakotwiki.tls=true"
+      - "traefik.http.routers.avakotwiki.tls.certresolver=letsencrypt"
+      - "traefik.http.services.avakotwiki.loadbalancer.server.port=3000"
+      - "traefik.http.routers.avakotwiki-secure.service=avakotwiki"
+
+  linkus:
+    build:
+      context: ./wikijs/Linkus/.
+      dockerfile: Dockerfile
+    container_name: linkus
+    volumes:
+      - ./wikijs/repo/:/app/repo:ro
+    environment:
+      - BASE_PATH=https://wiki.avakot.org/
+      - TARGET_DIR=/app/repo
+      - PORT=3022
+      - HOST_NAME=wiki.avakot.org/linkus
+    ports:
+      - 3022:3022  # Keep this for debugging
+    networks:
+      - proxy
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      # Change the router rule to use the wiki domain with a path prefix
+      - "traefik.http.routers.linkus.rule=Host(`wiki.avakot.org`) && PathPrefix(`/linkus`)"
+      - "traefik.http.routers.linkus.entrypoints=https"
+      - "traefik.http.routers.linkus.tls=true"
+      - "traefik.http.routers.linkus.tls.certresolver=letsencrypt"
+      - "traefik.http.services.linkus.loadbalancer.server.port=3022"
+      # Add a middleware to strip the path prefix before forwarding to the app
+      - "traefik.http.middlewares.linkus-stripprefix.stripprefix.prefixes=/linkus"
+      - "traefik.http.routers.linkus.middlewares=linkus-stripprefix@docker"
+    restart: always
+
+

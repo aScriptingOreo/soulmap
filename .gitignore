@@ -1,2 +1,5 @@
 database/
 .env
+checkpoint.sh
+filedistro/
+wikijs/Linkus/node_modules

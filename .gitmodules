@@ -7,3 +7,9 @@
 [submodule "client"]
 	path = client
 	url = https://github.com/aScriptingOreo/soulmap-client
+[submodule "mediawiki"]
+	path = mediawiki
+	url = https://github.com/aScriptingOreo/wiki.avakot
+[submodule "wiki.avakot.org"]
+	path = wiki.avakot.org
+	url = https://github.com/aScriptingOreo/wiki.avakot.org
