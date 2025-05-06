@@ -1,15 +1,24 @@
 networks:
   proxy:
     external: true
-  #grafana-edge_monitoring:
-  #  external: true
+  grafana-edge_monitoring:
+    external: true
 
 services:
-  devsm:
+  # Build the common client image but don't run it as a service
+  client-builder:
     build:
       context: ./client/.
       dockerfile: Dockerfile
-    container_name: devsm
+    image: soulmap-client:latest
+    command: echo "Image built successfully"
+    profiles:
+      - builder
+      
+  # Production service using pre-built image
+  sm:
+    image: soulmap-client:latest
+    container_name: sm-client
     entrypoint: []  # This will override any ENTRYPOINT from the image
     command: bun dev
     volumes:
@@ -34,15 +43,17 @@ services:
       - "traefik.docker.network=proxy"
       
       # Single service for the Vite dev server
-      - "traefik.http.services.devsm.loadbalancer.server.port=${CLIENT_PORT}"
+      - "traefik.http.services.sm.loadbalancer.server.port=${CLIENT_PORT}"
       
       # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
-      - "traefik.http.routers.devsm.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.devsm.entrypoints=https"
-      - "traefik.http.routers.devsm.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.devsm.tls=true"
+      - "traefik.http.routers.sm.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.sm.entrypoints=https"
+      - "traefik.http.routers.sm.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sm.tls=true"
+      - "traefik.http.routers.sm.middlewares=sm@docker"
+      - "traefik.http.middlewares.sm.headers.customrequestheaders.X-Forwarded-Host=${DOMAIN}"
     depends_on:
-      devsm-pg:
+      sm-pg:
         condition: service_healthy
       smapi: 
         condition: service_started
@@ -51,7 +62,7 @@ services:
     build:
       context: ./server/.
       dockerfile: Dockerfile
-    container_name: smapi
+    container_name: sm-api
     command: bun run dev
     volumes:
       - ./server:/app
@@ -62,28 +73,56 @@ services:
       - SERVER_PORT=${SERVER_PORT}
       - DOMAIN=${DOMAIN}
       - PORT=${SERVER_PORT}  # Ensure the PORT env var is set for the server
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_BOT_ID=${DISCORD_BOT_ID}
+      - DISCORD_BOT_SECRET=${DISCORD_BOT_SECRET}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
+      - DISCORD_SERVER_ID=${DISCORD_SERVER_ID} 
+      - DISCORD_ADMIN_ROLE_ID=${DISCORD_ADMIN_ROLE_ID}
+      - DISCORD_MANAGER_ROLE_ID=${DISCORD_MANAGER_ROLE_ID}
+      - DISCORD_CONTRIBUTOR_ROLE_ID=${DISCORD_CONTRIBUTOR_ROLE_ID}
+      - ADMIN_API_TOKEN=${ADMIN_API_TOKEN}
+      - NODE_ENV=development
     ports:
       - "${SERVER_PORT}:${SERVER_PORT}"
     networks:
+      - proxy
       - default
+    labels:
+      # Basic Traefik config
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      
+      # Service definition for the API
+      - "traefik.http.services.smapi.loadbalancer.server.port=${SERVER_PORT}"
+      
+      # Router configuration for the API
+      - "traefik.http.routers.smapi.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.smapi.entrypoints=https"
+      - "traefik.http.routers.smapi.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.smapi.tls=true"
     restart: always
 
-  devsm-admin:
+  sm-admin:
     build:
       context: ./admin/.
       dockerfile: Dockerfile
-    container_name: devsm-admin
+    container_name: sm-admin
     environment:
       - NODE_ENV=development
       - VITE_ADMIN_API_TOKEN=${ADMIN_API_TOKEN:-dev-token}
       - API_URL=http://${VITE_API_HOST}:${SERVER_PORT:-3000}
-      - VITE_DISCORD_CLIENT_ID=${discord_bot_id}
-      - VITE_SERVER_ID=1309555440102674513
-      - VITE_ADMIN_ROLE_ID=1309700533749289012
-      - VITE_MANAGER_ROLE_ID=1363588579506262056
-      - DOMAIN=${DOMAIN}  # Pass the DOMAIN variable from .env
-      - VITE_DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL} # Add this line
-      - DISCORD_LOGIN=FALSE
+      - VITE_DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - VITE_REDIRECT_URI=https://${DOMAIN}/admin/auth/callback
+      - VITE_SERVER_ID=${DISCORD_SERVER_ID}
+      - VITE_ADMIN_ROLE_ID=${DISCORD_ADMIN_ROLE_ID}
+      - VITE_MANAGER_ROLE_ID=${DISCORD_MANAGER_ROLE_ID}
+      - VITE_CONTRIBUTOR_ROLE_ID=${DISCORD_CONTRIBUTOR_ROLE_ID}
+      - DOMAIN=${DOMAIN}
+      - VITE_DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     volumes:
       - ./admin:/app
       - /app/node_modules
@@ -98,17 +137,23 @@ services:
       - "traefik.docker.network=proxy"
     
       # Service definition for admin panel (Vite dev server)
-      - "traefik.http.services.devsm-admin.loadbalancer.server.port=5173"
+      - "traefik.http.services.sm-admin.loadbalancer.server.port=5173"
     
       # Router for the admin panel at /admin path
-      - "traefik.http.routers.devsm-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
-      - "traefik.http.routers.devsm-admin.entrypoints=https"
-      - "traefik.http.routers.devsm-admin.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.devsm-admin.tls=true"
+      - "traefik.http.routers.sm-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.sm-admin.entrypoints=https"
+      - "traefik.http.routers.sm-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sm-admin.tls=true"
+      
+      # Critical: Add middleware for header pass-through and preserving the original request path
+      - "traefik.http.routers.sm-admin.middlewares=sm-admin-auth-headers@docker"
+      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Prefix=/admin"
+      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Host=${DOMAIN}"
 
-  devsm-pg:
+  sm-pg:
     image: postgres:latest
-    container_name: devsm-postgres
+    container_name: sm-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -119,7 +164,7 @@ services:
       - 5435:5432
     networks:
       - default
-    #  - grafana-edge_monitoring
+      - grafana-edge_monitoring
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
@@ -127,71 +172,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  avakotwiki:
-    image: lscr.io/linuxserver/wikijs:latest
-    container_name: avakotWiki
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - DB_TYPE=sqlite #optional
-      - DB_HOST= #optional
-      - DB_PORT= #optional
-      - DB_NAME= #optional
-      - DB_USER= #optional
-      - DB_PASS= #optional
-    volumes:
-      - ./wikijs/assets:/app/assets
-      - ./wikijs/config.yml:/app/config.yml:rw
-      - ./wikijs/db.sqlite:/config/db.sqlite:rw
-      - ./wikijs/repo:/wiki-data
-      - ./wikijs/data:/data
-    ports:
-      - 3020:3000
-    restart: unless-stopped
-    networks:
-      - proxy
-      - default
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.http.routers.avakotwiki.rule=Host(`wiki.avakot.org`)"
-      - "traefik.http.routers.avakotwiki.entrypoints=https"
-      - "traefik.http.routers.avakotwiki.tls=true"
-      - "traefik.http.routers.avakotwiki.tls.certresolver=letsencrypt"
-      - "traefik.http.services.avakotwiki.loadbalancer.server.port=3000"
-      - "traefik.http.routers.avakotwiki-secure.service=avakotwiki"
-
-  linkus:
-    build:
-      context: ./wikijs/Linkus/.
-      dockerfile: Dockerfile
-    container_name: linkus
-    volumes:
-      - ./wikijs/repo/:/app/repo:ro
-    environment:
-      - BASE_PATH=https://wiki.avakot.org/
-      - TARGET_DIR=/app/repo
-      - PORT=3022
-      - HOST_NAME=wiki.avakot.org/linkus
-    ports:
-      - 3022:3022  # Keep this for debugging
-    networks:
-      - proxy
-      - default
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      # Change the router rule to use the wiki domain with a path prefix
-      - "traefik.http.routers.linkus.rule=Host(`wiki.avakot.org`) && PathPrefix(`/linkus`)"
-      - "traefik.http.routers.linkus.entrypoints=https"
-      - "traefik.http.routers.linkus.tls=true"
-      - "traefik.http.routers.linkus.tls.certresolver=letsencrypt"
-      - "traefik.http.services.linkus.loadbalancer.server.port=3022"
-      # Add a middleware to strip the path prefix before forwarding to the app
-      - "traefik.http.middlewares.linkus-stripprefix.stripprefix.prefixes=/linkus"
-      - "traefik.http.routers.linkus.middlewares=linkus-stripprefix@docker"
-    restart: always
-
-
