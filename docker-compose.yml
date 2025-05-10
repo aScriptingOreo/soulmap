@@ -5,20 +5,13 @@ networks:
     external: true
 
 services:
-  # Build the common client image but don't run it as a service
-  client-builder:
+  # Production service using pre-built image
+  devsm:
+    # image: soulmap-client:latest
     build:
       context: ./client/.
       dockerfile: Dockerfile
-    image: soulmap-client:latest
-    command: echo "Image built successfully"
-    profiles:
-      - builder
-      
-  # Production service using pre-built image
-  sm:
-    image: soulmap-client:latest
-    container_name: sm-client
+    container_name: devsm-client
     entrypoint: []  # This will override any ENTRYPOINT from the image
     command: bun dev
     volumes:
@@ -43,26 +36,25 @@ services:
       - "traefik.docker.network=proxy"
       
       # Single service for the Vite dev server
-      - "traefik.http.services.sm.loadbalancer.server.port=${CLIENT_PORT}"
+      - "traefik.http.services.devsm.loadbalancer.server.port=${CLIENT_PORT}"
       
       # Simple HTTP router - no SSL, no redirects - FOR THE MAIN APP
-      - "traefik.http.routers.sm.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.sm.entrypoints=https"
-      - "traefik.http.routers.sm.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.sm.tls=true"
-      - "traefik.http.routers.sm.middlewares=sm@docker"
-      - "traefik.http.middlewares.sm.headers.customrequestheaders.X-Forwarded-Host=${DOMAIN}"
+      - "traefik.http.routers.devsm.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.devsm.entrypoints=https"
+      - "traefik.http.routers.devsm.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.devsm.tls=true"
+
     depends_on:
-      sm-pg:
+      devsm-pg:
         condition: service_healthy
-      smapi: 
+      devsmapi: 
         condition: service_started
 
-  smapi:
+  devsmapi:
     build:
       context: ./server/.
       dockerfile: Dockerfile
-    container_name: sm-api
+    container_name: devsm-api
     command: bun run dev
     volumes:
       - ./server:/app
@@ -99,17 +91,17 @@ services:
       - "traefik.http.services.smapi.loadbalancer.server.port=${SERVER_PORT}"
       
       # Router configuration for the API
-      - "traefik.http.routers.smapi.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.smapi.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.smapi.entrypoints=https"
       - "traefik.http.routers.smapi.tls.certresolver=letsencrypt"
       - "traefik.http.routers.smapi.tls=true"
     restart: always
 
-  sm-admin:
+  devsm-admin:
     build:
       context: ./admin/.
       dockerfile: Dockerfile
-    container_name: sm-admin
+    container_name: devsm-admin
     environment:
       - NODE_ENV=development
       - VITE_ADMIN_API_TOKEN=${ADMIN_API_TOKEN:-dev-token}
@@ -130,30 +122,30 @@ services:
       - proxy
       - default
     restart: always
-    ports:
-      - "5170:5173"  # Vite dev server port
+    #ports:
+    #  - "5175:5173"  # Vite dev server port
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
     
       # Service definition for admin panel (Vite dev server)
-      - "traefik.http.services.sm-admin.loadbalancer.server.port=5173"
+      - "traefik.http.services.devsm-admin.loadbalancer.server.port=5173"
     
       # Router for the admin panel at /admin path
-      - "traefik.http.routers.sm-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
-      - "traefik.http.routers.sm-admin.entrypoints=https"
-      - "traefik.http.routers.sm-admin.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.sm-admin.tls=true"
+      - "traefik.http.routers.devsm-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.devsm-admin.entrypoints=https"
+      - "traefik.http.routers.devsm-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.devsm-admin.tls=true"
       
       # Critical: Add middleware for header pass-through and preserving the original request path
-      - "traefik.http.routers.sm-admin.middlewares=sm-admin-auth-headers@docker"
-      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Prefix=/admin"
-      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.sm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Host=${DOMAIN}"
+      - "traefik.http.routers.devsm-admin.middlewares=devsm-admin-auth-headers@docker"
+      - "traefik.http.middlewares.devsm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Prefix=/admin"
+      - "traefik.http.middlewares.devsm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.devsm-admin-auth-headers.headers.customRequestHeaders.X-Forwarded-Host=${DOMAIN}"
 
-  sm-pg:
+  devsm-pg:
     image: postgres:latest
-    container_name: sm-postgres
+    container_name: devsm-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -161,7 +153,7 @@ services:
     volumes:
       - ./database:/var/lib/postgresql/data
     ports:
-      - 5435:5432
+      - 5465:5432
     networks:
       - default
       - grafana-edge_monitoring
