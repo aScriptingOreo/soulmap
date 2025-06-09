@@ -1,13 +1,15 @@
 networks:
   default:
     driver: bridge
+  proxy:
+    external: true
 
 services:
-  postgres:
+  v3sm-pg:
     image: postgres:16-alpine
-    container_name: soulmap_pg
-    ports:
-      - "5432:5432"
+    container_name: v3sm-pg
+    expose:
+      - "5432"
     environment:
       POSTGRES_USER: ${PG_U}
       POSTGRES_PASSWORD: ${PG_P}
@@ -16,17 +18,129 @@ services:
       - ./pgdb:/var/lib/postgresql/data
       - ./api/src/database/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
+    networks:
+      - default
 
-
-  redis:
+  v3sm-redis:
     image: redis:alpine
-    container_name: soulmap_redis
-    ports:
-      - "6379:6379"
+    container_name: v3sm-redis
     volumes:
       - redis_data:/data
     restart: unless-stopped
     command: redis-server --appendonly yes
+    networks:
+      - default
+    expose:
+      - "6379"
+
+  v3sm-api:
+    build: ./api
+    container_name: v3sm-api
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=development
+      - PG_HOST=v3sm-pg
+      - PG_PORT=5432
+      - PG_U=${PG_U}
+      - PG_P=${PG_P}
+      - PG_DB=${PG_DB}
+      - REDIS_HOST=v3sm-redis
+      - REDIS_PORT=6379
+      - API_KEY_TEST=${API_KEY_TEST}
+      - API_ALLOWED_LOCAL_IPS=${API_ALLOWED_LOCAL_IPS}
+      - JWT_SECRET=${JWT_SECRET}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_BOT_ID=${DISCORD_BOT_ID}
+      - DISCORD_BOT_SECRET=${DISCORD_BOT_SECRET}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
+      - DISCORD_SERVER_ID=${DISCORD_SERVER_ID}
+      - DISCORD_ADMIN_ROLE_ID=${DISCORD_ADMIN_ROLE_ID}
+      - DISCORD_MANAGER_ROLE_ID=${DISCORD_MANAGER_ROLE_ID}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION}
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    depends_on:
+      - v3sm-pg
+      - v3sm-redis
+    restart: unless-stopped
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.v3smapi.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.v3smapi.entrypoints=https"
+      - "traefik.http.routers.v3smapi.tls=true"
+      - "traefik.http.routers.v3smapi.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.v3smapi.service=v3smapi"
+      - "traefik.http.services.v3smapi.loadbalancer.server.port=3000"
+      - "traefik.http.routers.v3smapi.middlewares=api-stripprefix"
+      - "traefik.http.middlewares.api-stripprefix.stripprefix.prefixes=/api"
+
+  # v3sm-client:
+  #   build: ./client
+  #   container_name: soulmap_client
+  #   ports:
+  #     - "5173:5173"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - VITE_API_URL=http://v3sm-api:3000
+  #   volumes:
+  #     - ./client:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - v3sm-api
+  #   restart: unless-stopped
+  #   networks:
+  #     - default
+
+  v3smadmin:
+    build: ./admin
+    container_name: v3sm-admin
+    expose:
+      - "5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=https://soulmap.7thseraph.org/api
+      - PUBLIC_URL=/admin
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    depends_on:
+      - v3sm-api
+    restart: unless-stopped
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.v3smadmin.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.v3smadmin.entrypoints=https"
+      - "traefik.http.routers.v3smadmin.tls=true"
+      - "traefik.http.routers.v3smadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.v3smadmin.service=v3smadmin"
+      - "traefik.http.services.v3smadmin.loadbalancer.server.port=5173"
+      - "traefik.http.routers.v3smadmin.middlewares=admin-headers"
+      - "traefik.http.middlewares.admin-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.X-Content-Type-Options=nosniff"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Access-Control-Allow-Origin=*"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Access-Control-Allow-Methods=GET,POST,PUT,DELETE,OPTIONS"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Access-Control-Allow-Headers=Content-Type,Authorization"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Cache-Control=no-cache, no-store, must-revalidate"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Pragma=no-cache"
+      - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.Expires=0"
 
 volumes:
   redis_data:
