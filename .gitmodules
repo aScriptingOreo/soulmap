@@ -1,0 +1,12 @@
+[submodule "admin"]
+	path = admin
+	url = https://github.com/aScriptingOreo/soulmap-admin.git
+	branch = v3
+[submodule "api"]
+	path = api
+	url = https://github.com/aScriptingOreo/soulmap-api.git
+	branch = v3
+[submodule "client"]
+	path = client
+	url = https://github.com/aScriptingOreo/soulmap-client.git
+	branch = v3

@@ -1,0 +1,32 @@
+networks:
+  default:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: soulmap_pg
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${PG_U}
+      POSTGRES_PASSWORD: ${PG_P}
+      POSTGRES_DB: ${PG_DB}
+    volumes:
+      - ./pgdb:/var/lib/postgresql/data
+      - ./api/src/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+
+  redis:
+    image: redis:alpine
+    container_name: soulmap_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
