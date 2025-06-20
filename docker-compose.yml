@@ -5,11 +5,13 @@ networks:
     external: true
 
 services:
+
+## Database
   v3sm-pg:
     image: postgres:16-alpine
     container_name: v3sm-pg
-    expose:
-      - "5432"
+    ports:
+      - "9923:5432"
     environment:
       POSTGRES_USER: ${PG_U}
       POSTGRES_PASSWORD: ${PG_P}
@@ -21,6 +23,7 @@ services:
     networks:
       - default
 
+## Redis
   v3sm-redis:
     image: redis:alpine
     container_name: v3sm-redis
@@ -33,6 +36,8 @@ services:
     expose:
       - "6379"
 
+
+## Main API service
   v3sm-api:
     build: ./api
     container_name: v3sm-api
@@ -77,7 +82,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.v3smapi.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.v3smapi.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.v3smapi.entrypoints=https"
       - "traefik.http.routers.v3smapi.tls=true"
       - "traefik.http.routers.v3smapi.tls.certresolver=letsencrypt"
@@ -86,34 +91,56 @@ services:
       - "traefik.http.routers.v3smapi.middlewares=api-stripprefix"
       - "traefik.http.middlewares.api-stripprefix.stripprefix.prefixes=/api"
 
-  # v3sm-client:
-  #   build: ./client
-  #   container_name: soulmap_client
-  #   ports:
-  #     - "5173:5173"
-  #   environment:
-  #     - NODE_ENV=development
-  #     - VITE_API_URL=http://v3sm-api:3000
-  #   volumes:
-  #     - ./client:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     - v3sm-api
-  #   restart: unless-stopped
-  #   networks:
-  #     - default
-
-  v3smadmin:
-    build: ./admin
-    container_name: v3sm-admin
+## Main Map Client - THE STAR OF THE SHOW!
+  v3sm-client:
+    build: ./client
+    command: bun run dev
+    container_name: v3sm-client
     expose:
-      - "5173"
+      - "3000"
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=https://soulmap.7thseraph.org/api
-      - PUBLIC_URL=/admin
-      - CHOKIDAR_USEPOLLING=true
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN}/api/graphql
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - v3sm-api
+    restart: unless-stopped
+    networks:
+      - default
+      - proxy
+    labels:
+      # Main domain - highest priority route
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.v3smclient.rule=Host(`${DOMAIN}`) && !PathPrefix(`/api`) && !PathPrefix(`/admin`)"
+      - "traefik.http.routers.v3smclient.entrypoints=https"
+      - "traefik.http.routers.v3smclient.tls=true"
+      - "traefik.http.routers.v3smclient.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.v3smclient.service=v3smclient"
+      - "traefik.http.services.v3smclient.loadbalancer.server.port=3000"
+      - "traefik.http.routers.v3smclient.middlewares=client-headers"
+      - "traefik.http.middlewares.client-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+## Admin dashboard
+  v3sm-admin:
+    build: ./admin
+    command: bun run dev
+    container_name: v3sm-admin
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN}/api
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - NEXT_TELEMETRY_DISABLED=1
       - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./admin:/app
       - /app/node_modules
@@ -126,12 +153,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.v3smadmin.rule=Host(`soulmap.7thseraph.org`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.v3smadmin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)"
       - "traefik.http.routers.v3smadmin.entrypoints=https"
       - "traefik.http.routers.v3smadmin.tls=true"
       - "traefik.http.routers.v3smadmin.tls.certresolver=letsencrypt"
       - "traefik.http.routers.v3smadmin.service=v3smadmin"
-      - "traefik.http.services.v3smadmin.loadbalancer.server.port=5173"
+      - "traefik.http.services.v3smadmin.loadbalancer.server.port=3000"
       - "traefik.http.routers.v3smadmin.middlewares=admin-headers"
       - "traefik.http.middlewares.admin-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.admin-headers.headers.customresponseheaders.X-Content-Type-Options=nosniff"
